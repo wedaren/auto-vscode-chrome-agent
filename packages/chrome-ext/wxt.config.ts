@@ -6,9 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Browser Agent',
     description: '浏览器上下文感知 + 深度报告生成',
+    action: {},
     permissions: ['activeTab', 'sidePanel', 'tabs'],
-    side_panel: {
-      default_path: 'sidepanel.html',
-    },
   },
 });

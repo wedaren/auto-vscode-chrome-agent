@@ -35,7 +35,7 @@
       "id": "task_003",
       "type": "coding",
       "title": "WebSocket server（VSCode 插件侧）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_002"
       ],
