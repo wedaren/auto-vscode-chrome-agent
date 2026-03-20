@@ -35,13 +35,14 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
-// extension.ts — VSCode 插件入口，负责激活和销毁生命周期
+// extension.ts — VSCode 插件入口，仅负责激活/销毁生命周期编排
 const vscode = __importStar(require("vscode"));
 const lm_service_1 = require("./lm-service");
 const ws_server_1 = require("./ws-server");
 const mcp_client_1 = require("./mcp-client");
 const report_generator_1 = require("./report-generator");
 const message_handler_1 = require("./message-handler");
+const command_registry_1 = require("./command-registry");
 let lmService;
 let wsServer;
 let mcpClient;
@@ -49,9 +50,9 @@ let reportGenerator;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
-    // 初始化 LM 服务
+    // 初始化核心服务
     lmService = new lm_service_1.LmService(outputChannel);
-    // 初始化 WebSocket 服务端
+    mcpClient = new mcp_client_1.McpClient(outputChannel);
     const port = vscode.workspace
         .getConfiguration('browserAgent')
         .get('port', 7777);
@@ -59,74 +60,16 @@ function activate(context) {
     wsServer.start().catch((err) => {
         outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
     });
-    // 注册 WebSocket 消息处理器（委托给 MessageHandler）
+    // 注册 WebSocket 消息处理器
     const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, outputChannel);
     wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
-    // 初始化 MCP Client（chrome-devtools-mcp）
-    mcpClient = new mcp_client_1.McpClient(outputChannel);
     // 初始化报告生成器
     reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
-    // 注册命令：生成深度报告
-    const generateReportCommand = vscode.commands.registerCommand('browser-agent.generateReport', async () => {
-        const topic = await vscode.window.showInputBox({
-            prompt: '输入研究主题',
-            placeHolder: '例如：React 19 新特性分析',
-        });
-        if (!topic) {
-            return;
-        }
-        outputChannel.appendLine(`[BrowserAgent] 开始生成报告: ${topic}`);
-        outputChannel.show(true);
-        try {
-            const report = await reportGenerator.generate({
-                topic,
-                maxPages: 3,
-                sessionId: `report-${Date.now()}`,
-            });
-            outputChannel.appendLine(`[BrowserAgent] 报告生成完成:\n${report}`);
-            void vscode.window.showInformationMessage('Browser Agent: 深度报告已生成');
-        }
-        catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            void vscode.window.showErrorMessage(`Browser Agent: 报告生成失败 - ${message}`);
-        }
-    });
-    // 注册命令：连接 DevTools MCP
-    const connectMcpCommand = vscode.commands.registerCommand('browser-agent.connectDevtools', async () => {
-        try {
-            await mcpClient.connect();
-            const tools = await mcpClient.listTools();
-            outputChannel.appendLine(`[BrowserAgent] DevTools MCP 已连接，可用工具: ${tools.length} 个`);
-        }
-        catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            void vscode.window.showErrorMessage(`Browser Agent: DevTools MCP 连接失败 - ${message}`);
-        }
-    });
-    // 注册命令：发送消息到语言模型
-    const askCommand = vscode.commands.registerCommand('browser-agent.ask', async () => {
-        const input = await vscode.window.showInputBox({
-            prompt: '输入你的问题',
-            placeHolder: '例如：帮我分析这个页面的内容',
-        });
-        if (!input) {
-            return;
-        }
-        outputChannel.appendLine(`[BrowserAgent] 用户输入: ${input}`);
-        outputChannel.show(true);
-        try {
-            const response = await lmService.sendMessage(input, 'You are a helpful browser agent assistant. Answer concisely.');
-            outputChannel.appendLine(`[BrowserAgent] AI 回复:\n${response}`);
-            void vscode.window.showInformationMessage(`AI: ${response.substring(0, 200)}`);
-        }
-        catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            outputChannel.appendLine(`[BrowserAgent] 错误: ${message}`);
-            void vscode.window.showErrorMessage(`Browser Agent: ${message}`);
-        }
-    });
+    // 注册所有命令
+    const commandRegistry = new command_registry_1.CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel);
+    const commandDisposables = commandRegistry.registerAll();
     // 注册 dispose
-    context.subscriptions.push(outputChannel, askCommand, connectMcpCommand, generateReportCommand, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, ...commandDisposables, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
