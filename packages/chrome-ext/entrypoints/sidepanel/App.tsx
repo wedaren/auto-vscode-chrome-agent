@@ -1,4 +1,4 @@
-// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信和快捷按钮
+// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知和快捷按钮
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../../src/ws-client';
@@ -10,14 +10,35 @@ interface Message {
   timestamp: number;
 }
 
+/** 页面上下文数据 */
+interface PageContext {
+  url: string;
+  title: string;
+  selectedText: string;
+}
+
 /** WebSocket 服务端地址（VSCode 插件侧） */
 const WS_URL = 'ws://localhost:7777';
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [pageContext, setPageContext] = useState<PageContext>({ url: '', title: '', selectedText: '' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsClientRef = useRef<WsClient | null>(null);
+
+  /** 请求当前页面的上下文信息 */
+  const fetchPageContext = useCallback(async () => {
+    try {
+      const response = await browser.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT' });
+      if (response?.payload) {
+        setPageContext(response.payload as PageContext);
+      }
+    } catch {
+      // content script 不可用时静默失败
+      console.log('[App] 无法获取页面上下文');
+    }
+  }, []);
 
   // 初始化 WebSocket 客户端
   useEffect(() => {
@@ -72,6 +93,31 @@ export default function App() {
     };
   }, []);
 
+  // 监听来自 background 的上下文变化消息
+  useEffect(() => {
+    const handleMessage = (message: { type: string; payload?: PageContext }) => {
+      if (
+        message.type === 'PAGE_CONTEXT' ||
+        message.type === 'SELECTION_CHANGED' ||
+        message.type === 'TAB_CHANGED' ||
+        message.type === 'TAB_UPDATED'
+      ) {
+        if (message.payload) {
+          setPageContext(message.payload);
+        }
+      }
+    };
+
+    browser.runtime.onMessage.addListener(handleMessage);
+
+    // 首次加载获取上下文
+    fetchPageContext();
+
+    return () => {
+      browser.runtime.onMessage.removeListener(handleMessage);
+    };
+  }, [fetchPageContext]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -85,12 +131,19 @@ export default function App() {
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // 通过 WebSocket 发送到 VSCode 侧
+    // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
     const client = wsClientRef.current;
     if (client) {
-      client.sendMessage('chat', { text: content });
+      client.sendMessage('chat', {
+        text: content,
+        context: {
+          url: pageContext.url,
+          title: pageContext.title,
+          selectedText: pageContext.selectedText,
+        },
+      });
     }
-  }, []);
+  }, [pageContext]);
 
   const handleQuickAction = useCallback((action: string) => {
     handleSendMessage(action);
@@ -106,6 +159,18 @@ export default function App() {
           title={isConnected ? '已连接' : '未连接'}
         />
       </header>
+
+      {/* Page context bar */}
+      {pageContext.url && (
+        <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 truncate">
+          {pageContext.title || pageContext.url}
+          {pageContext.selectedText && (
+            <span className="ml-2 text-blue-500">
+              (已选中 {pageContext.selectedText.length} 字)
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
