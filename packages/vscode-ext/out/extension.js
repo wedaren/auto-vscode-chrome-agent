@@ -39,8 +39,10 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const lm_service_1 = require("./lm-service");
 const ws_server_1 = require("./ws-server");
+const mcp_client_1 = require("./mcp-client");
 let lmService;
 let wsServer;
+let mcpClient;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -53,6 +55,20 @@ function activate(context) {
     wsServer = new ws_server_1.WsServer(outputChannel, port);
     wsServer.start().catch((err) => {
         outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    // 初始化 MCP Client（chrome-devtools-mcp）
+    mcpClient = new mcp_client_1.McpClient(outputChannel);
+    // 注册命令：连接 DevTools MCP
+    const connectMcpCommand = vscode.commands.registerCommand('browser-agent.connectDevtools', async () => {
+        try {
+            await mcpClient.connect();
+            const tools = await mcpClient.listTools();
+            outputChannel.appendLine(`[BrowserAgent] DevTools MCP 已连接，可用工具: ${tools.length} 个`);
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            void vscode.window.showErrorMessage(`Browser Agent: DevTools MCP 连接失败 - ${message}`);
+        }
     });
     // 注册命令：发送消息到语言模型
     const askCommand = vscode.commands.registerCommand('browser-agent.ask', async () => {
@@ -77,11 +93,13 @@ function activate(context) {
         }
     });
     // 注册 dispose
-    context.subscriptions.push(outputChannel, askCommand, { dispose: () => wsServer?.dispose() });
+    context.subscriptions.push(outputChannel, askCommand, connectMcpCommand, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 function deactivate() {
+    void mcpClient?.dispose();
+    mcpClient = undefined;
     wsServer?.dispose();
     wsServer = undefined;
     lmService = undefined;

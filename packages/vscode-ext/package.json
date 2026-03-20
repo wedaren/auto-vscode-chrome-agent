@@ -20,6 +20,10 @@
       {
         "command": "browser-agent.ask",
         "title": "Browser Agent: 提问"
+      },
+      {
+        "command": "browser-agent.connectDevtools",
+        "title": "Browser Agent: 连接 DevTools MCP"
       }
     ],
     "configuration": {
@@ -39,12 +43,13 @@
     "dev": "tsc -watch -p ./tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "ws": "^8.16.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.0",
     "@types/vscode": "^1.96.0",
     "@types/ws": "^8.5.10",
-    "@types/node": "^20.11.0",
     "typescript": "^5.3.3"
   }
 }

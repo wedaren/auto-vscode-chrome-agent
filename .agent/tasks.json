@@ -69,7 +69,7 @@
       "id": "task_006",
       "type": "coding",
       "title": "页面上下文感知（URL / 标题 / 选中文本）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_005"
       ],
@@ -80,7 +80,7 @@
       "id": "task_007",
       "type": "coding",
       "title": "chrome-devtools-mcp 集成",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_006"
       ],
