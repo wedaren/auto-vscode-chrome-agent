@@ -305,7 +305,7 @@
       "id": "evo_v2_003",
       "type": "coding",
       "title": "Chrome 重构：从 App.tsx 抽取 useChat + useWebSocket 自定义 Hooks",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_014"
       ],

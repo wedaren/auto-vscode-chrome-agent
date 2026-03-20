@@ -12,6 +12,7 @@ declare global {
   const browser: typeof import('wxt/browser')['browser']
   const createIframeUi: typeof import('wxt/client')['createIframeUi']
   const createIntegratedUi: typeof import('wxt/client')['createIntegratedUi']
+  const createMessage: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')['createMessage']
   const createShadowRootUi: typeof import('wxt/client')['createShadowRootUi']
   const defineAppConfig: typeof import('wxt/sandbox')['defineAppConfig']
   const defineBackground: typeof import('wxt/sandbox')['defineBackground']
@@ -28,6 +29,7 @@ declare global {
   const useContext: typeof import('react')['useContext']
   const useEffect: typeof import('react')['useEffect']
   const useMemo: typeof import('react')['useMemo']
+  const usePageContext: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')['usePageContext']
   const useReducer: typeof import('react')['useReducer']
   const useRef: typeof import('react')['useRef']
   const useState: typeof import('react')['useState']
@@ -45,9 +47,15 @@ declare global {
   export type { TypingIndicatorProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')
   // @ts-ignore
-  export type { Message, UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
+  export type { UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')
+  // @ts-ignore
+  export type { PageContext, UsePageContextReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')
   // @ts-ignore
   export type { UseWebSocketReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')
+  // @ts-ignore
+  export type { MessageRole, Message } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')
 }

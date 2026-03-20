@@ -1,14 +1,10 @@
 // useChat.ts — 自定义 Hook：封装 messages 状态、isStreaming、streamingMsgIdRef、handleSendMessage、handleCancel 逻辑
 import { useState, useRef, useCallback } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
+import { createMessage, type Message } from '../utils/message-factory';
 
-/** 聊天消息 */
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
+// 从 message-factory 统一导出 Message 类型
+export type { Message } from '../utils/message-factory';
 
 /** 页面上下文（发送消息时附加） */
 interface ChatContext {
@@ -62,13 +58,7 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
     switch (msg.type) {
       case 'chat_response': {
         // 兼容旧式全量响应
-        const assistantMsg: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: String(msg.payload ?? ''),
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
         break;
       }
       case 'chat_response_chunk': {
@@ -78,15 +68,9 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
 
         if (!streamingMsgIdRef.current) {
           // 首个 chunk：创建新的 assistant message
-          const newId = crypto.randomUUID();
-          streamingMsgIdRef.current = newId;
+          const newMsg = createMessage('assistant', fragment);
+          streamingMsgIdRef.current = newMsg.id;
           setIsStreaming(true);
-          const newMsg: Message = {
-            id: newId,
-            role: 'assistant',
-            content: fragment,
-            timestamp: Date.now(),
-          };
           setMessages((prev) => [...prev, newMsg]);
         } else {
           // 后续 chunk：追加到已有消息
@@ -123,13 +107,7 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
       }
       case 'echo': {
         // 服务端回显消息
-        const echoMsg: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: String(msg.payload ?? ''),
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, echoMsg]);
+        setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
         break;
       }
     }
@@ -141,13 +119,7 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
       // 流式生成中不允许发送新消息
       if (isStreaming) return;
 
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => [...prev, createMessage('user', content)]);
 
       // 进入等待状态（TypingIndicator 立即显示）
       setIsStreaming(true);
@@ -167,13 +139,10 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
       if (!sent) {
         // 发送失败：恢复 isStreaming 状态并显示错误提示
         setIsStreaming(false);
-        const errorMsg: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: '\u26A0\uFE0F \u6D88\u606F\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5 WebSocket \u8FDE\u63A5\u72B6\u6001\u3002',
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
+        setMessages((prev) => [
+          ...prev,
+          createMessage('assistant', '\u26A0\uFE0F 消息发送失败，请检查 WebSocket 连接状态。'),
+        ]);
       }
     },
     [isStreaming, sendMessage],
