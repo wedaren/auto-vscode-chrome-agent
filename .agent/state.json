@@ -5,7 +5,13 @@
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
-  "last_validation": null,
+  "last_validation": {
+    "task_id": "evo_v1_007",
+    "result": "pass",
+    "score": 100,
+    "issues": [],
+    "acceptance_cmd_output": "PASS"
+  },
   "last_tick": "2026-03-20T14:47:44.312053Z",
   "pm_done": true
 }
