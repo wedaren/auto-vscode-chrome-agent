@@ -125,7 +125,7 @@
       "id": "evo_v1_002",
       "type": "coding",
       "title": "WebSocket 新增 list_models / select_model 消息处理",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_001"
       ],
@@ -137,7 +137,7 @@
       "id": "evo_v1_003",
       "type": "coding",
       "title": "Chrome 侧新增 ModelSelector 下拉组件",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_002"
       ],

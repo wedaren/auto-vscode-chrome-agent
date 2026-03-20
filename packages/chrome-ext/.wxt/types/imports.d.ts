@@ -6,6 +6,7 @@ declare global {
   const InvalidMatchPattern: typeof import('wxt/sandbox')['InvalidMatchPattern']
   const MatchPattern: typeof import('wxt/sandbox')['MatchPattern']
   const MigrationError: typeof import('wxt/storage')['MigrationError']
+  const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
   const browser: typeof import('wxt/browser')['browser']
   const createIframeUi: typeof import('wxt/client')['createIframeUi']
   const createIntegratedUi: typeof import('wxt/client')['createIntegratedUi']
@@ -27,4 +28,10 @@ declare global {
   const useReducer: typeof import('react')['useReducer']
   const useRef: typeof import('react')['useRef']
   const useState: typeof import('react')['useState']
+}
+// for type re-export
+declare global {
+  // @ts-ignore
+  export type { ModelInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')
 }
