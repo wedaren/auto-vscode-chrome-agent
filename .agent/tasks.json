@@ -168,6 +168,66 @@
       "acceptance": "两个包均构建通过，Chrome 侧有 ModelSelector 组件和 list_models/select_model/models_list 消息处理，VSCode 侧有 listModels/selectModelById 和对应 WebSocket 处理",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'listModels' src/lm-service.ts && grep -q 'list_models' src/extension.ts && grep -q 'select_model' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && grep -q 'ModelSelector' entrypoints/sidepanel/App.tsx && grep -q 'models_list' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 模型选择功能验收失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
+    },
+    {
+      "id": "evo_v1_006",
+      "type": "coding",
+      "title": "VSCode 侧流式响应：extension.ts chat 改用 sendMessageStreaming + 发送 chunk 消息",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_004"
+      ],
+      "acceptance": "extension.ts 中 chat 消息处理改用 lmService.sendMessageStreaming()，每个 fragment 通过 WebSocket 发送 chat_response_chunk（payload 含 text 和 done:false），完成时发送 chat_response_end（payload 含 fullText），支持 cancel_chat 消息中断生成（AbortController），编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'sendMessageStreaming' src/extension.ts && grep -q 'chat_response_chunk' src/extension.ts && grep -q 'chat_response_end' src/extension.ts && grep -q 'cancel_chat' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 流式响应或取消机制缺失或编译失败'",
+      "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
+    },
+    {
+      "id": "evo_v1_007",
+      "type": "coding",
+      "title": "Chrome 侧流式响应：App.tsx 处理 chunk 增量渲染 + 停止生成按钮",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_006"
+      ],
+      "acceptance": "App.tsx 处理 chat_response_chunk 消息，增量追加到当前 assistant message 的 content；处理 chat_response_end 标记消息完成；等待响应时显示 isStreaming 状态；停止按钮点击发送 cancel_chat 消息；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'chat_response_chunk' entrypoints/sidepanel/App.tsx && grep -q 'chat_response_end' entrypoints/sidepanel/App.tsx && grep -q 'cancel_chat' entrypoints/sidepanel/App.tsx && grep -q 'isStreaming' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 流式响应处理或停止生成缺失或构建失败'",
+      "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
+    },
+    {
+      "id": "evo_v1_008",
+      "type": "coding",
+      "title": "MessageBubble 组件：Markdown 渲染 + 代码语法高亮 + 代码块复制按钮",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_007"
+      ],
+      "acceptance": "新建 components/MessageBubble.tsx 组件；安装 marked 和 highlight.js 依赖；assistant 消息渲染为 Markdown HTML（标题/列表/粗体/链接/代码块）；代码块有语法高亮；每个代码块有复制按钮；user 消息保持纯文本样式；App.tsx 中消息列表使用 MessageBubble 替代原有内联渲染；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f components/MessageBubble.tsx && grep -q 'marked' components/MessageBubble.tsx && grep -q 'highlight' components/MessageBubble.tsx && grep -q 'MessageBubble' entrypoints/sidepanel/App.tsx && grep -q 'marked' package.json && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: MessageBubble 组件或 Markdown 渲染缺失或构建失败'",
+      "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
+    },
+    {
+      "id": "evo_v1_009",
+      "type": "coding",
+      "title": "TypingIndicator 组件：等待/流式响应时显示思考中动画",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_008"
+      ],
+      "acceptance": "新建 components/TypingIndicator.tsx，三点跳动 CSS 动画；App.tsx 在 isStreaming 状态且 assistant 消息 content 为空时显示 TypingIndicator；流式内容开始到达后隐藏指示器显示实际内容；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f components/TypingIndicator.tsx && grep -q 'TypingIndicator' entrypoints/sidepanel/App.tsx && grep -q 'isStreaming' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: TypingIndicator 缺失或构建失败'",
+      "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
+    },
+    {
+      "id": "evo_v1_010",
+      "type": "validate",
+      "title": "Copilot 级体验全量验收：流式 + Markdown + 指示器 + 停止，双端构建通过",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_009"
+      ],
+      "acceptance": "双端构建通过；VSCode 侧有 sendMessageStreaming 流式调用 + chat_response_chunk/end 消息 + cancel_chat 取消；Chrome 侧有流式消息处理 + MessageBubble Markdown 渲染 + TypingIndicator + 停止生成按钮",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'sendMessageStreaming' src/extension.ts && grep -q 'chat_response_chunk' src/extension.ts && grep -q 'cancel_chat' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && grep -q 'chat_response_chunk' entrypoints/sidepanel/App.tsx && test -f components/MessageBubble.tsx && test -f components/TypingIndicator.tsx && grep -q 'cancel_chat' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Copilot 级体验验收失败'",
+      "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
     }
   ]
 }

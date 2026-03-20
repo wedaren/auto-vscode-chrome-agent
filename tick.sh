@@ -399,6 +399,29 @@ evolution_loop() {
                 py_state_inc "retry_count"
               fi
               ;;
+            validate)
+              run_validator_agent "$current_task" || true
+              if run_acceptance "$current_task"; then
+                log "✅ 进化验收 $current_task 通过"
+                cd "$PROJECT_DIR"
+                git add -A 2>/dev/null || true
+                git commit -m "evo($current_task): $(task_field "$current_task" "title")" \
+                  2>/dev/null || true
+                mark_done "$current_task"
+                mark_evolution_done "$current_task"
+                py_state_set "retry_count" "0"
+              else
+                warn "❌ 进化验收 $current_task 失败"
+                fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
+                printf "## %s 验收失败（第%s次）\n" "$current_task" "$((retry+1))" > "$fail_log"
+                run_research_agent "$current_task" "$fail_log"
+                py_state_inc "retry_count"
+              fi
+              ;;
+            *)
+              warn "未知任务类型：$ttype，跳过"
+              mark_done "$current_task"
+              ;;
           esac
           sleep 2
         done
