@@ -1,16 +1,16 @@
 {
-  "phase": "validate",
-  "current_task": "evo_v1_005",
+  "phase": "coding",
+  "current_task": "evo_v1_006",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 98,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v1_005",
+    "task_id": "evo_v1_006",
     "result": "pass",
-    "score": 98,
+    "score": 97,
     "issues": [
-      "chrome-ext tsconfig.json include 未覆盖 components/ 目录（WXT 构建不受影响，属小瑕疵）"
+      "activeChatTokens 在 WebSocket 连接断开时未主动清理（边缘情况，finally 块仅在流式完成/异常时清理）"
     ],
     "acceptance_cmd_output": "PASS"
   },

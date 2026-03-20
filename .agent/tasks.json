@@ -173,7 +173,7 @@
       "id": "evo_v1_006",
       "type": "coding",
       "title": "VSCode 侧流式响应：extension.ts chat 改用 sendMessageStreaming + 发送 chunk 消息",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_004"
       ],
