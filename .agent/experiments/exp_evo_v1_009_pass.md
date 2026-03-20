@@ -16,3 +16,13 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- TypeScript 裸 tsc 检查有 WXT 全局变量未识别警告（browser/defineBackground 等），但这是 WXT 项目的已知行为，npm run build 无错通过，不扣分
+- TypingIndicator 组件代码简洁，有顶部注释、aria-label 无障碍属性，符合规范
+- App.tsx 中显示逻辑正确：isStreaming 且 assistant 消息为空时显示指示器，内容到达后自动隐藏
+- CSS 动画（@keyframes typing-bounce + .typing-dot）在 assets/style.css 中正确定义
+- 未引入任何外部 API key 依赖，符合 program.md 约束
