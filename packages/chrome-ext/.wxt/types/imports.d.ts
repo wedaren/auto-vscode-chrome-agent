@@ -5,6 +5,7 @@ declare global {
   const ContentScriptContext: typeof import('wxt/client')['ContentScriptContext']
   const InvalidMatchPattern: typeof import('wxt/sandbox')['InvalidMatchPattern']
   const MatchPattern: typeof import('wxt/sandbox')['MatchPattern']
+  const MessageBubble: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')['default']
   const MigrationError: typeof import('wxt/storage')['MigrationError']
   const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
   const browser: typeof import('wxt/browser')['browser']
@@ -31,6 +32,9 @@ declare global {
 }
 // for type re-export
 declare global {
+  // @ts-ignore
+  export type { MessageBubbleProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')
   // @ts-ignore
   export type { ModelInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')

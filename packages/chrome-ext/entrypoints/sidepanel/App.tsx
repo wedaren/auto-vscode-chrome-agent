@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
+import MessageBubble from '../../components/MessageBubble';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../../src/ws-client';
 
 interface Message {
@@ -285,16 +286,7 @@ export default function App() {
           </div>
         )}
         {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-              msg.role === 'user'
-                ? 'ml-auto bg-blue-500 text-white'
-                : 'mr-auto bg-gray-100 text-gray-800'
-            }`}
-          >
-            {msg.content}
-          </div>
+          <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
         ))}
         <div ref={messagesEndRef} />
       </div>
