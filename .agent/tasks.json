@@ -209,7 +209,7 @@
       "id": "evo_v1_009",
       "type": "coding",
       "title": "TypingIndicator 组件：等待/流式响应时显示思考中动画",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_008"
       ],
