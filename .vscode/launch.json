@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-ext"],
+      "outFiles": ["${workspaceFolder}/packages/vscode-ext/out/**/*.js"],
+      "preLaunchTask": "compile-vscode-ext"
+    },
+    {
+      "name": "Run Extension + Chrome Dev",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-ext"],
+      "outFiles": ["${workspaceFolder}/packages/vscode-ext/out/**/*.js"],
+      "preLaunchTask": "build-all"
+    }
+  ]
+}

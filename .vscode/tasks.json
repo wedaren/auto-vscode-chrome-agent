@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "compile-vscode-ext",
+      "type": "shell",
+      "command": "pnpm --filter vscode-ext compile",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "watch-vscode-ext",
+      "type": "shell",
+      "command": "pnpm --filter vscode-ext watch",
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": ["$tsc-watch"],
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "dev-chrome-ext",
+      "type": "shell",
+      "command": "pnpm --filter chrome-ext dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "built in"
+        }
+      },
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "build-all",
+      "dependsOn": ["compile-vscode-ext", "dev-chrome-ext"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

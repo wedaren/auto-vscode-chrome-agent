@@ -2,21 +2,75 @@
 import * as vscode from 'vscode';
 
 /**
+ * 模型信息结构，用于向 Chrome 侧暴露可用模型列表
+ */
+export interface ModelInfo {
+  id: string;
+  name: string;
+  vendor: string;
+  family: string;
+  maxInputTokens: number;
+}
+
+/**
  * LmService 负责与 vscode.lm API 交互，
  * 选择模型、发送请求、处理流式响应。
  */
 export class LmService {
   private outputChannel: vscode.OutputChannel;
+  private selectedModelInstance: vscode.LanguageModelChat | undefined;
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel;
   }
 
   /**
+   * 列出所有可用的语言模型信息
+   * 调用 vscode.lm.selectChatModels({}) 获取全量模型列表
+   * @returns 可用模型信息数组
+   */
+  async listModels(): Promise<ModelInfo[]> {
+    const models = await vscode.lm.selectChatModels({});
+    this.outputChannel.appendLine(`[LmService] 发现 ${models.length} 个可用模型`);
+    return models.map((m) => ({
+      id: m.id,
+      name: m.name,
+      vendor: m.vendor,
+      family: m.family,
+      maxInputTokens: m.maxInputTokens,
+    }));
+  }
+
+  /**
+   * 根据模型 id 选择并缓存模型实例
+   * 后续 sendMessage / sendMessageStreaming 将优先使用此模型
+   * @param id 模型唯一标识
+   * @returns 是否选择成功
+   */
+  async selectModelById(id: string): Promise<boolean> {
+    const models = await vscode.lm.selectChatModels({});
+    const target = models.find((m) => m.id === id);
+    if (target) {
+      this.selectedModelInstance = target;
+      this.outputChannel.appendLine(`[LmService] 已手动选择模型: ${target.name} (id: ${target.id})`);
+      return true;
+    }
+    this.outputChannel.appendLine(`[LmService] 未找到 id 为 "${id}" 的模型`);
+    return false;
+  }
+
+  /**
    * 选择可用的语言模型（优先 gpt-4o）
+   * 如果已通过 selectModelById 指定模型，则直接返回缓存
    * 需要用户已安装 GitHub Copilot Chat 并有订阅
    */
   async selectModel(): Promise<vscode.LanguageModelChat | undefined> {
+    // 如果已通过 selectModelById 指定模型，优先使用
+    if (this.selectedModelInstance) {
+      this.outputChannel.appendLine(`[LmService] 使用已选模型: ${this.selectedModelInstance.name}`);
+      return this.selectedModelInstance;
+    }
+
     // 优先选择 gpt-4o 家族
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',

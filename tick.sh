@@ -243,6 +243,178 @@ check_env() {
 }
 
 # ════════════════════════════════════════════════════════════
+# Evolution Loop（MVP 完成后自动进入）
+# ════════════════════════════════════════════════════════════
+
+check_evolution_goals() {
+  # 返回 program.md 里待处理的功能数量
+  python3 -c "
+import re
+try:
+    content = open('$AGENT_DIR/program.md').read()
+    pending = re.findall(r'- \[ \]', content)
+    print(len(pending))
+except: print(0)
+" 2>/dev/null || echo "0"
+}
+
+mark_evolution_done() {
+  local goal_id="$1"
+  python3 -c "
+import json, re
+with open('$TASKS') as f: data = json.load(f)
+goal_text = ''
+for t in data['tasks']:
+    if t['id'] == '$goal_id':
+        goal_text = t.get('evolution_goal', '')
+        break
+if not goal_text: exit()
+with open('$AGENT_DIR/program.md') as f: content = f.read()
+lines = content.split('\n')
+for i, line in enumerate(lines):
+    if '[~]' in line and goal_text[:20] in line:
+        lines[i] = line.replace('[~]', '[x]')
+        break
+with open('$AGENT_DIR/program.md', 'w') as f:
+    f.write('\n'.join(lines))
+" 2>/dev/null || true
+}
+
+run_evolution_agent() {
+  log "🌱 Evolution Agent 启动..."
+  cd "$PROJECT_DIR"
+  local out
+  out=$(claude -p --dangerously-skip-permissions \
+    --system-prompt "$(cat "$CLAUDE_DIR/evolution-agent.md")" \
+    "读取 .agent/program.md 的功能进化区，处理第一个待处理（- [ ]）功能。
+按规范拆解任务追加到 tasks.json，更新 program.md 状态。
+最后一行输出 EVOLUTION_RESULT: <任务ID列表> | <功能名>" 2>&1) || true
+
+  local result_line
+  result_line=$(echo "$out" | grep "^EVOLUTION_RESULT:" | tail -1)
+  if [ -n "$result_line" ]; then
+    log "🌱 $result_line"
+    return 0
+  else
+    warn "Evolution Agent 未输出结果"
+    return 1
+  fi
+}
+
+evolution_loop() {
+  log ""
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "🎉 MVP 完成，进入功能进化模式"
+  log "在 .agent/program.md 的「待实现功能」下追加想法"
+  log "格式：- [ ] 你的功能描述（可以模糊）"
+  log "保存后系统自动检测并开始实现"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log ""
+
+  local evo_loop=0
+
+  while true; do
+    evo_loop=$((evo_loop + 1))
+
+    # 检查用户介入
+    if [ -f "$INBOX" ] && [ -s "$INBOX" ]; then
+      notify "⚠️ 需要你介入"
+      warn "查看：cat .agent/inbox/needs-you.md"
+      warn "处理完：rm .agent/inbox/needs-you.md && bash tick.sh"
+      exit 0
+    fi
+
+    # 检查有没有待处理的进化目标
+    pending=$(check_evolution_goals)
+
+    if [ "$pending" -gt 0 ]; then
+      info "── Evolution Loop $evo_loop | 发现 $pending 个待处理功能 ──"
+
+      # 启动 Evolution Agent 拆解任务
+      if run_evolution_agent; then
+        log "开始执行进化任务..."
+        py_state_set "retry_count" "0"
+
+        while true; do
+          current_task=$(next_pending_task)
+          [ -z "$current_task" ] && break
+
+          if ! echo "$current_task" | grep -q "^evo_"; then
+            break
+          fi
+
+          ttype=$(task_field "$current_task" "type")
+          retry=$(py_state_get "retry_count")
+          [ -z "$retry" ] || [ "$retry" = "None" ] && retry=0
+
+          info "── Evo | $current_task ($ttype) | retry=$retry ──"
+
+          if [ "$retry" -ge 3 ]; then
+            warn "$current_task 失败 3 次，需要你介入"
+            printf "## %s 进化任务需要决策\n\n失败次数：%s\n\n处理完删除本文件后重跑 tick.sh\n" \
+              "$current_task" "$retry" > "$INBOX"
+            notify "⚠️ 进化任务 $current_task 失败 3 次"
+            exit 0
+          fi
+
+          case "$ttype" in
+            coding)
+              coder_out=$(run_coder_agent "$current_task" "$retry" 2>&1) || true
+              score_line=$(echo "$coder_out" | grep "^CODER_RESULT:" | tail -1)
+              score=$(echo "$score_line" | grep -o 'score=[0-9]*' | cut -d= -f2)
+              score=${score:-0}
+
+              if echo "$score_line" | grep -q "SELF_REJECT"; then
+                warn "❌ Coder 自拒（$score 分）"
+                fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
+                printf "## %s 失败\n\n%s\n" "$current_task" "$coder_out" > "$fail_log"
+                run_research_agent "$current_task" "$fail_log"
+                py_state_inc "retry_count"
+              elif run_acceptance "$current_task"; then
+                val_out=$(run_validator_agent "$current_task" 2>&1) || true
+                if echo "$val_out" | grep -q "VALIDATION_RESULT: PASS"; then
+                  cd "$PROJECT_DIR"
+                  git add -A 2>/dev/null || true
+                  git commit -m "evo($current_task): $(task_field "$current_task" "title") [score=$score]" \
+                    2>/dev/null || true
+                  mark_done "$current_task"
+                  mark_evolution_done "$current_task"
+                  py_state_set "retry_count" "0"
+                  log "✅ 进化任务 $current_task 完成 [score=$score]"
+                  notify "✅ 新功能完成：$(task_field "$current_task" "evolution_goal")"
+                else
+                  warn "❌ Validator 拒绝"
+                  cd "$PROJECT_DIR" && git checkout -- . 2>/dev/null || true
+                  fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
+                  printf "## %s Validator 拒绝\n\n%s\n" "$current_task" "$val_out" > "$fail_log"
+                  run_research_agent "$current_task" "$fail_log"
+                  py_state_inc "retry_count"
+                fi
+              else
+                warn "❌ 命令验收失败"
+                cd "$PROJECT_DIR" && git checkout -- . 2>/dev/null || true
+                fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
+                printf "## %s 验收失败\n" "$current_task" > "$fail_log"
+                run_research_agent "$current_task" "$fail_log"
+                py_state_inc "retry_count"
+              fi
+              ;;
+          esac
+          sleep 2
+        done
+      fi
+
+    else
+      log "💤 等待新功能目标... (每60秒检查一次 program.md)"
+      log "   追加方式：在 .agent/program.md 的「待实现功能」下加一行"
+      log "   格式：- [ ] 你的想法"
+      sleep 60
+    fi
+
+  done
+}
+
+# ════════════════════════════════════════════════════════════
 # 主循环
 # ════════════════════════════════════════════════════════════
 main() {
@@ -272,10 +444,10 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
       exit 0
     fi
 
-    # 检查完成
+    # 检查完成 → 进入进化循环
     if [ -f "$DONE_FILE" ]; then
-      notify "🎉 Browser Agent MVP 完成！"
-      cat "$DONE_FILE"
+      notify "🎉 MVP 已完成，进入进化模式"
+      evolution_loop
       exit 0
     fi
 
@@ -430,187 +602,3 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
 
 trap 'echo ""; warn "调度器已停止（Ctrl+C）"; exit 0' INT
 main
-
-# ════════════════════════════════════════════════════════════
-# Evolution Loop（MVP 完成后自动进入）
-# ════════════════════════════════════════════════════════════
-
-check_evolution_goals() {
-  # 返回 program.md 里待处理的功能数量
-  python3 -c "
-import re
-try:
-    content = open('$AGENT_DIR/program.md').read()
-    pending = re.findall(r'- \[ \]', content)
-    print(len(pending))
-except: print(0)
-" 2>/dev/null || echo "0"
-}
-
-mark_evolution_done() {
-  local goal_id="$1"
-  # 把 tasks.json 里对应 evolution_goal 的任务标记完成时
-  # 同时把 program.md 里的 [~] 改为 [x]
-  python3 -c "
-import json, re
-# 找到这个任务的 evolution_goal
-with open('$TASKS') as f: data = json.load(f)
-goal_text = ''
-for t in data['tasks']:
-    if t['id'] == '$goal_id':
-        goal_text = t.get('evolution_goal', '')
-        break
-if not goal_text: exit()
-# 更新 program.md
-with open('$AGENT_DIR/program.md') as f: content = f.read()
-# 找到包含这段文字的 [~] 行，改为 [x]
-lines = content.split('\n')
-for i, line in enumerate(lines):
-    if '[~]' in line and goal_text[:20] in line:
-        lines[i] = line.replace('[~]', '[x]')
-        break
-with open('$AGENT_DIR/program.md', 'w') as f:
-    f.write('\n'.join(lines))
-" 2>/dev/null || true
-}
-
-run_evolution_agent() {
-  log "🌱 Evolution Agent 启动..."
-  cd "$PROJECT_DIR"
-  local out
-  out=$(claude -p --dangerously-skip-permissions \
-    --system-prompt "$(cat "$CLAUDE_DIR/evolution-agent.md")" \
-    "读取 .agent/program.md 的功能进化区，处理第一个待处理（- [ ]）功能。
-按规范拆解任务追加到 tasks.json，更新 program.md 状态。
-最后一行输出 EVOLUTION_RESULT: <任务ID列表> | <功能名>" 2>&1) || true
-
-  local result_line
-  result_line=$(echo "$out" | grep "^EVOLUTION_RESULT:" | tail -1)
-  if [ -n "$result_line" ]; then
-    log "🌱 $result_line"
-    return 0
-  else
-    warn "Evolution Agent 未输出结果"
-    return 1
-  fi
-}
-
-evolution_loop() {
-  log ""
-  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  log "🎉 MVP 完成，进入功能进化模式"
-  log "在 .agent/program.md 的「待实现功能」下追加想法"
-  log "格式：- [ ] 你的功能描述（可以模糊）"
-  log "保存后系统自动检测并开始实现"
-  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  log ""
-
-  local evo_loop=0
-
-  while true; do
-    evo_loop=$((evo_loop + 1))
-
-    # 检查用户介入
-    if [ -f "$INBOX" ] && [ -s "$INBOX" ]; then
-      notify "⚠️ 需要你介入"
-      warn "查看：cat .agent/inbox/needs-you.md"
-      warn "处理完：rm .agent/inbox/needs-you.md && bash tick.sh"
-      exit 0
-    fi
-
-    # 检查有没有待处理的进化目标
-    pending=$(check_evolution_goals)
-
-    if [ "$pending" -gt 0 ]; then
-      info "── Evolution Loop $evo_loop | 发现 $pending 个待处理功能 ──"
-
-      # 启动 Evolution Agent 拆解任务
-      if run_evolution_agent; then
-        # 拆解成功，继续正常的 Karpathy Loop 执行新任务
-        log "开始执行进化任务..."
-
-        # 重置 retry_count
-        py_state_set "retry_count" "0"
-
-        # 用主循环逻辑执行新任务（复用已有机制）
-        while true; do
-          current_task=$(next_pending_task)
-          [ -z "$current_task" ] && break
-
-          # 只执行 evo_ 开头的任务
-          if ! echo "$current_task" | grep -q "^evo_"; then
-            break
-          fi
-
-          ttype=$(task_field "$current_task" "type")
-          retry=$(py_state_get "retry_count")
-          [ -z "$retry" ] || [ "$retry" = "None" ] && retry=0
-
-          info "── Evo | $current_task ($ttype) | retry=$retry ──"
-
-          if [ "$retry" -ge 3 ]; then
-            warn "$current_task 失败 3 次，需要你介入"
-            printf "## %s 进化任务需要决策\n\n失败次数：%s\n\n处理完删除本文件后重跑 tick.sh\n" \
-              "$current_task" "$retry" > "$INBOX"
-            notify "⚠️ 进化任务 $current_task 失败 3 次"
-            exit 0
-          fi
-
-          # 复用相同的 coding 执行逻辑
-          case "$ttype" in
-            coding)
-              coder_out=$(run_coder_agent "$current_task" "$retry" 2>&1) || true
-              score_line=$(echo "$coder_out" | grep "^CODER_RESULT:" | tail -1)
-              score=$(echo "$score_line" | grep -o 'score=[0-9]*' | cut -d= -f2)
-              score=${score:-0}
-
-              if echo "$score_line" | grep -q "SELF_REJECT"; then
-                warn "❌ Coder 自拒（$score 分）"
-                fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
-                printf "## %s 失败\n\n%s\n" "$current_task" "$coder_out" > "$fail_log"
-                run_research_agent "$current_task" "$fail_log"
-                py_state_inc "retry_count"
-              elif run_acceptance "$current_task"; then
-                val_out=$(run_validator_agent "$current_task" 2>&1) || true
-                if echo "$val_out" | grep -q "VALIDATION_RESULT: PASS"; then
-                  cd "$PROJECT_DIR"
-                  git add -A 2>/dev/null || true
-                  git commit -m "evo($current_task): $(task_field "$current_task" "title") [score=$score]" \
-                    2>/dev/null || true
-                  mark_done "$current_task"
-                  mark_evolution_done "$current_task"
-                  py_state_set "retry_count" "0"
-                  log "✅ 进化任务 $current_task 完成 [score=$score]"
-                  notify "✅ 新功能完成：$(task_field "$current_task" "evolution_goal")"
-                else
-                  warn "❌ Validator 拒绝"
-                  cd "$PROJECT_DIR" && git checkout -- . 2>/dev/null || true
-                  fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
-                  printf "## %s Validator 拒绝\n\n%s\n" "$current_task" "$val_out" > "$fail_log"
-                  run_research_agent "$current_task" "$fail_log"
-                  py_state_inc "retry_count"
-                fi
-              else
-                warn "❌ 命令验收失败"
-                cd "$PROJECT_DIR" && git checkout -- . 2>/dev/null || true
-                fail_log="$EXP_DIR/exp_${current_task}_fail_$((retry+1)).md"
-                printf "## %s 验收失败\n" "$current_task" > "$fail_log"
-                run_research_agent "$current_task" "$fail_log"
-                py_state_inc "retry_count"
-              fi
-              ;;
-          esac
-          sleep 2
-        done
-      fi
-
-    else
-      # 没有待处理目标，等待用户追加
-      log "💤 等待新功能目标... (每60秒检查一次 program.md)"
-      log "   追加方式：在 .agent/program.md 的「待实现功能」下加一行"
-      log "   格式：- [ ] 你的想法"
-      sleep 60
-    fi
-
-  done
-}
