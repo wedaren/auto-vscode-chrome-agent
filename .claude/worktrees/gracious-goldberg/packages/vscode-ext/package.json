@@ -1,0 +1,59 @@
+{
+  "name": "vscode-ext",
+  "displayName": "Browser Agent",
+  "description": "VSCode 插件 — Browser Agent 的 agent 大脑",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionDependencies": [
+    "github.copilot-chat"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "browser-agent.ask",
+        "title": "Browser Agent: 提问"
+      },
+      {
+        "command": "browser-agent.connectDevtools",
+        "title": "Browser Agent: 连接 DevTools MCP"
+      },
+      {
+        "command": "browser-agent.generateReport",
+        "title": "Browser Agent: 生成深度报告"
+      }
+    ],
+    "configuration": {
+      "title": "Browser Agent",
+      "properties": {
+        "browserAgent.port": {
+          "type": "number",
+          "default": 7777,
+          "description": "WebSocket 服务端口号"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "dev": "tsc -watch -p ./tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.96.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.3.3"
+  }
+}

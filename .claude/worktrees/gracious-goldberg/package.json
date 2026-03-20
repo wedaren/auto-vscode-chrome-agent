@@ -1,0 +1,15 @@
+{
+  "name": "browser-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome 插件 + VSCode 插件的 agent 系统",
+  "scripts": {
+    "dev:vscode": "pnpm --filter vscode-ext dev",
+    "dev:chrome": "pnpm --filter chrome-ext dev",
+    "build": "pnpm -r build",
+    "compile": "pnpm -r compile"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

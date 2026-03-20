@@ -102,7 +102,7 @@
       "id": "task_009",
       "type": "validate",
       "title": "MVP 全量验收",
-      "status": "done",
+      "status": "blocked",
       "depends_on": [
         "task_008"
       ],
