@@ -80,7 +80,7 @@
       "id": "task_007",
       "type": "coding",
       "title": "chrome-devtools-mcp 集成",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_006"
       ],
