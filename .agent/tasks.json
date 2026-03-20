@@ -233,7 +233,7 @@
       "id": "evo_v1_011",
       "type": "coding",
       "title": "修复 models_list 和 select_model 消息格式不匹配（P0 致命 bug）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_010"
       ],
