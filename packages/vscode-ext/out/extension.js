@@ -58,6 +58,78 @@ function activate(context) {
     wsServer.start().catch((err) => {
         outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
     });
+    // 注册 WebSocket 消息处理器：list_models / select_model / chat
+    wsServer.onMessage((ws, msg) => {
+        switch (msg.type) {
+            case 'list_models':
+                // Chrome 侧请求可用模型列表
+                void (async () => {
+                    try {
+                        const models = await lmService.listModels();
+                        wsServer.send(ws, {
+                            type: 'models_list',
+                            payload: models,
+                            sessionId: msg.sessionId,
+                        });
+                        outputChannel.appendLine(`[BrowserAgent] 已返回 ${models.length} 个模型信息`);
+                    }
+                    catch (err) {
+                        outputChannel.appendLine(`[BrowserAgent] list_models 失败: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                })();
+                break;
+            case 'select_model':
+                // Chrome 侧请求选择指定模型
+                void (async () => {
+                    try {
+                        const { id } = msg.payload;
+                        const success = await lmService.selectModelById(id);
+                        wsServer.send(ws, {
+                            type: 'model_selected',
+                            payload: { success, id },
+                            sessionId: msg.sessionId,
+                        });
+                        outputChannel.appendLine(`[BrowserAgent] select_model id=${id} 结果: ${success ? '成功' : '未找到'}`);
+                    }
+                    catch (err) {
+                        outputChannel.appendLine(`[BrowserAgent] select_model 失败: ${err instanceof Error ? err.message : String(err)}`);
+                        wsServer.send(ws, {
+                            type: 'model_selected',
+                            payload: { success: false, id: '' },
+                            sessionId: msg.sessionId,
+                        });
+                    }
+                })();
+                break;
+            case 'chat': {
+                // Chrome 侧的用户聊天消息，委托 LmService 处理
+                const text = msg.payload?.text ?? '';
+                void (async () => {
+                    try {
+                        const response = await lmService.sendMessage(text, 'You are a helpful browser agent assistant. Answer concisely.');
+                        wsServer.send(ws, {
+                            type: 'chat_response',
+                            payload: { text: response },
+                            sessionId: msg.sessionId,
+                        });
+                    }
+                    catch (err) {
+                        wsServer.send(ws, {
+                            type: 'chat_response',
+                            payload: {
+                                text: `错误: ${err instanceof Error ? err.message : String(err)}`,
+                            },
+                            sessionId: msg.sessionId,
+                        });
+                    }
+                })();
+                break;
+            }
+            default:
+                outputChannel.appendLine(`[BrowserAgent] 未处理的消息类型: ${msg.type}`);
+                break;
+        }
+    });
     // 初始化 MCP Client（chrome-devtools-mcp）
     mcpClient = new mcp_client_1.McpClient(outputChannel);
     // 初始化报告生成器

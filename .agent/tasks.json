@@ -114,7 +114,9 @@
       "type": "coding",
       "title": "LmService 新增 listModels() 和 selectModelById() 方法",
       "status": "done",
-      "depends_on": ["task_009"],
+      "depends_on": [
+        "task_009"
+      ],
       "acceptance": "lm-service.ts 有 listModels() 返回所有可用模型信息数组（id/name/vendor/family/maxInputTokens），有 selectModelById(id) 可指定模型，编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'listModels' src/lm-service.ts && grep -q 'selectModelById' src/lm-service.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: listModels/selectModelById 缺失或编译失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
@@ -124,7 +126,9 @@
       "type": "coding",
       "title": "WebSocket 新增 list_models / select_model 消息处理",
       "status": "pending",
-      "depends_on": ["evo_v1_001"],
+      "depends_on": [
+        "evo_v1_001"
+      ],
       "acceptance": "extension.ts 中注册了 list_models 和 select_model 的 WebSocket 消息处理器，收到 list_models 返回 models_list，收到 select_model 调用 LmService.selectModelById()，编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'list_models' src/extension.ts && grep -q 'select_model' src/extension.ts && grep -q 'models_list' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 模型消息处理缺失或编译失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
@@ -134,7 +138,9 @@
       "type": "coding",
       "title": "Chrome 侧新增 ModelSelector 下拉组件",
       "status": "pending",
-      "depends_on": ["evo_v1_002"],
+      "depends_on": [
+        "evo_v1_002"
+      ],
       "acceptance": "components/ModelSelector.tsx 存在，是一个 React 下拉选择组件，接受 models 列表和 onSelect 回调，构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ModelSelector.tsx && grep -q 'ModelSelector' components/ModelSelector.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: ModelSelector 组件缺失或构建失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
@@ -144,7 +150,9 @@
       "type": "coding",
       "title": "App.tsx 集成 ModelSelector，WebSocket 联动模型选择",
       "status": "pending",
-      "depends_on": ["evo_v1_003"],
+      "depends_on": [
+        "evo_v1_003"
+      ],
       "acceptance": "App.tsx 引入 ModelSelector，连接时自动请求 list_models，选择模型时发送 select_model，接收 models_list 更新下拉列表，构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'ModelSelector' entrypoints/sidepanel/App.tsx && grep -q 'list_models' entrypoints/sidepanel/App.tsx && grep -q 'select_model' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: App.tsx 模型选择集成缺失或构建失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
@@ -154,7 +162,9 @@
       "type": "validate",
       "title": "模型选择功能全量验收：双端构建通过 + 消息链路完整",
       "status": "pending",
-      "depends_on": ["evo_v1_004"],
+      "depends_on": [
+        "evo_v1_004"
+      ],
       "acceptance": "两个包均构建通过，Chrome 侧有 ModelSelector 组件和 list_models/select_model/models_list 消息处理，VSCode 侧有 listModels/selectModelById 和对应 WebSocket 处理",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'listModels' src/lm-service.ts && grep -q 'list_models' src/extension.ts && grep -q 'select_model' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && grep -q 'ModelSelector' entrypoints/sidepanel/App.tsx && grep -q 'models_list' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 模型选择功能验收失败'",
       "evolution_goal": "chrome 插件对话能选 vscode.lm 模型对话"
