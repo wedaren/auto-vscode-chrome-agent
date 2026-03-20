@@ -1,17 +1,19 @@
 {
   "phase": "idle",
-  "current_task": "evo_v2_003",
+  "current_task": "evo_v2_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v2_003",
+    "task_id": "evo_v2_004",
     "result": "pass",
-    "score": 100,
-    "issues": [],
-    "acceptance_cmd_output": "PASS — hooks/useChat.ts 和 hooks/useWebSocket.ts 存在，App.tsx 正确引用，npm run build 成功无 error"
+    "score": 95,
+    "issues": [
+      "WARN: useChat.ts 和 message-factory.ts 重复导出 Message 类型，WXT 构建有 duplicated imports 警告，建议 useChat.ts 改为 re-export message-factory 的 Message"
+    ],
+    "acceptance_cmd_output": "PASS — hooks/usePageContext.ts 和 utils/message-factory.ts 存在，App.tsx 139 行 < 180，npm run build 成功（0 errors，有 duplicated imports WARN）"
   },
-  "last_tick": "2026-03-20T16:00:00.000000Z",
+  "last_tick": "2026-03-21T00:00:00.000000Z",
   "pm_done": true
 }
