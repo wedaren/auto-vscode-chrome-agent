@@ -293,7 +293,7 @@
       "id": "evo_v2_002",
       "type": "coding",
       "title": "VSCode 重构：从 extension.ts 抽取 CommandRegistry 命令注册模块",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v2_001"
       ],
