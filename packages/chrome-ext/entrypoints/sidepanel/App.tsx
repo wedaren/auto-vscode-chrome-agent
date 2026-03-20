@@ -1,8 +1,9 @@
-// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知、模型选择、流式响应和停止生成
+// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知、模型选择、流式响应、停止生成和思考中指示器
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
 import MessageBubble from '../../components/MessageBubble';
+import TypingIndicator from '../../components/TypingIndicator';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../../src/ws-client';
 
 interface Message {
@@ -228,6 +229,9 @@ export default function App() {
     };
     setMessages((prev) => [...prev, userMessage]);
 
+    // 进入等待状态（TypingIndicator 立即显示）
+    setIsStreaming(true);
+
     // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
     const client = wsClientRef.current;
     if (client) {
@@ -288,6 +292,13 @@ export default function App() {
         {messages.map((msg) => (
           <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
         ))}
+        {/* 思考中指示器：isStreaming 且尚未收到 assistant 内容时显示 */}
+        {isStreaming && (() => {
+          const lastMsg = messages[messages.length - 1];
+          // 显示条件：最后一条消息不是 assistant 或 assistant 消息内容为空
+          const showIndicator = !lastMsg || lastMsg.role !== 'assistant' || lastMsg.content === '';
+          return showIndicator ? <TypingIndicator /> : null;
+        })()}
         <div ref={messagesEndRef} />
       </div>
 

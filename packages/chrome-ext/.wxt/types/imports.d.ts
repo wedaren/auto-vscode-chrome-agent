@@ -8,6 +8,7 @@ declare global {
   const MessageBubble: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')['default']
   const MigrationError: typeof import('wxt/storage')['MigrationError']
   const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
+  const TypingIndicator: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')['default']
   const browser: typeof import('wxt/browser')['browser']
   const createIframeUi: typeof import('wxt/client')['createIframeUi']
   const createIntegratedUi: typeof import('wxt/client')['createIntegratedUi']
@@ -38,4 +39,7 @@ declare global {
   // @ts-ignore
   export type { ModelInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')
+  // @ts-ignore
+  export type { TypingIndicatorProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')
 }
