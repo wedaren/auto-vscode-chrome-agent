@@ -10,8 +10,19 @@
   "categories": [
     "Other"
   ],
+  "extensionDependencies": [
+    "github.copilot-chat"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "browser-agent.ask",
+        "title": "Browser Agent: 提问"
+      }
+    ]
+  },
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",

@@ -13,7 +13,7 @@
       "id": "task_001",
       "type": "coding",
       "title": "初始化 monorepo 项目结构",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_000"
       ],
@@ -24,7 +24,7 @@
       "id": "task_002",
       "type": "coding",
       "title": "VSCode 插件骨架 + vscode.lm 基础调用",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_001"
       ],
@@ -46,7 +46,7 @@
       "id": "task_004",
       "type": "coding",
       "title": "Chrome 插件骨架（WXT）+ side panel UI",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_001"
       ],
