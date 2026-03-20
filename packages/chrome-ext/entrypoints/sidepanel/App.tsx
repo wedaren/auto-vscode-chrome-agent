@@ -1,6 +1,7 @@
-// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知和快捷按钮
+// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知、模型选择和快捷按钮
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
+import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../../src/ws-client';
 
 interface Message {
@@ -24,6 +25,9 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [pageContext, setPageContext] = useState<PageContext>({ url: '', title: '', selectedText: '' });
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsClientRef = useRef<WsClient | null>(null);
 
@@ -45,9 +49,13 @@ export default function App() {
     const client = new WsClient({ url: WS_URL });
     wsClientRef.current = client;
 
-    // 监听连接状态
+    // 监听连接状态，连接时自动请求模型列表
     const unsubState = client.onStateChange((state: ConnectionState) => {
       setIsConnected(state === 'connected');
+      if (state === 'connected') {
+        setModelsLoading(true);
+        client.sendMessage('list_models', null);
+      }
     });
 
     // 监听服务端消息
@@ -75,6 +83,18 @@ export default function App() {
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, echoMsg]);
+          break;
+        }
+        case 'models_list': {
+          // 收到可用模型列表
+          const modelsList = (msg.payload as { models: ModelInfo[] })?.models ?? [];
+          setModels(modelsList);
+          setModelsLoading(false);
+          // 如果尚未选择模型且列表非空，默认选中第一个
+          if (modelsList.length > 0) {
+            setSelectedModelId((prev) => prev ?? modelsList[0].id);
+          }
+          console.log('[App] 收到模型列表:', modelsList.length, '个模型');
           break;
         }
         default:
@@ -122,6 +142,16 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  /** 用户选择模型时，发送 select_model 消息到 VSCode 侧 */
+  const handleModelSelect = useCallback((modelId: string) => {
+    setSelectedModelId(modelId);
+    const client = wsClientRef.current;
+    if (client) {
+      client.sendMessage('select_model', { modelId });
+      console.log('[App] 已选择模型:', modelId);
+    }
+  }, []);
+
   const handleSendMessage = useCallback((content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -159,6 +189,15 @@ export default function App() {
           title={isConnected ? '已连接' : '未连接'}
         />
       </header>
+
+      {/* Model selector */}
+      <ModelSelector
+        models={models}
+        selectedModelId={selectedModelId}
+        onSelect={handleModelSelect}
+        disabled={!isConnected}
+        loading={modelsLoading}
+      />
 
       {/* Page context bar */}
       {pageContext.url && (
