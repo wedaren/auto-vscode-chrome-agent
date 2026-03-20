@@ -24,6 +24,10 @@
       {
         "command": "browser-agent.connectDevtools",
         "title": "Browser Agent: 连接 DevTools MCP"
+      },
+      {
+        "command": "browser-agent.generateReport",
+        "title": "Browser Agent: 生成深度报告"
       }
     ],
     "configuration": {

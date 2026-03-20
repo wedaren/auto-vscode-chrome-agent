@@ -40,9 +40,11 @@ const vscode = __importStar(require("vscode"));
 const lm_service_1 = require("./lm-service");
 const ws_server_1 = require("./ws-server");
 const mcp_client_1 = require("./mcp-client");
+const report_generator_1 = require("./report-generator");
 let lmService;
 let wsServer;
 let mcpClient;
+let reportGenerator;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -58,6 +60,33 @@ function activate(context) {
     });
     // 初始化 MCP Client（chrome-devtools-mcp）
     mcpClient = new mcp_client_1.McpClient(outputChannel);
+    // 初始化报告生成器
+    reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
+    // 注册命令：生成深度报告
+    const generateReportCommand = vscode.commands.registerCommand('browser-agent.generateReport', async () => {
+        const topic = await vscode.window.showInputBox({
+            prompt: '输入研究主题',
+            placeHolder: '例如：React 19 新特性分析',
+        });
+        if (!topic) {
+            return;
+        }
+        outputChannel.appendLine(`[BrowserAgent] 开始生成报告: ${topic}`);
+        outputChannel.show(true);
+        try {
+            const report = await reportGenerator.generate({
+                topic,
+                maxPages: 3,
+                sessionId: `report-${Date.now()}`,
+            });
+            outputChannel.appendLine(`[BrowserAgent] 报告生成完成:\n${report}`);
+            void vscode.window.showInformationMessage('Browser Agent: 深度报告已生成');
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            void vscode.window.showErrorMessage(`Browser Agent: 报告生成失败 - ${message}`);
+        }
+    });
     // 注册命令：连接 DevTools MCP
     const connectMcpCommand = vscode.commands.registerCommand('browser-agent.connectDevtools', async () => {
         try {
@@ -93,11 +122,13 @@ function activate(context) {
         }
     });
     // 注册 dispose
-    context.subscriptions.push(outputChannel, askCommand, connectMcpCommand, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, askCommand, connectMcpCommand, generateReportCommand, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 function deactivate() {
+    reportGenerator?.cancel();
+    reportGenerator = undefined;
     void mcpClient?.dispose();
     mcpClient = undefined;
     wsServer?.dispose();
