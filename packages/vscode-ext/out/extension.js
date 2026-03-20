@@ -105,7 +105,24 @@ function activate(context) {
                 break;
             case 'chat': {
                 // Chrome 侧的用户聊天消息，使用流式响应处理
-                const text = msg.payload?.text ?? '';
+                const chatPayload = msg.payload;
+                const text = chatPayload?.text ?? '';
+                const context = chatPayload?.context;
+                // 根据浏览器上下文动态构建 system prompt
+                let systemPrompt = 'You are a helpful browser agent assistant. Answer concisely.';
+                if (context) {
+                    const contextParts = [];
+                    if (context.url) {
+                        contextParts.push(`用户正在浏览 ${context.url}${context.title ? ` (${context.title})` : ''}`);
+                    }
+                    if (context.selectedText) {
+                        contextParts.push(`用户选中了以下文本:\n"""\n${context.selectedText}\n"""`);
+                    }
+                    if (contextParts.length > 0) {
+                        systemPrompt += '\n\n当前浏览器上下文:\n' + contextParts.join('\n');
+                    }
+                }
+                outputChannel.appendLine(`[BrowserAgent] chat 收到消息，context: url=${context?.url ?? '无'}, title=${context?.title ?? '无'}, selectedText=${context?.selectedText ? `${context.selectedText.length}字` : '无'}`);
                 void (async () => {
                     // 创建 CancellationTokenSource 用于支持 cancel_chat 中断
                     const cts = new vscode.CancellationTokenSource();
@@ -118,7 +135,7 @@ function activate(context) {
                                 payload: { text: fragment, done: false },
                                 sessionId: msg.sessionId,
                             });
-                        }, 'You are a helpful browser agent assistant. Answer concisely.', cts.token);
+                        }, systemPrompt, cts.token);
                         // 流式完成，发送 chat_response_end
                         wsServer.send(ws, {
                             type: 'chat_response_end',

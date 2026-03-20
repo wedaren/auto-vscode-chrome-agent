@@ -86,7 +86,32 @@ export function activate(context: vscode.ExtensionContext): void {
 
       case 'chat': {
         // Chrome 侧的用户聊天消息，使用流式响应处理
-        const text = (msg.payload as { text?: string })?.text ?? '';
+        const chatPayload = msg.payload as {
+          text?: string;
+          context?: { url?: string; title?: string; selectedText?: string };
+        };
+        const text = chatPayload?.text ?? '';
+        const context = chatPayload?.context;
+
+        // 根据浏览器上下文动态构建 system prompt
+        let systemPrompt = 'You are a helpful browser agent assistant. Answer concisely.';
+        if (context) {
+          const contextParts: string[] = [];
+          if (context.url) {
+            contextParts.push(`用户正在浏览 ${context.url}${context.title ? ` (${context.title})` : ''}`);
+          }
+          if (context.selectedText) {
+            contextParts.push(`用户选中了以下文本:\n"""\n${context.selectedText}\n"""`);
+          }
+          if (contextParts.length > 0) {
+            systemPrompt += '\n\n当前浏览器上下文:\n' + contextParts.join('\n');
+          }
+        }
+
+        outputChannel.appendLine(
+          `[BrowserAgent] chat 收到消息，context: url=${context?.url ?? '无'}, title=${context?.title ?? '无'}, selectedText=${context?.selectedText ? `${context.selectedText.length}字` : '无'}`,
+        );
+
         void (async () => {
           // 创建 CancellationTokenSource 用于支持 cancel_chat 中断
           const cts = new vscode.CancellationTokenSource();
@@ -103,7 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
                   sessionId: msg.sessionId,
                 });
               },
-              'You are a helpful browser agent assistant. Answer concisely.',
+              systemPrompt,
               cts.token,
             );
 
