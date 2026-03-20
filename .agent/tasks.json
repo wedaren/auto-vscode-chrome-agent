@@ -317,7 +317,7 @@
       "id": "evo_v2_004",
       "type": "coding",
       "title": "Chrome 重构：抽取 usePageContext Hook + createMessage 工具函数，App.tsx 精简为纯 UI",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v2_003"
       ],
