@@ -91,7 +91,7 @@
       "id": "task_008",
       "type": "coding",
       "title": "深度报告生成",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_007"
       ],
