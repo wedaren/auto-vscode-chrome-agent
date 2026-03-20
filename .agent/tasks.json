@@ -221,13 +221,61 @@
       "id": "evo_v1_010",
       "type": "validate",
       "title": "Copilot 级体验全量验收：流式 + Markdown + 指示器 + 停止，双端构建通过",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_009"
       ],
       "acceptance": "双端构建通过；VSCode 侧有 sendMessageStreaming 流式调用 + chat_response_chunk/end 消息 + cancel_chat 取消；Chrome 侧有流式消息处理 + MessageBubble Markdown 渲染 + TypingIndicator + 停止生成按钮",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'sendMessageStreaming' src/extension.ts && grep -q 'chat_response_chunk' src/extension.ts && grep -q 'cancel_chat' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && grep -q 'chat_response_chunk' entrypoints/sidepanel/App.tsx && test -f components/MessageBubble.tsx && test -f components/TypingIndicator.tsx && grep -q 'cancel_chat' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Copilot 级体验验收失败'",
       "evolution_goal": "chrome 对话要做到 vscode Copilot 一样好用"
+    },
+    {
+      "id": "evo_v1_011",
+      "type": "coding",
+      "title": "修复 models_list 和 select_model 消息格式不匹配（P0 致命 bug）",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_010"
+      ],
+      "acceptance": "VSCode extension.ts 中 list_models 处理器返回 payload: { models } 格式（对象包裹数组）；select_model 处理器从 payload 提取 modelId 字段（与 Chrome 侧一致）；Chrome App.tsx models_list 处理正确解析 payload.models；select_model 发送 payload.modelId；双端编译/构建通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q '{ models }\\|{models}\\|{ models:' src/extension.ts && grep -q 'modelId' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 消息格式修复失败或构建失败'",
+      "evolution_goal": "现在 chrome 对话无法正常对话"
+    },
+    {
+      "id": "evo_v1_012",
+      "type": "coding",
+      "title": "修复 chat 消息处理：提取 context 并拼入 LM 调用的 system prompt",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_011"
+      ],
+      "acceptance": "extension.ts chat 处理器从 msg.payload 提取 context（url/title/selectedText）；将上下文信息动态拼入 system prompt（如有 url 则提示'用户正在浏览 {url}'，有 selectedText 则附加选中文本）；传入 lmService.sendMessageStreaming()；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'context' src/extension.ts && grep -q 'url\\|title\\|selectedText' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: context 处理缺失或编译失败'",
+      "evolution_goal": "现在 chrome 对话无法正常对话"
+    },
+    {
+      "id": "evo_v1_013",
+      "type": "coding",
+      "title": "修复 isStreaming 状态管理：发送失败恢复 + chat_response_end 边缘情况",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_012"
+      ],
+      "acceptance": "App.tsx handleSendMessage 检查 sendMessage 返回值，发送失败时恢复 isStreaming=false 并移除空 assistant 消息或显示错误提示；chat_response_end 处理改用 typeof fullText === 'string' 判断（兼容空字符串场景）；WebSocket 断连时自动恢复 isStreaming 状态；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'sendMessage.*chat' entrypoints/sidepanel/App.tsx && grep -q 'setIsStreaming(false)' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 状态管理修复缺失或构建失败'",
+      "evolution_goal": "现在 chrome 对话无法正常对话"
+    },
+    {
+      "id": "evo_v1_014",
+      "type": "validate",
+      "title": "Chrome 对话修复全量验收：消息格式 + 上下文感知 + 状态管理，双端构建通过",
+      "status": "pending",
+      "depends_on": [
+        "evo_v1_013"
+      ],
+      "acceptance": "双端构建通过；VSCode 侧 models_list 返回 { models } 格式 + select_model 接收 modelId + chat 提取 context 拼入 prompt；Chrome 侧 models_list 正确解析 + isStreaming 失败恢复 + chat_response_end 兼容空字符串",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'modelId' src/extension.ts && grep -q 'context' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Chrome 对话修复验收失败'",
+      "evolution_goal": "现在 chrome 对话无法正常对话"
     }
   ]
 }

@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext): void {
             const models = await lmService!.listModels();
             wsServer!.send(ws, {
               type: 'models_list',
-              payload: models,
+              payload: { models },
               sessionId: msg.sessionId,
             });
             outputChannel.appendLine(
@@ -61,15 +61,15 @@ export function activate(context: vscode.ExtensionContext): void {
         // Chrome 侧请求选择指定模型
         void (async () => {
           try {
-            const { id } = msg.payload as { id: string };
-            const success = await lmService!.selectModelById(id);
+            const { modelId } = msg.payload as { modelId: string };
+            const success = await lmService!.selectModelById(modelId);
             wsServer!.send(ws, {
               type: 'model_selected',
-              payload: { success, id },
+              payload: { success, modelId },
               sessionId: msg.sessionId,
             });
             outputChannel.appendLine(
-              `[BrowserAgent] select_model id=${id} 结果: ${success ? '成功' : '未找到'}`,
+              `[BrowserAgent] select_model modelId=${modelId} 结果: ${success ? '成功' : '未找到'}`,
             );
           } catch (err) {
             outputChannel.appendLine(
@@ -77,7 +77,7 @@ export function activate(context: vscode.ExtensionContext): void {
             );
             wsServer!.send(ws, {
               type: 'model_selected',
-              payload: { success: false, id: '' },
+              payload: { success: false, modelId: '' },
               sessionId: msg.sessionId,
             });
           }
