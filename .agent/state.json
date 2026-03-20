@@ -1,15 +1,17 @@
 {
   "phase": "code",
-  "current_task": "evo_v1_003",
+  "current_task": "evo_v1_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v1_003",
+    "task_id": "evo_v1_004",
     "result": "pass",
-    "score": 100,
-    "issues": [],
+    "score": 95,
+    "issues": [
+      "tsconfig include 未显式覆盖 components/ 目录（WXT 构建不受影响，属小瑕疵）"
+    ],
     "acceptance_cmd_output": "PASS"
   },
   "last_tick": "2026-03-20T14:24:03.674327Z",

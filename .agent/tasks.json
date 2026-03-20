@@ -149,7 +149,7 @@
       "id": "evo_v1_004",
       "type": "coding",
       "title": "App.tsx 集成 ModelSelector，WebSocket 联动模型选择",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_003"
       ],
