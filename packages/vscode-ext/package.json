@@ -21,7 +21,17 @@
         "command": "browser-agent.ask",
         "title": "Browser Agent: 提问"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Browser Agent",
+      "properties": {
+        "browserAgent.port": {
+          "type": "number",
+          "default": 7777,
+          "description": "WebSocket 服务端口号"
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",

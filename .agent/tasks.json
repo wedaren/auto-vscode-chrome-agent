@@ -24,7 +24,7 @@
       "id": "task_002",
       "type": "coding",
       "title": "VSCode 插件骨架 + vscode.lm 基础调用",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_001"
       ],
@@ -35,7 +35,7 @@
       "id": "task_003",
       "type": "coding",
       "title": "WebSocket server（VSCode 插件侧）",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_002"
       ],

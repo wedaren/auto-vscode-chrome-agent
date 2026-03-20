@@ -38,12 +38,22 @@ exports.deactivate = deactivate;
 // extension.ts — VSCode 插件入口，负责激活和销毁生命周期
 const vscode = __importStar(require("vscode"));
 const lm_service_1 = require("./lm-service");
+const ws_server_1 = require("./ws-server");
 let lmService;
+let wsServer;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
     // 初始化 LM 服务
     lmService = new lm_service_1.LmService(outputChannel);
+    // 初始化 WebSocket 服务端
+    const port = vscode.workspace
+        .getConfiguration('browserAgent')
+        .get('port', 7777);
+    wsServer = new ws_server_1.WsServer(outputChannel, port);
+    wsServer.start().catch((err) => {
+        outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
+    });
     // 注册命令：发送消息到语言模型
     const askCommand = vscode.commands.registerCommand('browser-agent.ask', async () => {
         const input = await vscode.window.showInputBox({
@@ -66,11 +76,14 @@ function activate(context) {
             void vscode.window.showErrorMessage(`Browser Agent: ${message}`);
         }
     });
-    context.subscriptions.push(outputChannel, askCommand);
+    // 注册 dispose
+    context.subscriptions.push(outputChannel, askCommand, { dispose: () => wsServer?.dispose() });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 function deactivate() {
+    wsServer?.dispose();
+    wsServer = undefined;
     lmService = undefined;
 }
 //# sourceMappingURL=extension.js.map
