@@ -16,3 +16,15 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收详情：
+- acceptance_cmd：PASS（`{ models }` 格式确认、`modelId` 字段确认、VSCode 编译零错误、Chrome 构建零错误）
+- TypeScript 严格模式：`tsc --noEmit` 零错误
+- program.md 约束：模型调用仅通过 vscode.lm API ✓ | Chrome 插件不内置模型 ✓ | 无需外部 API key 的依赖 ✓
+- 代码质量：extension.ts 和 App.tsx 均有顶部注释，消息格式双端一致（VSCode 返回 `payload: { models }`，Chrome 解析 `payload.models`；Chrome 发送 `{ modelId }`，VSCode 解构 `{ modelId }`）
