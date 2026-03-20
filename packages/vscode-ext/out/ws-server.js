@@ -96,6 +96,14 @@ class WsServer {
             });
         });
     }
+    /** 消息处理回调，供外部注册自定义处理逻辑 */
+    externalHandler = null;
+    /**
+     * 注册外部消息处理器（用于 extension.ts 中接入 LmService 等）
+     */
+    onMessage(handler) {
+        this.externalHandler = handler;
+    }
     /**
      * 处理收到的桥接消息
      */
@@ -104,9 +112,30 @@ class WsServer {
             case 'ping':
                 this.send(ws, { type: 'pong', payload: null, sessionId: msg.sessionId });
                 break;
+            case 'chat': {
+                // 收到 Chrome 侧的用户聊天消息
+                const text = msg.payload?.text ?? '';
+                this.outputChannel.appendLine(`[WsServer] 收到聊天消息: ${text}`);
+                // 如果有外部处理器，委托处理；否则 echo 回去
+                if (this.externalHandler) {
+                    this.externalHandler(ws, msg);
+                }
+                else {
+                    this.send(ws, {
+                        type: 'echo',
+                        payload: `[echo] ${text}`,
+                        sessionId: msg.sessionId,
+                    });
+                }
+                break;
+            }
             default:
                 // 后续任务会扩展更多消息类型处理
                 this.outputChannel.appendLine(`[WsServer] 未处理的消息类型: ${msg.type}`);
+                // 委托给外部处理器（如果有）
+                if (this.externalHandler) {
+                    this.externalHandler(ws, msg);
+                }
                 break;
         }
     }

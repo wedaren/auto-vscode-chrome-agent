@@ -13,6 +13,6 @@
     "validated_at": "2026-03-20T08:00:00Z",
     "validator_notes": "WXT build 0 errors, side panel UI 完整, ChatInput 组件存在, 快捷按钮齐全, 无外部 API key 依赖, Chrome 插件不内置模型"
   },
-  "last_tick": "2026-03-20T07:49:39.306961Z",
+  "last_tick": "2026-03-20T07:53:37.106849Z",
   "pm_done": true
 }

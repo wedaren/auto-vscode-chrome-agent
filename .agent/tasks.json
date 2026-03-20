@@ -46,7 +46,7 @@
       "id": "task_004",
       "type": "coding",
       "title": "Chrome 插件骨架（WXT）+ side panel UI",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_001"
       ],
@@ -57,7 +57,7 @@
       "id": "task_005",
       "type": "coding",
       "title": "Chrome ↔ VSCode WebSocket 消息收发",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_003",
         "task_004"

@@ -21,6 +21,12 @@ export declare class WsServer {
      * @returns Promise 在服务端开始监听后 resolve
      */
     start(): Promise<void>;
+    /** 消息处理回调，供外部注册自定义处理逻辑 */
+    private externalHandler;
+    /**
+     * 注册外部消息处理器（用于 extension.ts 中接入 LmService 等）
+     */
+    onMessage(handler: (ws: WebSocket, msg: BridgeMessage) => void): void;
     /**
      * 处理收到的桥接消息
      */

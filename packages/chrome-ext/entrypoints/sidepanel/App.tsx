@@ -1,6 +1,7 @@
-// App.tsx — Side Panel 主组件，包含对话界面和快捷按钮
-import React, { useState, useRef, useEffect } from 'react';
+// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信和快捷按钮
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
+import { WsClient, type BridgeMessage, type ConnectionState } from '../../src/ws-client';
 
 interface Message {
   id: string;
@@ -9,16 +10,73 @@ interface Message {
   timestamp: number;
 }
 
+/** WebSocket 服务端地址（VSCode 插件侧） */
+const WS_URL = 'ws://localhost:7777';
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsClientRef = useRef<WsClient | null>(null);
+
+  // 初始化 WebSocket 客户端
+  useEffect(() => {
+    const client = new WsClient({ url: WS_URL });
+    wsClientRef.current = client;
+
+    // 监听连接状态
+    const unsubState = client.onStateChange((state: ConnectionState) => {
+      setIsConnected(state === 'connected');
+    });
+
+    // 监听服务端消息
+    const unsubMsg = client.onMessage((msg: BridgeMessage) => {
+      switch (msg.type) {
+        case 'pong':
+          console.log('[App] 收到 pong，连接确认');
+          break;
+        case 'chat_response': {
+          const assistantMsg: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: String(msg.payload ?? ''),
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+          break;
+        }
+        case 'echo': {
+          // 服务端回显消息
+          const echoMsg: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: String(msg.payload ?? ''),
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, echoMsg]);
+          break;
+        }
+        default:
+          console.log('[App] 未处理的消息类型:', msg.type);
+      }
+    });
+
+    // 连接
+    client.connect();
+
+    return () => {
+      unsubState();
+      unsubMsg();
+      client.dispose();
+      wsClientRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = useCallback((content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -26,11 +84,17 @@ export default function App() {
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, userMessage]);
-  };
 
-  const handleQuickAction = (action: string) => {
+    // 通过 WebSocket 发送到 VSCode 侧
+    const client = wsClientRef.current;
+    if (client) {
+      client.sendMessage('chat', { text: content });
+    }
+  }, []);
+
+  const handleQuickAction = useCallback((action: string) => {
     handleSendMessage(action);
-  };
+  }, [handleSendMessage]);
 
   return (
     <div className="flex flex-col h-screen bg-white">
