@@ -1,0 +1,94 @@
+{
+  "tasks": [
+    {
+      "id": "task_000",
+      "type": "pm_research",
+      "title": "技术可行性调研 + 项目骨架决策",
+      "status": "pending",
+      "depends_on": [],
+      "acceptance": "knowledge/ 下有四份研究文档，decisions.md 有完整技术决策",
+      "acceptance_cmd": "test -f .agent/knowledge/vscode-lm.md && test -f .agent/knowledge/chrome-ext.md && test -f .agent/knowledge/websocket.md && test -f .agent/knowledge/chrome-devtools-mcp.md && test -s .agent/decisions.md && echo PASS || echo 'FAIL: knowledge 文档不完整'"
+    },
+    {
+      "id": "task_001",
+      "type": "coding",
+      "title": "初始化 monorepo 项目结构",
+      "status": "blocked",
+      "depends_on": ["task_000"],
+      "acceptance": "pnpm install 无报错，packages/vscode-ext 和 packages/chrome-ext 目录存在且有 package.json",
+      "acceptance_cmd": "test -f package.json && test -f packages/vscode-ext/package.json && test -f packages/chrome-ext/package.json && echo PASS || echo 'FAIL: 项目结构不完整'"
+    },
+    {
+      "id": "task_002",
+      "type": "coding",
+      "title": "VSCode 插件骨架 + vscode.lm 基础调用",
+      "status": "blocked",
+      "depends_on": ["task_001"],
+      "acceptance": "插件编译通过，有 activate() 函数，有调用 vscode.lm 的代码",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && grep -r 'vscode.lm' src/ && echo PASS || echo 'FAIL: 编译失败或未使用 vscode.lm'"
+    },
+    {
+      "id": "task_003",
+      "type": "coding",
+      "title": "WebSocket server（VSCode 插件侧）",
+      "status": "blocked",
+      "depends_on": ["task_002"],
+      "acceptance": "ws server 代码存在，端口 7890，有连接/断开事件处理",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -r 'WebSocketServer\\|new Server' src/ > /dev/null && grep -r '7890' src/ > /dev/null && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket server 代码缺失或编译失败'"
+    },
+    {
+      "id": "task_004",
+      "type": "coding",
+      "title": "Chrome 插件骨架（WXT）+ side panel UI",
+      "status": "blocked",
+      "depends_on": ["task_001"],
+      "acceptance": "WXT 结构正确，side panel 入口存在，有对话输入框组件",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f wxt.config.ts && npm run build 2>&1 | grep -i 'error' | grep -v 'no error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WXT 构建失败'"
+    },
+    {
+      "id": "task_005",
+      "type": "coding",
+      "title": "Chrome ↔ VSCode WebSocket 消息收发",
+      "status": "blocked",
+      "depends_on": ["task_003", "task_004"],
+      "acceptance": "Chrome 插件有 WebSocket 客户端，能连接 localhost:7890",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -r 'WebSocket\\|ws://' src/ entrypoints/ > /dev/null && grep -r '7890' src/ entrypoints/ > /dev/null && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 客户端代码缺失'"
+    },
+    {
+      "id": "task_006",
+      "type": "coding",
+      "title": "页面上下文感知（URL / 标题 / 选中文本）",
+      "status": "blocked",
+      "depends_on": ["task_005"],
+      "acceptance": "content script 存在，能获取 URL、标题、选中文本",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -r 'document.title\\|location.href\\|getSelection' entrypoints/ src/ > /dev/null && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 上下文采集代码缺失'"
+    },
+    {
+      "id": "task_007",
+      "type": "coding",
+      "title": "chrome-devtools-mcp 集成",
+      "status": "blocked",
+      "depends_on": ["task_006"],
+      "acceptance": "VSCode 插件有启动和连接 chrome-devtools-mcp 的代码",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -r 'chrome-devtools-mcp\\|devtools\\|McpClient' src/ > /dev/null && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: MCP 集成代码缺失'"
+    },
+    {
+      "id": "task_008",
+      "type": "coding",
+      "title": "深度报告生成",
+      "status": "blocked",
+      "depends_on": ["task_007"],
+      "acceptance": "有报告生成模块，能多页面探索并输出 Markdown",
+      "acceptance_cmd": "cd packages/vscode-ext && find src/ -name '*report*' -o -name '*reporter*' | grep -q . && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 报告生成模块缺失'"
+    },
+    {
+      "id": "task_009",
+      "type": "validate",
+      "title": "MVP 全量验收",
+      "status": "blocked",
+      "depends_on": ["task_008"],
+      "acceptance": "两个包均构建通过，program.md 停止条件全部满足",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 最终构建失败'"
+    }
+  ]
+}

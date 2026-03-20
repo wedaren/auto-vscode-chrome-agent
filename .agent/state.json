@@ -1,0 +1,10 @@
+{
+  "phase": "pm_research",
+  "current_task": "task_000",
+  "loop_count": 0,
+  "retry_count": 0,
+  "last_result": null,
+  "last_validation": null,
+  "last_tick": null,
+  "pm_done": false
+}
