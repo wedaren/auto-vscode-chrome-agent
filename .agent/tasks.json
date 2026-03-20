@@ -276,6 +276,56 @@
       "acceptance": "双端构建通过；VSCode 侧 models_list 返回 { models } 格式 + select_model 接收 modelId + chat 提取 context 拼入 prompt；Chrome 侧 models_list 正确解析 + isStreaming 失败恢复 + chat_response_end 兼容空字符串",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'modelId' src/extension.ts && grep -q 'context' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Chrome 对话修复验收失败'",
       "evolution_goal": "现在 chrome 对话无法正常对话"
+    },
+    {
+      "id": "evo_v2_001",
+      "type": "coding",
+      "title": "VSCode 重构：从 extension.ts 抽取 MessageHandler 消息路由类",
+      "status": "pending",
+      "depends_on": ["evo_v1_014"],
+      "acceptance": "新建 src/message-handler.ts，包含 MessageHandler 类，封装所有 WebSocket 消息处理逻辑（list_models/select_model/chat/cancel_chat）、浏览器上下文→system prompt 构建、CancellationToken 生命周期管理；extension.ts 中消息路由部分替换为调用 MessageHandler；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && test -f src/message-handler.ts && grep -q 'class MessageHandler\\|export class MessageHandler' src/message-handler.ts && grep -q 'list_models\\|handleListModels' src/message-handler.ts && grep -q 'chat_response_chunk\\|handleChat' src/message-handler.ts && grep -q 'cancel_chat\\|handleCancelChat' src/message-handler.ts && grep -q 'MessageHandler' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: MessageHandler 抽取失败或编译失败'",
+      "evolution_goal": "重构这个项目"
+    },
+    {
+      "id": "evo_v2_002",
+      "type": "coding",
+      "title": "VSCode 重构：从 extension.ts 抽取 CommandRegistry 命令注册模块",
+      "status": "pending",
+      "depends_on": ["evo_v2_001"],
+      "acceptance": "新建 src/command-registry.ts，封装所有 vscode.commands.registerCommand 调用（generateReport/connectDevtools/ask）；extension.ts 中命令注册部分替换为调用 CommandRegistry；extension.ts 仅保留 activate/deactivate 编排逻辑（< 100 行）；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && test -f src/command-registry.ts && grep -q 'generateReport\\|connectDevtools\\|ask' src/command-registry.ts && wc -l < src/extension.ts | xargs -I{} test {} -lt 120 && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: CommandRegistry 抽取失败、extension.ts 未缩减或编译失败'",
+      "evolution_goal": "重构这个项目"
+    },
+    {
+      "id": "evo_v2_003",
+      "type": "coding",
+      "title": "Chrome 重构：从 App.tsx 抽取 useChat + useWebSocket 自定义 Hooks",
+      "status": "pending",
+      "depends_on": ["evo_v1_014"],
+      "acceptance": "新建 hooks/useChat.ts（封装 messages 状态、isStreaming、streamingMsgIdRef、handleSendMessage、handleCancel 逻辑）；新建 hooks/useWebSocket.ts（封装 WsClient 初始化、连接状态管理、消息分发、断连恢复）；App.tsx 中对应逻辑替换为调用这两个 Hook；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/useChat.ts && test -f hooks/useWebSocket.ts && grep -q 'useChat' entrypoints/sidepanel/App.tsx && grep -q 'useWebSocket' entrypoints/sidepanel/App.tsx && grep -q 'isStreaming\\|handleSend\\|messages' hooks/useChat.ts && grep -q 'WsClient\\|onMessage\\|connectionState' hooks/useWebSocket.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: useChat/useWebSocket Hook 抽取失败或构建失败'",
+      "evolution_goal": "重构这个项目"
+    },
+    {
+      "id": "evo_v2_004",
+      "type": "coding",
+      "title": "Chrome 重构：抽取 usePageContext Hook + createMessage 工具函数，App.tsx 精简为纯 UI",
+      "status": "pending",
+      "depends_on": ["evo_v2_003"],
+      "acceptance": "新建 hooks/usePageContext.ts（封装 fetchPageContext、browser.runtime.onMessage 监听、pageContext 状态）；新建 utils/message-factory.ts（createMessage 工厂函数，消除重复的消息创建代码）；App.tsx 仅保留 UI 渲染和 Hook 调用（< 150 行）；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/usePageContext.ts && test -f utils/message-factory.ts && grep -q 'usePageContext' entrypoints/sidepanel/App.tsx && grep -q 'createMessage' utils/message-factory.ts && wc -l < entrypoints/sidepanel/App.tsx | xargs -I{} test {} -lt 180 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: usePageContext/message-factory 抽取失败、App.tsx 未缩减或构建失败'",
+      "evolution_goal": "重构这个项目"
+    },
+    {
+      "id": "evo_v2_005",
+      "type": "validate",
+      "title": "重构全量验收：双端构建通过 + 核心文件缩减 + 新模块完整",
+      "status": "pending",
+      "depends_on": ["evo_v2_002", "evo_v2_004"],
+      "acceptance": "双端构建通过；VSCode 侧 extension.ts < 100 行，新增 message-handler.ts 和 command-registry.ts；Chrome 侧 App.tsx < 150 行，新增 hooks/useChat.ts、hooks/useWebSocket.ts、hooks/usePageContext.ts、utils/message-factory.ts；功能行为不变",
+      "acceptance_cmd": "cd packages/vscode-ext && test -f src/message-handler.ts && test -f src/command-registry.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && test -f hooks/useChat.ts && test -f hooks/useWebSocket.ts && test -f hooks/usePageContext.ts && test -f utils/message-factory.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 重构验收失败'",
+      "evolution_goal": "重构这个项目"
     }
   ]
 }
