@@ -1,19 +1,11 @@
 {
   "phase": "coding",
-  "current_task": "evo_v1_006",
+  "current_task": "evo_v1_007",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
-  "last_validation": {
-    "task_id": "evo_v1_006",
-    "result": "pass",
-    "score": 97,
-    "issues": [
-      "activeChatTokens 在 WebSocket 连接断开时未主动清理（边缘情况，finally 块仅在流式完成/异常时清理）"
-    ],
-    "acceptance_cmd_output": "PASS"
-  },
+  "last_validation": null,
   "last_tick": "2026-03-20T14:47:44.312053Z",
   "pm_done": true
 }

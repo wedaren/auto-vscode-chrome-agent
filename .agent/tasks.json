@@ -185,7 +185,7 @@
       "id": "evo_v1_007",
       "type": "coding",
       "title": "Chrome 侧流式响应：App.tsx 处理 chunk 增量渲染 + 停止生成按钮",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_006"
       ],
