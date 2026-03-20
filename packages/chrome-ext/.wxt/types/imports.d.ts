@@ -24,12 +24,14 @@ declare global {
   const storage: typeof import('wxt/storage')['storage']
   const useAppConfig: typeof import('wxt/client')['useAppConfig']
   const useCallback: typeof import('react')['useCallback']
+  const useChat: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')['useChat']
   const useContext: typeof import('react')['useContext']
   const useEffect: typeof import('react')['useEffect']
   const useMemo: typeof import('react')['useMemo']
   const useReducer: typeof import('react')['useReducer']
   const useRef: typeof import('react')['useRef']
   const useState: typeof import('react')['useState']
+  const useWebSocket: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')['useWebSocket']
 }
 // for type re-export
 declare global {
@@ -42,4 +44,10 @@ declare global {
   // @ts-ignore
   export type { TypingIndicatorProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')
+  // @ts-ignore
+  export type { Message, UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')
+  // @ts-ignore
+  export type { UseWebSocketReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')
 }
