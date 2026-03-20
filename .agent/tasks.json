@@ -113,7 +113,7 @@
       "id": "evo_v1_001",
       "type": "coding",
       "title": "LmService 新增 listModels() 和 selectModelById() 方法",
-      "status": "pending",
+      "status": "done",
       "depends_on": ["task_009"],
       "acceptance": "lm-service.ts 有 listModels() 返回所有可用模型信息数组（id/name/vendor/family/maxInputTokens），有 selectModelById(id) 可指定模型，编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'listModels' src/lm-service.ts && grep -q 'selectModelById' src/lm-service.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: listModels/selectModelById 缺失或编译失败'",
