@@ -1,4 +1,4 @@
-// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知、模型选择和快捷按钮
+// App.tsx — Side Panel 主组件，包含对话界面、WebSocket 通信、页面上下文感知、模型选择、流式响应和停止生成
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
@@ -25,11 +25,14 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [pageContext, setPageContext] = useState<PageContext>({ url: '', title: '', selectedText: '' });
+  const [isStreaming, setIsStreaming] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
   const [modelsLoading, setModelsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsClientRef = useRef<WsClient | null>(null);
+  /** 当前正在流式接收的 assistant 消息 ID */
+  const streamingMsgIdRef = useRef<string | null>(null);
 
   /** 请求当前页面的上下文信息 */
   const fetchPageContext = useCallback(async () => {
@@ -65,6 +68,7 @@ export default function App() {
           console.log('[App] 收到 pong，连接确认');
           break;
         case 'chat_response': {
+          // 兼容旧式全量响应
           const assistantMsg: Message = {
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -72,6 +76,56 @@ export default function App() {
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, assistantMsg]);
+          break;
+        }
+        case 'chat_response_chunk': {
+          // 流式响应：增量追加到当前 assistant message
+          const chunkPayload = msg.payload as { text: string; done: boolean };
+          const fragment = chunkPayload?.text ?? '';
+
+          if (!streamingMsgIdRef.current) {
+            // 首个 chunk：创建新的 assistant message
+            const newId = crypto.randomUUID();
+            streamingMsgIdRef.current = newId;
+            setIsStreaming(true);
+            const newMsg: Message = {
+              id: newId,
+              role: 'assistant',
+              content: fragment,
+              timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, newMsg]);
+          } else {
+            // 后续 chunk：追加到已有消息
+            const targetId = streamingMsgIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId ? { ...m, content: m.content + fragment } : m,
+              ),
+            );
+          }
+          break;
+        }
+        case 'chat_response_end': {
+          // 流式结束：标记完成，清除流式状态
+          const endPayload = msg.payload as { fullText?: string; cancelled?: boolean };
+          const targetId = streamingMsgIdRef.current;
+
+          if (targetId && endPayload?.fullText) {
+            // 用服务端的完整文本校正最终内容（防止丢片段）
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId ? { ...m, content: endPayload.fullText! } : m,
+              ),
+            );
+          }
+
+          streamingMsgIdRef.current = null;
+          setIsStreaming(false);
+          console.log(
+            '[App] 流式响应结束',
+            endPayload?.cancelled ? '(已取消)' : '',
+          );
           break;
         }
         case 'echo': {
@@ -152,7 +206,19 @@ export default function App() {
     }
   }, []);
 
+  /** 发送取消流式生成指令 */
+  const handleCancelChat = useCallback(() => {
+    const client = wsClientRef.current;
+    if (client && isStreaming) {
+      client.sendMessage('cancel_chat', null);
+      console.log('[App] 已发送 cancel_chat');
+    }
+  }, [isStreaming]);
+
   const handleSendMessage = useCallback((content: string) => {
+    // 流式生成中不允许发送新消息
+    if (isStreaming) return;
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -173,7 +239,7 @@ export default function App() {
         },
       });
     }
-  }, [pageContext]);
+  }, [pageContext, isStreaming]);
 
   const handleQuickAction = useCallback((action: string) => {
     handleSendMessage(action);
@@ -233,30 +299,38 @@ export default function App() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick action buttons */}
+      {/* Quick action buttons / Stop button */}
       <div className="flex gap-2 px-4 py-2 border-t border-gray-100">
-        <button
-          onClick={() => handleQuickAction('探索此页')}
-          className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-        >
-          探索此页
-        </button>
-        <button
-          onClick={() => handleQuickAction('生成报告')}
-          className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-        >
-          生成报告
-        </button>
-        <button
-          onClick={() => handleQuickAction('停止')}
-          className="px-3 py-1.5 text-xs rounded-full bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
-        >
-          停止
-        </button>
+        {isStreaming ? (
+          <button
+            onClick={handleCancelChat}
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" stroke="none" />
+            </svg>
+            停止生成
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => handleQuickAction('探索此页')}
+              className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            >
+              探索此页
+            </button>
+            <button
+              onClick={() => handleQuickAction('生成报告')}
+              className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            >
+              生成报告
+            </button>
+          </>
+        )}
       </div>
 
       {/* Chat input */}
-      <ChatInput onSend={handleSendMessage} />
+      <ChatInput onSend={handleSendMessage} disabled={isStreaming} />
     </div>
   );
 }
