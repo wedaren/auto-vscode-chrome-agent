@@ -197,7 +197,7 @@
       "id": "evo_v1_008",
       "type": "coding",
       "title": "MessageBubble 组件：Markdown 渲染 + 代码语法高亮 + 代码块复制按钮",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_007"
       ],
