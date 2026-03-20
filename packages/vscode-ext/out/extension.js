@@ -45,6 +45,8 @@ let lmService;
 let wsServer;
 let mcpClient;
 let reportGenerator;
+/** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
+const activeChatTokens = new Map();
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -102,27 +104,62 @@ function activate(context) {
                 })();
                 break;
             case 'chat': {
-                // Chrome 侧的用户聊天消息，委托 LmService 处理
+                // Chrome 侧的用户聊天消息，使用流式响应处理
                 const text = msg.payload?.text ?? '';
                 void (async () => {
+                    // 创建 CancellationTokenSource 用于支持 cancel_chat 中断
+                    const cts = new vscode.CancellationTokenSource();
+                    activeChatTokens.set(ws, cts);
                     try {
-                        const response = await lmService.sendMessage(text, 'You are a helpful browser agent assistant. Answer concisely.');
+                        const fullText = await lmService.sendMessageStreaming(text, (fragment) => {
+                            // 每个 fragment 发送 chat_response_chunk
+                            wsServer.send(ws, {
+                                type: 'chat_response_chunk',
+                                payload: { text: fragment, done: false },
+                                sessionId: msg.sessionId,
+                            });
+                        }, 'You are a helpful browser agent assistant. Answer concisely.', cts.token);
+                        // 流式完成，发送 chat_response_end
                         wsServer.send(ws, {
-                            type: 'chat_response',
-                            payload: { text: response },
+                            type: 'chat_response_end',
+                            payload: { fullText },
                             sessionId: msg.sessionId,
                         });
                     }
                     catch (err) {
+                        // 被取消时也发送 chat_response_end 标记结束
+                        const isCancelled = cts.token.isCancellationRequested;
                         wsServer.send(ws, {
-                            type: 'chat_response',
+                            type: 'chat_response_end',
                             payload: {
-                                text: `错误: ${err instanceof Error ? err.message : String(err)}`,
+                                fullText: isCancelled
+                                    ? ''
+                                    : `错误: ${err instanceof Error ? err.message : String(err)}`,
+                                cancelled: isCancelled,
                             },
                             sessionId: msg.sessionId,
                         });
+                        if (!isCancelled) {
+                            outputChannel.appendLine(`[BrowserAgent] chat 流式响应错误: ${err instanceof Error ? err.message : String(err)}`);
+                        }
+                    }
+                    finally {
+                        activeChatTokens.delete(ws);
+                        cts.dispose();
                     }
                 })();
+                break;
+            }
+            case 'cancel_chat': {
+                // Chrome 侧请求中断当前流式生成
+                const cts = activeChatTokens.get(ws);
+                if (cts) {
+                    cts.cancel();
+                    outputChannel.appendLine('[BrowserAgent] 收到 cancel_chat，已中断流式生成');
+                }
+                else {
+                    outputChannel.appendLine('[BrowserAgent] 收到 cancel_chat，但无活跃的流式请求');
+                }
                 break;
             }
             default:

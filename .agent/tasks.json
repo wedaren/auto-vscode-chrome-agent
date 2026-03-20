@@ -161,7 +161,7 @@
       "id": "evo_v1_005",
       "type": "validate",
       "title": "模型选择功能全量验收：双端构建通过 + 消息链路完整",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_004"
       ],

@@ -47,8 +47,9 @@ export declare class LmService {
      * 发送消息并以流式方式回调每个片段
      * @param userMessage 用户输入的文本
      * @param onFragment 每次收到片段时的回调
+     * @param systemPrompt 可选的系统提示
      * @param token 取消令牌
      */
-    sendMessageStreaming(userMessage: string, onFragment: (fragment: string) => void, token?: vscode.CancellationToken): Promise<string>;
+    sendMessageStreaming(userMessage: string, onFragment: (fragment: string) => void, systemPrompt?: string, token?: vscode.CancellationToken): Promise<string>;
 }
 //# sourceMappingURL=lm-service.d.ts.map

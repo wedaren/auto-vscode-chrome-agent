@@ -146,16 +146,19 @@ class LmService {
      * 发送消息并以流式方式回调每个片段
      * @param userMessage 用户输入的文本
      * @param onFragment 每次收到片段时的回调
+     * @param systemPrompt 可选的系统提示
      * @param token 取消令牌
      */
-    async sendMessageStreaming(userMessage, onFragment, token) {
+    async sendMessageStreaming(userMessage, onFragment, systemPrompt, token) {
         const model = await this.selectModel();
         if (!model) {
             throw new Error('无可用语言模型');
         }
-        const messages = [
-            vscode.LanguageModelChatMessage.User(userMessage),
-        ];
+        const messages = [];
+        if (systemPrompt) {
+            messages.push(vscode.LanguageModelChatMessage.User(systemPrompt));
+        }
+        messages.push(vscode.LanguageModelChatMessage.User(userMessage));
         const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
         const response = await model.sendRequest(messages, {}, cancellationToken);
         let fullText = '';
@@ -163,6 +166,7 @@ class LmService {
             fullText += fragment;
             onFragment(fragment);
         }
+        this.outputChannel.appendLine(`[LmService] 流式响应完成，长度: ${fullText.length}`);
         return fullText;
     }
 }
