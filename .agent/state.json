@@ -1,23 +1,26 @@
 {
   "phase": "idle",
-  "current_task": "evo_v1_011",
+  "current_task": "evo_v1_012",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v1_011",
+    "task_id": "evo_v1_012",
     "result": "pass",
     "score": 100,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-20T15:10:00.000000Z",
+    "validated_at": "2026-03-20T16:00:00.000000Z",
     "details": {
-      "acceptance_cmd": "PASS (60/60)",
-      "typescript_errors": "0 errors (20/20)",
-      "program_constraints": "all satisfied (20/20)"
+      "acceptance_cmd": "PASS (grep context/url/title/selectedText + npm run compile 0 errors)",
+      "typescript_strict": "strict: true, 编译零错误",
+      "program_md_compliance": "模型调用仅通过 vscode.lm API, 无外部 API key 依赖, Chrome 插件不内置模型",
+      "context_extraction": "chat handler 从 payload 提取 context.url/title/selectedText",
+      "system_prompt_dynamic": "根据 context 动态拼接，有 url 提示浏览页面，有 selectedText 附加选中文本",
+      "code_quality": "顶部注释完整, TypeScript strict 模式编译通过"
     }
   },
-  "last_tick": "2026-03-20T15:00:00.000000Z",
+  "last_tick": "2026-03-20T15:30:00.000000Z",
   "pm_done": true
 }

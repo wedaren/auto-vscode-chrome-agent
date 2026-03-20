@@ -245,7 +245,7 @@
       "id": "evo_v1_012",
       "type": "coding",
       "title": "修复 chat 消息处理：提取 context 并拼入 LM 调用的 system prompt",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_011"
       ],
