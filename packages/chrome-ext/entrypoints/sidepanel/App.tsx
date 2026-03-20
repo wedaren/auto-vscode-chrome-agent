@@ -54,12 +54,19 @@ export default function App() {
     const client = new WsClient({ url: WS_URL });
     wsClientRef.current = client;
 
-    // 监听连接状态，连接时自动请求模型列表
+    // 监听连接状态，连接时自动请求模型列表，断连时恢复流式状态
     const unsubState = client.onStateChange((state: ConnectionState) => {
       setIsConnected(state === 'connected');
       if (state === 'connected') {
         setModelsLoading(true);
         client.sendMessage('list_models', null);
+      }
+      if (state === 'disconnected') {
+        // WebSocket 断连时自动恢复 isStreaming 状态，防止 UI 锁死
+        if (streamingMsgIdRef.current) {
+          streamingMsgIdRef.current = null;
+          setIsStreaming(false);
+        }
       }
     });
 
@@ -113,8 +120,8 @@ export default function App() {
           const endPayload = msg.payload as { fullText?: string; cancelled?: boolean };
           const targetId = streamingMsgIdRef.current;
 
-          if (targetId && endPayload?.fullText) {
-            // 用服务端的完整文本校正最终内容（防止丢片段）
+          if (targetId && typeof endPayload?.fullText === 'string') {
+            // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === targetId ? { ...m, content: endPayload.fullText! } : m,
@@ -234,15 +241,27 @@ export default function App() {
 
     // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
     const client = wsClientRef.current;
-    if (client) {
-      client.sendMessage('chat', {
-        text: content,
-        context: {
-          url: pageContext.url,
-          title: pageContext.title,
-          selectedText: pageContext.selectedText,
-        },
-      });
+    const sent = client
+      ? client.sendMessage('chat', {
+          text: content,
+          context: {
+            url: pageContext.url,
+            title: pageContext.title,
+            selectedText: pageContext.selectedText,
+          },
+        })
+      : false;
+
+    if (!sent) {
+      // 发送失败：恢复 isStreaming 状态并显示错误提示
+      setIsStreaming(false);
+      const errorMsg: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '\u26A0\uFE0F \u6D88\u606F\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5 WebSocket \u8FDE\u63A5\u72B6\u6001\u3002',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     }
   }, [pageContext, isStreaming]);
 
