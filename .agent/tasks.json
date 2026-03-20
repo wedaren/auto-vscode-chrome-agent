@@ -281,7 +281,7 @@
       "id": "evo_v2_001",
       "type": "coding",
       "title": "VSCode 重构：从 extension.ts 抽取 MessageHandler 消息路由类",
-      "status": "pending",
+      "status": "done",
       "depends_on": ["evo_v1_014"],
       "acceptance": "新建 src/message-handler.ts，包含 MessageHandler 类，封装所有 WebSocket 消息处理逻辑（list_models/select_model/chat/cancel_chat）、浏览器上下文→system prompt 构建、CancellationToken 生命周期管理；extension.ts 中消息路由部分替换为调用 MessageHandler；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && test -f src/message-handler.ts && grep -q 'class MessageHandler\\|export class MessageHandler' src/message-handler.ts && grep -q 'list_models\\|handleListModels' src/message-handler.ts && grep -q 'chat_response_chunk\\|handleChat' src/message-handler.ts && grep -q 'cancel_chat\\|handleCancelChat' src/message-handler.ts && grep -q 'MessageHandler' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: MessageHandler 抽取失败或编译失败'",
