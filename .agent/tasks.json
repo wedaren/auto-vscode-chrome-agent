@@ -257,7 +257,7 @@
       "id": "evo_v1_013",
       "type": "coding",
       "title": "修复 isStreaming 状态管理：发送失败恢复 + chat_response_end 边缘情况",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_012"
       ],
@@ -269,7 +269,7 @@
       "id": "evo_v1_014",
       "type": "validate",
       "title": "Chrome 对话修复全量验收：消息格式 + 上下文感知 + 状态管理，双端构建通过",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v1_013"
       ],
