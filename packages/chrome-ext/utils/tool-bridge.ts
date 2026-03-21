@@ -46,11 +46,25 @@ export interface ToolResultPayload {
 /**
  * 将 toolName + toolArgs 转换为 BrowserAction
  * toolName 直接对应 BrowserAction.type，toolArgs 展开为 BrowserAction 的字段
+ *
+ * 兼容映射：LLM 常见参数误用自动修正
+ * - type 操作：LLM 可能传 { text: "xxx" } 而非 { value: "xxx" }，自动映射 text→value
  */
 function toAction(toolName: string, toolArgs: Record<string, unknown>): BrowserAction {
+  const correctedArgs = { ...toolArgs };
+
+  // 兼容映射：type 操作中 LLM 常把 value 误写为 text
+  if (toolName === 'type' && correctedArgs.text && !correctedArgs.value) {
+    console.warn(
+      `[ToolBridge] 自动修正: type 操作的 text→value 参数映射 (text="${correctedArgs.text}")`,
+    );
+    correctedArgs.value = correctedArgs.text;
+    delete correctedArgs.text;
+  }
+
   return {
     type: toolName as BrowserAction['type'],
-    ...toolArgs,
+    ...correctedArgs,
   } as BrowserAction;
 }
 

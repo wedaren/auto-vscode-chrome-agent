@@ -74,12 +74,12 @@ const BROWSER_TOOLS: BrowserToolDef[] = [
   },
   {
     name: 'browser_type',
-    description: 'Type text into an input or textarea element. Clears the existing value first, then sets the new value and fires input/change events.',
+    description: 'Type text into an input or textarea element. Clears the existing value first, then sets the new value and fires input/change events. IMPORTANT: Use the `value` parameter (NOT `text`) to specify the string to type.',
     inputSchema: {
       type: 'object',
       properties: {
         selector: { type: 'string', description: 'CSS selector to locate the input/textarea element' },
-        value: { type: 'string', description: 'The text to type into the element' },
+        value: { type: 'string', description: 'The text to type into the element. This is the value parameter — do NOT use a "text" parameter instead.' },
       },
       required: ['selector', 'value'],
     },

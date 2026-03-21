@@ -1078,7 +1078,7 @@
       "id": "evo_v15_002",
       "type": "coding",
       "title": "Navigate 等待页面加载完成：background.ts browser.tabs.update 后监听 onUpdated(status=complete) + 验证 content script 就绪再返回成功",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_001"
       ],
