@@ -1401,7 +1401,7 @@
       "id": "evo_v20_003",
       "type": "coding",
       "title": "AgentLoop 工具 Schema 增强：将 MCP 工具的完整 inputSchema 注入 LLM 系统提示词",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v20_001"
       ],

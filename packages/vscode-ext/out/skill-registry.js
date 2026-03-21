@@ -41,7 +41,7 @@ exports.SkillRegistry = void 0;
 //       持久化层使用 UserDataManager，数据存储在 ~/.browser-agent/skills/ 目录下。
 const vscode = __importStar(require("vscode"));
 // ────────────────────────────────────────────────────────────────
-// 内置 15 个预设 Skill（原 5 + evo_v18_003 新增 10）
+// 内置 20 个预设 Skill（原 5 + evo_v18_003 新增 10 + evo_v20_004 新增 5 个 DevTools MCP 专属）
 // ────────────────────────────────────────────────────────────────
 const PRESET_SKILLS = [
     // 1. 导航到指定 URL
@@ -773,6 +773,202 @@ const PRESET_SKILLS = [
                 toolName: 'browser_screenshot',
                 argsTemplate: {},
                 description: '截取最后一屏（底部）',
+            },
+        ],
+    },
+    // ── 以下为 evo_v20_004 新增的 5 个 DevTools MCP 专属预设 Skill ──
+    // 16. DevTools 性能审计 — 录制页面性能 trace 并分析瓶颈
+    {
+        name: 'devtools_performance_audit',
+        displayName: 'DevTools 性能审计',
+        description: '通过 Chrome DevTools MCP 录制页面性能 trace（CPU / 渲染 / 网络），自动分析性能瓶颈并生成优化建议',
+        category: 'preset',
+        enabled: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                duration: {
+                    type: 'string',
+                    description: 'trace 录制时长（毫秒，默认 5000）',
+                    default: '5000',
+                },
+            },
+            required: [],
+        },
+        steps: [
+            {
+                toolName: 'performance_start_trace',
+                argsTemplate: {},
+                description: '开始录制性能 trace（CPU 采样 + 渲染帧 + 网络活动）',
+            },
+            {
+                toolName: 'evaluate_script',
+                argsTemplate: {
+                    expression: `new Promise(resolve => setTimeout(() => resolve('trace recording for {{duration}}ms completed'), parseInt('{{duration}}', 10) || 5000))`,
+                },
+                description: '等待指定时长以采集足够的性能数据',
+            },
+            {
+                toolName: 'performance_stop_trace',
+                argsTemplate: {},
+                description: '停止录制性能 trace 并获取原始数据',
+            },
+            {
+                toolName: 'performance_analyze_insight',
+                argsTemplate: {},
+                description: '分析 trace 数据，识别长任务、布局抖动、渲染瓶颈等问题',
+            },
+            {
+                toolName: 'take_screenshot',
+                argsTemplate: {},
+                description: '截取当前页面状态快照作为审计附件',
+                optional: true,
+            },
+        ],
+    },
+    // 17. DevTools 网络分析 — 分析页面网络请求
+    {
+        name: 'devtools_network_analysis',
+        displayName: 'DevTools 网络分析',
+        description: '通过 Chrome DevTools MCP 列出页面所有网络请求，按类型/大小/耗时排序分析，识别慢请求和大资源',
+        category: 'preset',
+        enabled: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                urlFilter: {
+                    type: 'string',
+                    description: '过滤 URL 关键词（可选，为空则列出所有请求）',
+                    default: '',
+                },
+            },
+            required: [],
+        },
+        steps: [
+            {
+                toolName: 'list_network_requests',
+                argsTemplate: {},
+                description: '获取页面所有网络请求列表（URL / 状态码 / 类型 / 大小 / 耗时）',
+            },
+            {
+                toolName: 'get_network_request',
+                argsTemplate: { index: 0 },
+                description: '获取第一个请求的详细信息（请求头 / 响应头 / 时间线）作为示例',
+                optional: true,
+            },
+            {
+                toolName: 'take_screenshot',
+                argsTemplate: {},
+                description: '截取页面当前状态快照',
+                optional: true,
+            },
+        ],
+    },
+    // 18. DevTools Lighthouse 审计 — 运行 Lighthouse 全面审计
+    {
+        name: 'devtools_lighthouse_audit',
+        displayName: 'DevTools Lighthouse 审计',
+        description: '通过 Chrome DevTools MCP 运行 Lighthouse 审计，获取性能 / 可访问性 / 最佳实践 / SEO 等多维度评分和建议',
+        category: 'preset',
+        enabled: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                categories: {
+                    type: 'string',
+                    description: '审计类别（逗号分隔：performance,accessibility,best-practices,seo）',
+                    default: 'performance,accessibility,best-practices,seo',
+                },
+            },
+            required: [],
+        },
+        steps: [
+            {
+                toolName: 'lighthouse_audit',
+                argsTemplate: { categories: '{{categories}}' },
+                description: '运行 Lighthouse 审计，生成各维度评分和优化建议',
+            },
+            {
+                toolName: 'take_screenshot',
+                argsTemplate: {},
+                description: '截取审计完成后的页面状态',
+                optional: true,
+            },
+        ],
+    },
+    // 19. DevTools 多页面工作流 — 打开新标签页、导航、执行脚本、关闭
+    {
+        name: 'devtools_multi_page_workflow',
+        displayName: 'DevTools 多页面工作流',
+        description: '通过 Chrome DevTools MCP 在新标签页中打开指定 URL，执行自定义 JavaScript 脚本采集数据，完成后自动关闭标签页',
+        category: 'preset',
+        enabled: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                url: {
+                    type: 'string',
+                    description: '要在新标签页中打开的目标 URL',
+                },
+                script: {
+                    type: 'string',
+                    description: '要执行的 JavaScript 脚本（返回值作为采集结果）',
+                    default: 'document.title + " | " + document.querySelectorAll("a[href]").length + " links"',
+                },
+            },
+            required: ['url'],
+        },
+        steps: [
+            {
+                toolName: 'new_page',
+                argsTemplate: { url: '{{url}}' },
+                description: '打开新标签页并导航到目标 URL',
+            },
+            {
+                toolName: 'navigate_page',
+                argsTemplate: { url: '{{url}}' },
+                description: '确保页面导航到指定 URL 并等待加载完成',
+            },
+            {
+                toolName: 'evaluate_script',
+                argsTemplate: { expression: '{{script}}' },
+                description: '在页面上下文中执行自定义 JavaScript 脚本',
+            },
+            {
+                toolName: 'take_screenshot',
+                argsTemplate: {},
+                description: '截取采集后的页面快照作为记录',
+                optional: true,
+            },
+            {
+                toolName: 'close_page',
+                argsTemplate: {},
+                description: '关闭当前标签页，清理资源',
+            },
+        ],
+    },
+    // 20. DevTools DOM 快照 — 获取完整 DOM 结构和页面截图
+    {
+        name: 'devtools_dom_snapshot',
+        displayName: 'DevTools DOM 快照',
+        description: '通过 Chrome DevTools MCP 捕获当前页面的完整 DOM 结构快照（可访问性树）和视觉截图，适用于页面存档、结构分析、自动化测试基线',
+        category: 'preset',
+        enabled: true,
+        parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+        },
+        steps: [
+            {
+                toolName: 'take_snapshot',
+                argsTemplate: {},
+                description: '捕获页面完整 DOM 快照（含可访问性树和节点属性）',
+            },
+            {
+                toolName: 'take_screenshot',
+                argsTemplate: {},
+                description: '截取页面视觉截图，与 DOM 快照配对存档',
             },
         ],
     },
