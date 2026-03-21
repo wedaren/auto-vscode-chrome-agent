@@ -21,3 +21,12 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无显著问题
+- acceptance_cmd 通过（60/60）
+- TypeScript 编译零错误（20/20）
+- 符合 program.md 约束（15/20）：模型调用通过 vscode.lm API（经 LmService 封装）、Chrome 插件不内置模型、无需外部 API key 依赖；扣 5 分因 agent-loop.ts 内中文注释与英文代码混排风格不完全统一（非阻塞）
