@@ -1263,7 +1263,7 @@
       "id": "evo_v18_002",
       "type": "coding",
       "title": "SkillRunner 步骤结果传递增强：支持 {{$prev}} 和 {{$step_N}} 插值语法",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v18_001"
       ],
