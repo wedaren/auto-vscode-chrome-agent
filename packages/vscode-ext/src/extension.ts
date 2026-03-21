@@ -32,6 +32,31 @@ export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
   outputChannel.appendLine('[BrowserAgent] 插件激活中...');
 
+  // === 全局错误兜底：进程级 uncaughtException / unhandledRejection 处理器 ===
+  // 捕获所有逃逸的同步异常和未处理的 Promise rejection，防止崩溃扩展宿主进程
+  const uncaughtHandler = (err: Error): void => {
+    outputChannel.appendLine(
+      `[BrowserAgent][CRITICAL] uncaughtException: ${err.message}\n${err.stack ?? ''}`,
+    );
+    vscode.window.showErrorMessage(
+      `Browser Agent 遇到未捕获异常: ${err.message}`,
+    );
+  };
+  const rejectionHandler = (reason: unknown): void => {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    outputChannel.appendLine(
+      `[BrowserAgent][CRITICAL] unhandledRejection: ${msg}`,
+    );
+    vscode.window.showErrorMessage(
+      `Browser Agent 遇到未处理的 Promise 异常: ${msg}`,
+    );
+  };
+  process.on('uncaughtException', uncaughtHandler);
+  process.on('unhandledRejection', rejectionHandler);
+
+  /** 服务健康状态：wsServer 是否成功 initialized */
+  let wsServerHealthy = false;
+
   // 初始化全局用户数据目录管理器（最先初始化，其他模块可能依赖数据目录）
   userDataManager = new UserDataManager(outputChannel);
   userDataManager.init().catch((err: unknown) => {
@@ -61,11 +86,6 @@ export function activate(context: vscode.ExtensionContext): void {
     .getConfiguration('browserAgent')
     .get<number>('port', 7777);
   wsServer = new WsServer(outputChannel, port);
-  wsServer.start().catch((err: unknown) => {
-    outputChannel.appendLine(
-      `[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  });
 
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
@@ -83,9 +103,38 @@ export function activate(context: vscode.ExtensionContext): void {
   skillRunner = new SkillRunner(browserToolProvider, mcpClient, outputChannel);
   outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
 
-  // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider + Skill 系统以支持多工具源 AgentLoop 模式）
-  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner);
-  wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
+  // === 异步初始化 WebSocket 服务 + 健康检查 ===
+  // wsServer.start() 失败时标记不健康并阻断 MessageHandler 注册，防止下游级联崩溃
+  void (async () => {
+    try {
+      await wsServer!.start();
+      wsServerHealthy = true;
+      outputChannel.appendLine('[BrowserAgent] WebSocket 服务 initialized — healthy');
+    } catch (err) {
+      wsServerHealthy = false;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      outputChannel.appendLine(
+        `[BrowserAgent][CRITICAL] WebSocket 服务初始化失败，标记为不健康: ${errMsg}`,
+      );
+      vscode.window.showErrorMessage(
+        `Browser Agent WebSocket 启动失败，消息通道不可用: ${errMsg}`,
+      );
+    }
+
+    // 只有 wsServer healthy 时才注册消息处理回调，阻断不健康时的下游依赖
+    if (wsServerHealthy) {
+      const messageHandler = new MessageHandler(
+        lmService!, wsServer!, mcpClient!, outputChannel,
+        browserToolProvider!, skillRegistry, skillRunner,
+      );
+      wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
+      outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（wsServer healthy）');
+    } else {
+      outputChannel.appendLine(
+        '[BrowserAgent] MessageHandler 未注册：WebSocket 不健康，已阻断下游依赖',
+      );
+    }
+  })();
 
   // 初始化报告生成器
   reportGenerator = new ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
@@ -167,10 +216,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
   outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
 
-  // 注册 dispose
+  // 注册 dispose（含进程级错误处理器清理，避免插件停用后干扰其他扩展）
   context.subscriptions.push(
     outputChannel,
     configChangeDisposable,
+    {
+      dispose: () => {
+        process.removeListener('uncaughtException', uncaughtHandler);
+        process.removeListener('unhandledRejection', rejectionHandler);
+      },
+    },
     ...commandDisposables,
     connectionTreeView,
     messageTreeView,

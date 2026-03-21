@@ -871,13 +871,73 @@
       "id": "evo_v11_005",
       "type": "validate",
       "title": "全量验收：构建通过、目录自动创建、Skills 文件持久化、配置可变更",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v11_004"
       ],
       "acceptance": "VSCode 插件 compile 通过；user-data-manager.ts 存在且导出 UserDataManager 类；extension.ts 集成 UserDataManager；SkillRegistry 使用文件持久化；package.json 有 userDataDir 配置；有 openUserDataDir 命令；ConnectionTree 显示数据目录状态",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && test -f src/user-data-manager.ts && grep -q 'class UserDataManager' src/user-data-manager.ts && grep -q 'userDataDir' package.json && grep -q 'UserDataManager' src/extension.ts && grep -q 'UserDataManager' src/skill-registry.ts && grep -q 'openUserDataDir' src/command-registry.ts && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
+    },
+    {
+      "id": "evo_v12_001",
+      "type": "coding",
+      "title": "全局错误兜底 + 服务初始化健康检查：extension.ts activate() 中增加 process uncaughtException/unhandledRejection 处理器，服务初始化失败时标记不健康并阻断下游依赖",
+      "status": "pending",
+      "depends_on": [
+        "evo_v11_005"
+      ],
+      "acceptance": "extension.ts 注册 process-level 错误处理器；wsServer.start() 失败时 MessageHandler 不注册消息回调；outputChannel 记录初始化失败并显示用户可见错误通知；编译通过无 TS 错误",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -c \"uncaughtException\\|unhandledRejection\\|process\\.on\" src/extension.ts && grep -c \"健康\\|healthy\\|initialized\" src/extension.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vscode 插件容易崩溃；分析优化"
+    },
+    {
+      "id": "evo_v12_002",
+      "type": "coding",
+      "title": "CancellationToken 生命周期修复：message-handler activeChatTokens WebSocket 断开自动清理 + agent-loop/lm-service 孤立 CTS 修复",
+      "status": "pending",
+      "depends_on": [
+        "evo_v12_001"
+      ],
+      "acceptance": "MessageHandler 监听 WebSocket close 事件，断开时自动 cancel+dispose 对应 CTS 并从 Map 中删除；同一 ws 快速重发 chat 时先 dispose 旧 CTS；agent-loop callLlm 不再创建孤立 CTS；lm-service 同理；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -c \"ws\\.on.*close\\|onClose\\|addEventListener.*close\" src/message-handler.ts && grep -v \"new vscode.CancellationTokenSource().token\" src/agent-loop.ts > /dev/null && echo PASS || echo FAIL",
+      "evolution_goal": "vscode 插件容易崩溃；分析优化"
+    },
+    {
+      "id": "evo_v12_003",
+      "type": "coding",
+      "title": "内存管理优化：LlmRequestCollector 添加环形缓冲淘汰策略（最多保留 50 条）+ activeChatTokens/pendingRequests disposal guard + ConnectionTree 异步回调 disposed 检查",
+      "status": "pending",
+      "depends_on": [
+        "evo_v12_002"
+      ],
+      "acceptance": "LlmRequestCollector 有 MAX_ENTRIES 常量限制存储数量；pendingRequests 在 dispose 后拒绝新增；ConnectionTree 异步回调检查 disposed 标志后再 refresh；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -c \"MAX_ENTRIES\\|maxEntries\\|MAX_SIZE\" src/llm-request-collector.ts && grep -c \"disposed\\|_disposed\\|isDisposed\" src/connection-tree.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vscode 插件容易崩溃；分析优化"
+    },
+    {
+      "id": "evo_v12_004",
+      "type": "coding",
+      "title": "WebSocket 心跳 + AgentLoop 超时保护：ws-server 增加 ping/pong 心跳检测（30s 间隔）自动清理死连接 + AgentLoop.run() 增加总超时（5 分钟）防止无限挂起",
+      "status": "pending",
+      "depends_on": [
+        "evo_v12_003"
+      ],
+      "acceptance": "WsServer 有 heartbeat interval 定时 ping 所有客户端并检测 pong 超时断开；dispose 时清除 interval；AgentLoop.run() 有 totalTimeout 参数，超时自动中断并返回 fallback 答案；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -c \"heartbeat\\|ping.*pong\\|setInterval\" src/ws-server.ts && grep -c \"totalTimeout\\|TOTAL_TIMEOUT\\|AbortSignal\\|setTimeout\" src/agent-loop.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vscode 插件容易崩溃；分析优化"
+    },
+    {
+      "id": "evo_v12_005",
+      "type": "validation",
+      "title": "稳定性优化全量验收：双端构建通过 + 服务初始化失败场景不崩溃 + 无 TS 编译错误 + 核心防御性代码全部就位",
+      "status": "pending",
+      "depends_on": [
+        "evo_v12_004"
+      ],
+      "acceptance": "pnpm build 全量通过；extension.ts 有错误兜底；message-handler 有 ws close 清理；LlmRequestCollector 有淘汰策略；ws-server 有心跳；agent-loop 有超时保护；所有 CTS 无泄漏",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -l \"uncaughtException\" src/extension.ts > /dev/null && grep -l \"heartbeat\" src/ws-server.ts > /dev/null && grep -l \"MAX_ENTRIES\\|maxEntries\" src/llm-request-collector.ts > /dev/null && grep -l \"totalTimeout\\|TOTAL_TIMEOUT\" src/agent-loop.ts > /dev/null && echo PASS || echo FAIL",
+      "evolution_goal": "vscode 插件容易崩溃；分析优化"
     }
   ]
 }

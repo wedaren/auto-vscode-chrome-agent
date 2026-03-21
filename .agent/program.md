@@ -57,3 +57,4 @@
 - [x] 不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug（已拆解为 evo_v9_001, evo_v9_002, evo_v9_003, evo_v9_004, evo_v9_005 — 稳定性体系：React Error Boundary + Toast 通知系统 + 消息重试 + WebSocket 心跳健壮性 + Chrome Debug 调试面板）
 - [x] 不考虑时间，使用最优解，在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化（已拆解为 evo_v10_001, evo_v10_002, evo_v10_003, evo_v10_004, evo_v10_005 — LLM 请求细节下载：VSCode 侧 LlmRequestCollector 数据采集 + WebSocket llmDetail 协议扩展 + Chrome 下载工具函数 + MessageBubble 下载按钮）
 - [x] vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息（已拆解为 evo_v11_001, evo_v11_002, evo_v11_003, evo_v11_004, evo_v11_005 — 全局用户数据目录：UserDataManager 服务 + 配置 schema + SkillRegistry 文件持久化迁移 + 管理命令 + 调试视图状态展示）
+- [~] vscode 插件容易崩溃；分析优化（已拆解为 evo_v12_001, evo_v12_002, evo_v12_003, evo_v12_004, evo_v12_005 — 稳定性优化：全局错误兜底 + CancellationToken 生命周期修复 + 内存管理 + WebSocket 心跳 + AgentLoop 超时保护）

@@ -12,7 +12,7 @@
     "issues": [],
     "acceptance_cmd_output": "> vscode-ext@0.1.0 compile\n> tsc -p ./tsconfig.json\n\nPASS"
   },
-  "last_tick": "2026-03-21T12:30:11.714844Z",
+  "last_tick": "2026-03-21T13:23:44.289066Z",
   "pm_done": true,
   "last_research": "RESEARCH_RESULT: knowledge/fix_evo_v9_005_acceptance_cmd_path_mismatch.md | acceptance_cmd 路径错误 utils/ws-client.ts 应为 src/ws-client.ts，需执行 sed 修正 tasks.json（已失败3次，修复从未被执行）"
 }
