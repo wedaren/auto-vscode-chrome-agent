@@ -9,10 +9,12 @@ import { CommandRegistry } from './command-registry';
 import { ConnectionTreeDataProvider } from './connection-tree';
 import { MessageTreeDataProvider, MessageDocumentProvider, MESSAGE_SCHEME, getCapturedMessageById } from './message-tree';
 import { AgentTreeDataProvider } from './agent-tree';
+import { BrowserToolProvider } from './browser-tools';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
 let mcpClient: McpClient | undefined;
+let browserToolProvider: BrowserToolProvider | undefined;
 let reportGenerator: ReportGenerator | undefined;
 let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
@@ -35,6 +37,9 @@ export function activate(context: vscode.ExtensionContext): void {
       `[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`,
     );
   });
+
+  // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
+  browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
 
   // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
   const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel);
@@ -110,6 +115,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
+    { dispose: () => browserToolProvider?.dispose() },
     { dispose: () => wsServer?.dispose() },
     { dispose: () => { void mcpClient?.dispose(); } },
   );
@@ -121,6 +127,8 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   reportGenerator?.cancel();
   reportGenerator = undefined;
+  browserToolProvider?.dispose();
+  browserToolProvider = undefined;
   connectionTree?.dispose();
   connectionTree = undefined;
   messageTree?.dispose();

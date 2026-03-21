@@ -534,7 +534,7 @@
       "id": "evo_v6_002",
       "type": "coding",
       "title": "WebSocket 双向工具调用协议：新增 tool_execute/tool_result 消息类型，实现请求-响应匹配（requestId + Promise + 超时）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v6_001"
       ],

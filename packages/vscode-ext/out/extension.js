@@ -46,9 +46,11 @@ const command_registry_1 = require("./command-registry");
 const connection_tree_1 = require("./connection-tree");
 const message_tree_1 = require("./message-tree");
 const agent_tree_1 = require("./agent-tree");
+const browser_tools_1 = require("./browser-tools");
 let lmService;
 let wsServer;
 let mcpClient;
+let browserToolProvider;
 let reportGenerator;
 let connectionTree;
 let messageTree;
@@ -66,6 +68,8 @@ function activate(context) {
     wsServer.start().catch((err) => {
         outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
     });
+    // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
+    browserToolProvider = new browser_tools_1.BrowserToolProvider(wsServer, outputChannel);
     // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
     const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel);
     wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
@@ -108,13 +112,15 @@ function activate(context) {
     });
     outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
     // 注册 dispose
-    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => browserToolProvider?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 function deactivate() {
     reportGenerator?.cancel();
     reportGenerator = undefined;
+    browserToolProvider?.dispose();
+    browserToolProvider = undefined;
     connectionTree?.dispose();
     connectionTree = undefined;
     messageTree?.dispose();

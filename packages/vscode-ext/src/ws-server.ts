@@ -92,6 +92,16 @@ export class WsServer {
     return this.clients.size;
   }
 
+  /** 获取第一个已连接且处于 OPEN 状态的 WebSocket 客户端（通常只有一个 Chrome 插件连接） */
+  get firstClient(): WebSocket | null {
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        return client;
+      }
+    }
+    return null;
+  }
+
   /**
    * 启动 WebSocket 服务端
    * @returns Promise 在服务端开始监听后 resolve

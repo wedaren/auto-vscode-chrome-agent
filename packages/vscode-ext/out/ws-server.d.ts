@@ -38,6 +38,8 @@ export declare class WsServer {
     get listening(): boolean;
     /** 已连接客户端数 */
     get clientCount(): number;
+    /** 获取第一个已连接且处于 OPEN 状态的 WebSocket 客户端（通常只有一个 Chrome 插件连接） */
+    get firstClient(): WebSocket | null;
     /**
      * 启动 WebSocket 服务端
      * @returns Promise 在服务端开始监听后 resolve
