@@ -5,6 +5,7 @@ declare global {
   const ChatInput: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ChatInput')['default']
   const ContentScriptContext: typeof import('wxt/client')['ContentScriptContext']
   const ConversationList: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ConversationList')['default']
+  const DebugPanel: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/DebugPanel')['default']
   const ErrorBoundary: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ErrorBoundary')['default']
   const InvalidMatchPattern: typeof import('wxt/sandbox')['InvalidMatchPattern']
   const MatchPattern: typeof import('wxt/sandbox')['MatchPattern']
@@ -37,6 +38,7 @@ declare global {
   const useChat: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')['useChat']
   const useChatStorage: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage')['useChatStorage']
   const useContext: typeof import('react')['useContext']
+  const useDebugLog: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useDebugLog')['useDebugLog']
   const useEffect: typeof import('react')['useEffect']
   const useMemo: typeof import('react')['useMemo']
   const usePageContext: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')['usePageContext']
@@ -75,6 +77,9 @@ declare global {
   // @ts-ignore
   export type { Conversation, ConversationMeta } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage')
+  // @ts-ignore
+  export type { DebugLogType, DebugLogEntry, TimelineEntry, DebugToggles, UseDebugLogReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useDebugLog'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useDebugLog')
   // @ts-ignore
   export type { PageContext, UsePageContextReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')

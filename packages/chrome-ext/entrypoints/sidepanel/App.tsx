@@ -1,9 +1,10 @@
 // App.tsx — Side Panel 主组件，纯 UI 渲染层，所有逻辑由 Hook 管理
 // 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
-// 顶部 Tab 切换 Chat / Skills 两个视图
+// 顶部 Tab 切换 Chat / Skills / Debug 三个视图
 // 空会话时显示 WelcomeScreen 引导页
 // 集成 ErrorBoundary 组件 + 全局错误拦截层（window.onerror / unhandledrejection）
 // 连接指示器升级为可点击组件，显示详细状态弹窗 + 手动重新连接按钮
+// Debug 调试面板：实时消息日志 + 连接仪表盘 + 执行时间线 + 开关控制
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
@@ -12,17 +13,19 @@ import TypingIndicator from '../../components/TypingIndicator';
 import ConversationList from '../../components/ConversationList';
 import WelcomeScreen from '../../components/WelcomeScreen';
 import SkillPanel from '../../components/SkillPanel';
+import DebugPanel from '../../components/DebugPanel';
 import ToastContainer from '../../components/Toast';
 import ErrorBoundary, { type ErrorLogEntry } from '../../components/ErrorBoundary';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
 import { useToast } from '../../hooks/useToast';
+import { useDebugLog } from '../../hooks/useDebugLog';
 import type { BridgeMessage } from '../../src/ws-client';
 import type { ConnectionState, ConnectionDetails } from '../../src/ws-client';
 
 /** 顶部 Tab 类型 */
-type ActiveTab = 'chat' | 'skills';
+type ActiveTab = 'chat' | 'skills' | 'debug';
 
 /** WebSocket 服务端地址（VSCode 插件侧） */
 const WS_URL = 'ws://localhost:7777';
@@ -219,10 +222,11 @@ interface AppContentProps {
   errorLog: ErrorLogEntry[];
 }
 
-function AppContent({ errorLog: _errorLog }: AppContentProps) {
+function AppContent({ errorLog }: AppContentProps) {
   // --- Hooks ---
   const { isConnected, connectionState, connectionDetails, sendMessage, onMessage, reconnect } = useWebSocket(WS_URL);
   const { toasts, showToast, dismissToast } = useToast();
+  const debugLog = useDebugLog();
 
   /** Toast 回调桥接：将 useChat 内部错误通过 Toast 显示 */
   const handleChatToast = useCallback(
@@ -263,8 +267,29 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
   // 注册 WebSocket 消息处理
   // 注意：tool_execute / tool_result 消息由 useWebSocket 内部的 tool-bridge 自动处理，
   //       不在此处处理，不阻塞聊天 UI 渲染
+  // Debug：所有入站消息均记录到 debugLog
   useEffect(() => {
     const unsub = onMessage((msg: BridgeMessage) => {
+      // Debug 日志：记录所有入站消息
+      debugLog.logInbound(msg.type, msg.payload);
+
+      // 执行时间线：跟踪 agent_step / agent_complete / tool_execute / tool_result / skill 事件
+      if (msg.type === 'agent_step') {
+        const payload = msg.payload as { step?: string; description?: string } | undefined;
+        debugLog.logExecution(`Agent 步骤: ${payload?.step ?? 'unknown'}`, payload?.description);
+      }
+      if (msg.type === 'agent_complete') {
+        debugLog.logExecution('Agent 执行完成', msg.payload);
+      }
+      if (msg.type === 'tool_execute') {
+        const payload = msg.payload as { toolName?: string; requestId?: string } | undefined;
+        debugLog.startTimeline(`工具调用: ${payload?.toolName ?? 'unknown'}`, payload?.requestId);
+      }
+      if (msg.type === 'skill_progress') {
+        const payload = msg.payload as { skillName?: string; description?: string } | undefined;
+        debugLog.logExecution(`Skill 进度: ${payload?.skillName ?? 'unknown'}`, payload?.description);
+      }
+
       // tool_execute 由 useWebSocket 内的 tool-bridge 处理，tool_result 由 VSCode 侧处理
       // 这里只处理聊天相关消息
       if (msg.type === 'tool_execute' || msg.type === 'tool_result') {
@@ -288,13 +313,18 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
       }
     });
     return unsub;
-  }, [onMessage, handleChatMessage]);
+  }, [onMessage, handleChatMessage, debugLog]);
 
-  // 连接状态变化：连接时请求模型列表，断连时恢复流式状态 + Toast 提示
+  // 连接状态变化：连接时请求模型列表，断连时恢复流式状态 + Toast 提示 + Debug 日志
   useEffect(() => {
+    // Debug 日志：记录连接状态变迁
+    debugLog.logConnection(connectionState, { url: connectionDetails.url, reconnectCount: connectionDetails.reconnectCount });
+
     if (connectionState === 'connected') {
       setModelsLoading(true);
       sendMessage('list_models', null);
+      // Debug：记录出站消息
+      debugLog.logOutbound('list_models', null);
       showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
     if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
@@ -303,27 +333,40 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
     }
     if (connectionState === 'failed') {
       resetStreamingState();
+      debugLog.logError('连接失败', { url: connectionDetails.url, reconnectCount: connectionDetails.reconnectCount });
       showToast({
         type: 'error',
         message: '连接失败，请点击连接指示器手动重连',
         action: { label: '重新连接', onClick: reconnect },
       });
     }
-  }, [connectionState, sendMessage, resetStreamingState, showToast, reconnect]);
+  }, [connectionState, sendMessage, resetStreamingState, showToast, reconnect, debugLog, connectionDetails]);
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // 将全局 errorLog 条目同步到 debugLog（方便在 Debug 面板统一查看）
+  useEffect(() => {
+    if (errorLog.length === 0) return;
+    const latest = errorLog[0]; // errorLog 是倒序的
+    if (latest) {
+      debugLog.logError(`[${latest.source}] ${latest.message}`, latest.stack);
+    }
+  }, [errorLog, debugLog]);
+
   const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
     sendMessage('select_model', { modelId });
-  }, [sendMessage]);
+    debugLog.logOutbound('select_model', { modelId });
+  }, [sendMessage, debugLog]);
 
   const handleSendMessage = useCallback((content: string) => {
     chatSend(content, pageContext);
-  }, [chatSend, pageContext]);
+    // Debug：记录出站 chat 消息
+    debugLog.logOutbound('chat', { text: content, hasContext: !!pageContext.url });
+  }, [chatSend, pageContext, debugLog]);
 
   const handleQuickAction = useCallback((action: string) => {
     handleSendMessage(action);
@@ -441,7 +484,7 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
         </div>
       </header>
 
-      {/* Tab 切换栏：Chat / Skills */}
+      {/* Tab 切换栏：Chat / Skills / Debug */}
       <div className="flex border-b border-gray-200">
         <button
           onClick={() => setActiveTab('chat')}
@@ -471,6 +514,26 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
             Skills
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('debug')}
+          className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+            activeTab === 'debug'
+              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0112 12.75zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 01-1.152-6.135c-.026-.714-.56-1.305-1.274-1.305H6.22c-.714 0-1.249.591-1.275 1.305a23.91 23.91 0 01-1.152 6.135c2.56-.932 5.324-1.44 8.207-1.44zM15.75 9V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25V9" />
+            </svg>
+            Debug
+            {debugLog.stats.error > 0 && (
+              <span className="ml-0.5 px-1 py-0 text-[9px] rounded-full bg-red-100 text-red-600 font-bold">
+                {debugLog.stats.error}
+              </span>
+            )}
           </div>
         </button>
       </div>
@@ -563,6 +626,22 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
           sendMessage={sendMessage}
           onMessage={onMessage}
           isConnected={isConnected}
+        />
+      )}
+
+      {/* ===== Debug 调试面板 ===== */}
+      {activeTab === 'debug' && (
+        <DebugPanel
+          logs={debugLog.logs}
+          timeline={debugLog.timeline}
+          toggles={debugLog.toggles}
+          connectionState={connectionState}
+          connectionDetails={connectionDetails}
+          stats={debugLog.stats}
+          onSetToggles={debugLog.setToggles}
+          onClearLogs={debugLog.clearLogs}
+          onClearTimeline={debugLog.clearTimeline}
+          onExportLogs={debugLog.exportLogs}
         />
       )}
     </div>

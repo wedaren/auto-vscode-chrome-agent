@@ -727,7 +727,7 @@
       "id": "evo_v9_003",
       "type": "coding",
       "title": "WebSocket 连接健壮性增强：心跳检测 + 连接状态机 + 流式中断恢复 + 手动重连按钮",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v9_002"
       ],
