@@ -739,7 +739,7 @@
       "id": "evo_v9_004",
       "type": "coding",
       "title": "Chrome Side Panel 新增 Debug 调试面板：实时消息日志 + 连接仪表盘 + 执行时间线 + 开关控制",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v9_003"
       ],
@@ -756,7 +756,7 @@
         "evo_v9_004"
       ],
       "acceptance": "全链路验证：ErrorBoundary 包裹 App 根节点且含 fallback UI；Toast 组件支持四种类型且 useToast 提供全局 showToast；消息发送失败可重试（Message.status 字段 + 重试按钮）；ws-client 心跳机制正常（ping/pong 间隔）；连接状态包含 reconnecting/failed 等完整状态；流式中断有保留和提示；连接指示器可点击显示详情和手动重连；Debug Tab 存在且含连接仪表盘 + 消息日志 + 执行时间线三个区域；useDebugLog hook 正常工作；双端构建均通过无 TS 错误",
-      "acceptance_cmd": "cd packages/chrome-ext && test -f components/ErrorBoundary.tsx && test -f components/Toast.tsx && test -f hooks/useToast.ts && test -f components/DebugPanel.tsx && test -f hooks/useDebugLog.ts && grep -q 'ErrorBoundary' entrypoints/sidepanel/App.tsx && grep -q 'Toast' components/Toast.tsx && grep -q 'heartbeat\\|ping' utils/ws-client.ts && grep -q '调试\\|Debug' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 稳定性体系全量验收失败'",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f components/ErrorBoundary.tsx && test -f components/Toast.tsx && test -f hooks/useToast.ts && test -f components/DebugPanel.tsx && test -f hooks/useDebugLog.ts && grep -q 'ErrorBoundary' entrypoints/sidepanel/App.tsx && grep -q 'Toast' components/Toast.tsx && grep -q 'heartbeat\\|ping' src/ws-client.ts && grep -q '调试\\|Debug' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && npm run compile 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 稳定性体系全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
     },
     {
@@ -818,6 +818,56 @@
       "acceptance": "VSCode 插件 compile 通过，Chrome 插件 build 通过；LlmRequestCollector 采集完整数据；WebSocket 协议正确传输 llmDetail；MessageBubble 有下载按钮；下载 JSON 包含 model/systemPrompt/messages/response/timing/agentSteps 字段",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && cd ../../packages/chrome-ext && npx wxt build 2>&1 | tail -5 && grep -r 'LlmRequestCollector' ../vscode-ext/src/llm-request-collector.ts && grep -r 'llmDetail' ../chrome-ext/utils/message-factory.ts ../chrome-ext/components/MessageBubble.tsx ../vscode-ext/src/message-handler.ts && echo PASS || echo FAIL",
       "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
+    },
+    {
+      "id": "evo_v11_001",
+      "type": "coding",
+      "title": "创建 UserDataManager 服务类 + 添加 browserAgent.userDataDir 配置 schema",
+      "status": "pending",
+      "depends_on": ["evo_v10_005"],
+      "acceptance": "新增 packages/vscode-ext/src/user-data-manager.ts；UserDataManager 支持 init()（创建目录结构）、getPath()、readJSON()、writeJSON() 方法；package.json contributes.configuration 中新增 browserAgent.userDataDir 配置项（type: string，default: ~/.browser-agent）；compile 通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && test -f src/user-data-manager.ts && grep -q 'UserDataManager' src/user-data-manager.ts && grep -q 'userDataDir' package.json && echo PASS || echo FAIL",
+      "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
+    },
+    {
+      "id": "evo_v11_002",
+      "type": "coding",
+      "title": "在 extension.ts 中集成 UserDataManager 生命周期：激活时初始化目录，监听配置变更",
+      "status": "pending",
+      "depends_on": ["evo_v11_001"],
+      "acceptance": "extension.ts 在 activate() 中创建 UserDataManager 实例并调用 init()；监听 browserAgent.userDataDir 配置变更事件，变更时重新初始化；默认目录 ~/.browser-agent/ 下自动创建 skills/、config/、sessions/ 子目录；compile 通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -q 'UserDataManager' src/extension.ts && grep -q 'onDidChangeConfiguration' src/extension.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
+    },
+    {
+      "id": "evo_v11_003",
+      "type": "coding",
+      "title": "重构 SkillRegistry 持久化：从 workspace config 迁移到 UserDataManager 文件存储",
+      "status": "pending",
+      "depends_on": ["evo_v11_002"],
+      "acceptance": "SkillRegistry 构造函数接受 UserDataManager 参数；loadSkills() 从 ~/.browser-agent/skills/custom-skills.json 加载自定义 Skill；saveSkills() 写入同路径；预设开关存储到 ~/.browser-agent/skills/preset-overrides.json；首次加载时自动迁移旧 workspace config 数据；compile 通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -q 'UserDataManager' src/skill-registry.ts && grep -q 'custom-skills.json' src/skill-registry.ts && grep -q 'preset-overrides.json' src/skill-registry.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
+    },
+    {
+      "id": "evo_v11_004",
+      "type": "coding",
+      "title": "添加用户数据目录管理命令 + ConnectionTree 状态展示",
+      "status": "pending",
+      "depends_on": ["evo_v11_003"],
+      "acceptance": "注册 browserAgent.openUserDataDir 命令（在文件管理器中打开用户数据目录）；注册 browserAgent.revealUserDataDir 命令（在 VSCode 中打开目录）；ConnectionTreeDataProvider 显示当前 userDataDir 路径和磁盘占用；compile 通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -q 'openUserDataDir' src/command-registry.ts && grep -q 'userDataDir\\|UserData' src/connection-tree.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
+    },
+    {
+      "id": "evo_v11_005",
+      "type": "validate",
+      "title": "全量验收：构建通过、目录自动创建、Skills 文件持久化、配置可变更",
+      "status": "pending",
+      "depends_on": ["evo_v11_004"],
+      "acceptance": "VSCode 插件 compile 通过；user-data-manager.ts 存在且导出 UserDataManager 类；extension.ts 集成 UserDataManager；SkillRegistry 使用文件持久化；package.json 有 userDataDir 配置；有 openUserDataDir 命令；ConnectionTree 显示数据目录状态",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && test -f src/user-data-manager.ts && grep -q 'class UserDataManager' src/user-data-manager.ts && grep -q 'userDataDir' package.json && grep -q 'UserDataManager' src/extension.ts && grep -q 'UserDataManager' src/skill-registry.ts && grep -q 'openUserDataDir' src/command-registry.ts && echo PASS || echo FAIL",
+      "evolution_goal": "vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息"
     }
   ]
 }

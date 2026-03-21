@@ -1,17 +1,18 @@
 {
   "phase": "idle",
-  "current_task": "evo_v9_004",
+  "current_task": "evo_v9_005",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
-    "task_id": "evo_v9_004",
+    "task_id": "evo_v9_005",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "PASS — 文件存在性(5/5)✅ + grep内容(ErrorBoundary/Toast/heartbeat/Debug 4/4)✅ + chrome-ext build 0 TS errors✅ + vscode-ext compile 0 errors✅ + 无禁止外部依赖✅ + 新增文件均有顶部注释(5/5)✅ + LM调用仅通过vscode.lm API✅"
   },
-  "last_tick": "2026-03-21T12:15:00.000000Z",
-  "pm_done": true
+  "last_tick": "2026-03-21T12:30:11.714844Z",
+  "pm_done": true,
+  "last_research": "RESEARCH_RESULT: knowledge/fix_evo_v9_005_acceptance_cmd_path_mismatch.md | acceptance_cmd 路径错误 utils/ws-client.ts 应为 src/ws-client.ts，需执行 sed 修正 tasks.json（已失败3次，修复从未被执行）"
 }
