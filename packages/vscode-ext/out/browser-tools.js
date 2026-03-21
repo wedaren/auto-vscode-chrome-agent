@@ -59,6 +59,9 @@ const TOOL_MAPPINGS = {
     browser_evaluate: { actionType: 'evaluate', argMapping: { code: 'expression' } },
     browser_select_option: { actionType: 'selectOption', argMapping: { value: 'optionValue', text: 'optionText' } },
     browser_get_links: { actionType: 'getLinks', argMapping: { limit: 'maxCount' } },
+    // ── evo_v19_001: 沉浸式翻译工具 ──
+    browser_extract_paragraphs: { actionType: 'extractParagraphs', argMapping: { scope: 'scopeSelector', limit: 'maxCount' } },
+    browser_inject_bilingual: { actionType: 'injectBilingual', argMapping: { mode: 'injectMode' } },
 };
 /** 完整的工具定义列表 */
 const BROWSER_TOOLS = [
@@ -247,6 +250,39 @@ const BROWSER_TOOLS = [
                 limit: { type: 'number', description: 'Maximum number of links to return (default: 100)' },
             },
             required: [],
+        },
+    },
+    // ── evo_v19_001: 沉浸式翻译浏览器工具 ──
+    {
+        name: 'browser_extract_paragraphs',
+        description: 'Intelligently extract content paragraphs from the current page for translation. Detects the main content area (article > main > .content > body) and returns an array of paragraph objects with id, tag, and text. Skips nav, footer, script, style, and ad elements. Each paragraph gets a stable data-imt-id attribute for later injection.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', description: 'Optional CSS selector to limit extraction scope (default: auto-detect main content area)' },
+                limit: { type: 'number', description: 'Maximum number of paragraphs to extract (default: 200)' },
+            },
+            required: [],
+        },
+    },
+    {
+        name: 'browser_inject_bilingual',
+        description: 'Inject translated text below original paragraphs as bilingual display, or toggle/clear existing translations. Each translated paragraph is styled with .imt-translation class (light blue left border, subtle background). Modes: "inject" inserts translations, "toggle" shows/hides existing translations, "clear" removes all injected translations.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                mode: {
+                    type: 'string',
+                    description: 'Operation mode: "inject" to insert translations, "toggle" to show/hide, "clear" to remove all',
+                    enum: ['inject', 'toggle', 'clear'],
+                    default: 'inject',
+                },
+                translations: {
+                    type: 'string',
+                    description: 'JSON-encoded array of { id: string, translated: string } objects. Required for "inject" mode. The id must match the data-imt-id from browser_extract_paragraphs output.',
+                },
+            },
+            required: ['mode'],
         },
     },
 ];

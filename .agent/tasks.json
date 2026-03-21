@@ -1287,7 +1287,7 @@
       "id": "evo_v18_004",
       "type": "coding",
       "title": "AgentLoop 复杂任务编排增强：优化 system prompt 加入工具组合 few-shot 范例 + Skill 编排建议",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v18_003"
       ],
@@ -1299,7 +1299,7 @@
       "id": "evo_v18_005",
       "type": "validation",
       "title": "Skill 体系增强全量验收：双端构建 + 15 个预设 Skill + 15 个浏览器工具 + 步骤传参 + few-shot prompt",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v18_001",
         "evo_v18_002",
@@ -1309,6 +1309,69 @@
       "acceptance": "Chrome 插件构建通过 + VSCode 插件编译通过；browser-tools.ts 有 15 个工具定义；skill-registry.ts 有 15 个预设 Skill；skill-runner.ts 支持 $prev/$step_N 插值；agent-loop.ts 有 few-shot 范例",
       "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 && node -e \"const fs=require('fs'); const b=fs.readFileSync('src/browser-tools.ts','utf8'); const s=fs.readFileSync('src/skill-registry.ts','utf8'); const r=fs.readFileSync('src/skill-runner.ts','utf8'); const a=fs.readFileSync('src/agent-loop.ts','utf8'); const tools=(b.match(/name:\\s*'browser_/g)||[]).length; const skills=(s.match(/name:\\s*'[\\w_]+'/g)||[]).length; const hasInterp=r.includes('\\$prev')||r.includes('\\$step_'); const hasFewShot=a.includes('Example')||a.includes('example'); console.log('Tools:',tools,'Skills:',skills,'Interp:',hasInterp,'FewShot:',hasFewShot); process.exit(tools>=15&&skills>=15&&hasInterp&&hasFewShot?0:1)\" && echo PASS || echo FAIL",
       "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
+    },
+    {
+      "id": "evo_v19_001",
+      "type": "coding",
+      "title": "沉浸式翻译浏览器工具：browser_extract_paragraphs + browser_inject_bilingual",
+      "status": "pending",
+      "depends_on": [
+        "evo_v18_005"
+      ],
+      "acceptance": "browser-tools.ts 新增 browser_extract_paragraphs（智能内容区域检测 article>main>.content>body，提取 p/h1-h6/li/blockquote/td/figcaption 等段落，返回 [{index, tagName, text, selector}] 数组，每个元素标记 data-imt-id）和 browser_inject_bilingual（接收 [{index, translatedText}] 数组 + mode 参数(inject/toggle/clear)，inject 模式在每个原文段落后插入 .imt-translation 双语 div，toggle 模式切换 .imt-hidden，clear 模式移除所有注入元素）两个工具定义 + TOOL_MAPPINGS；action-executor.ts 新增 extractParagraphs 和 injectBilingual 两个执行函数，含沉浸式翻译 CSS 样式注入；content.ts / background.ts 路由新 ActionType；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'browser_extract_paragraphs' src/browser-tools.ts && grep -q 'browser_inject_bilingual' src/browser-tools.ts && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && grep -q 'extractParagraphs' utils/action-executor.ts && grep -q 'injectBilingual' utils/action-executor.ts && grep -q 'imt-translation' utils/action-executor.ts && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件沉浸式翻译，提供最好的用户体验"
+    },
+    {
+      "id": "evo_v19_002",
+      "type": "coding",
+      "title": "SkillRunner LLM 工具路由：新增 llm_translate 批量翻译工具",
+      "status": "pending",
+      "depends_on": [
+        "evo_v19_001"
+      ],
+      "acceptance": "skill-runner.ts 新增第三条工具路由：llm_* 前缀 → LmService（与 browser_* → BrowserToolProvider、其他 → McpClient 并列）；新增 llm_translate 工具实现，接收 {texts: string[], targetLanguage: string, sourceLanguage?: string}，通过 vscode.lm API 批量翻译，支持分批处理（每批最多 20 段，避免上下文溢出），返回 {translations: string[]} 数组；新增 llm-tools.ts 定义 LLM 工具元数据（name, description, inputSchema）；SkillRunner 构造函数接收 LmService 引用；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'llm_translate\\|llm_' src/skill-runner.ts && grep -q 'LmService\\|lmService' src/skill-runner.ts && test -f src/llm-tools.ts && grep -q 'llm_translate' src/llm-tools.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件沉浸式翻译，提供最好的用户体验"
+    },
+    {
+      "id": "evo_v19_003",
+      "type": "coding",
+      "title": "immersive_translate 预设 Skill 定义：替换旧 translate_page，4 步沉浸式翻译流程",
+      "status": "pending",
+      "depends_on": [
+        "evo_v19_002"
+      ],
+      "acceptance": "skill-registry.ts 中旧 translate_page skill 被替换为 immersive_translate（或新增并保留旧版）；新 skill 包含 4 步：Step1 browser_extract_paragraphs（智能提取段落）→ Step2 llm_translate({{$prev}} + targetLanguage) → Step3 browser_inject_bilingual({{$prev}} + mode:inject) → Step4 browser_screenshot(optional)；参数包含 targetLanguage（默认中文）、selector（默认 body）、sourceLanguage（可选）；displayName 为「沉浸式翻译」；description 说明双语对照功能；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'immersive_translate' src/skill-registry.ts && grep -q 'browser_extract_paragraphs' src/skill-registry.ts && grep -q 'llm_translate' src/skill-registry.ts && grep -q 'browser_inject_bilingual' src/skill-registry.ts && grep -q 'targetLanguage' src/skill-registry.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件沉浸式翻译，提供最好的用户体验"
+    },
+    {
+      "id": "evo_v19_004",
+      "type": "coding",
+      "title": "Chrome 侧沉浸式翻译 UI 控制：SkillPanel 翻译快捷入口 + toggle/clear 操作按钮",
+      "status": "pending",
+      "depends_on": [
+        "evo_v19_003"
+      ],
+      "acceptance": "SkillPanel.tsx 或新增 TranslateControl.tsx 组件：immersive_translate skill 卡片有特殊 UI 展示（翻译图标 + 目标语言快选）；翻译完成后展示 toggle 按钮（显示/隐藏翻译）和 clear 按钮（清除翻译）；toggle 按钮调用 browser_inject_bilingual(mode:'toggle')，clear 按钮调用 browser_inject_bilingual(mode:'clear')；翻译状态持久化在组件 state 中（已翻译/未翻译）；Chrome 插件构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -rq 'immersive_translate\\|toggle.*translat\\|TranslateControl' components/ && grep -rq 'toggle\\|clear' components/ && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件沉浸式翻译，提供最好的用户体验"
+    },
+    {
+      "id": "evo_v19_005",
+      "type": "validation",
+      "title": "沉浸式翻译全量验收：双端构建 + 新工具 + LLM 路由 + Skill 定义 + UI 控制",
+      "status": "pending",
+      "depends_on": [
+        "evo_v19_001",
+        "evo_v19_002",
+        "evo_v19_003",
+        "evo_v19_004"
+      ],
+      "acceptance": "Chrome 插件构建通过 + VSCode 插件编译通过；browser-tools.ts 有 browser_extract_paragraphs 和 browser_inject_bilingual 工具定义；action-executor.ts 有 extractParagraphs 和 injectBilingual 实现（含 .imt-translation CSS）；skill-runner.ts 有 llm_* 路由 + llm_translate 实现；skill-registry.ts 有 immersive_translate Skill（4 步流程）；Chrome 侧有翻译 toggle/clear UI 控制",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 && grep -q 'browser_extract_paragraphs' src/browser-tools.ts && grep -q 'browser_inject_bilingual' src/browser-tools.ts && grep -q 'extractParagraphs' ../chrome-ext/utils/action-executor.ts && grep -q 'injectBilingual' ../chrome-ext/utils/action-executor.ts && grep -q 'imt-translation' ../chrome-ext/utils/action-executor.ts && grep -q 'llm_translate' src/skill-runner.ts && grep -q 'immersive_translate' src/skill-registry.ts && grep -rq 'toggle\\|clear' ../chrome-ext/components/ && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件沉浸式翻译，提供最好的用户体验"
     }
   ]
 }

@@ -18,7 +18,9 @@ export type ActionType =
   | 'highlight'
   | 'evaluate'
   | 'selectOption'
-  | 'getLinks';
+  | 'getLinks'
+  | 'extractParagraphs'
+  | 'injectBilingual';
 
 /** 滚动模式 */
 export type ScrollMode = 'to-top' | 'to-bottom' | 'by-pixels' | 'to-element';
@@ -55,6 +57,12 @@ export interface BrowserAction {
   optionText?: string;
   /** getLinks / querySelectorAll 返回的最大元素数 */
   maxCount?: number;
+  /** extractParagraphs 的范围选择器 */
+  scopeSelector?: string;
+  /** injectBilingual 的操作模式: inject / toggle / clear */
+  injectMode?: 'inject' | 'toggle' | 'clear';
+  /** injectBilingual inject 模式的翻译数据（JSON 字符串） */
+  translations?: string;
 }
 
 /** 操作执行结果 */
@@ -488,6 +496,263 @@ function executeGetLinks(action: BrowserAction): ActionResult {
   };
 }
 
+// ── evo_v19_001: 沉浸式翻译 — 段落提取 + 双语注入 ──
+
+/** 需要跳过的标签（导航、脚本、样式、广告等） */
+const IMT_SKIP_TAGS = new Set([
+  'script', 'style', 'noscript', 'iframe', 'svg', 'canvas',
+  'nav', 'footer', 'header', 'aside', 'form', 'button',
+  'input', 'textarea', 'select', 'label',
+]);
+
+/** 内容段落标签 */
+const IMT_PARAGRAPH_TAGS = new Set([
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'li', 'blockquote', 'td', 'th', 'dt', 'dd',
+  'figcaption', 'caption', 'summary', 'pre',
+]);
+
+/**
+ * 自动检测页面主内容区域
+ * 优先级: article > main > [role="main"] > .content/.post/.article > body
+ */
+function detectMainContent(): Element {
+  const candidates = [
+    'article',
+    'main',
+    '[role="main"]',
+    '.content',
+    '.post',
+    '.article',
+    '.post-content',
+    '.entry-content',
+    '.article-content',
+    '#content',
+  ];
+  for (const sel of candidates) {
+    const el = document.querySelector(sel);
+    if (el && el.textContent && el.textContent.trim().length > 100) {
+      return el;
+    }
+  }
+  return document.body;
+}
+
+/**
+ * 执行 extractParagraphs 操作
+ * 智能提取页面段落，为每个段落设置 data-imt-id，返回结构化数据
+ */
+function executeExtractParagraphs(action: BrowserAction): ActionResult {
+  const scope = action.scopeSelector
+    ? document.querySelector(action.scopeSelector)
+    : detectMainContent();
+
+  if (!scope) {
+    return { success: false, error: `未找到范围元素: ${action.scopeSelector}` };
+  }
+
+  const maxCount = action.maxCount || 200;
+  const paragraphs: Array<{ id: string; tag: string; text: string }> = [];
+  let idCounter = 0;
+
+  // 递归遍历 DOM 树，提取内容段落
+  function walk(node: Element): void {
+    if (paragraphs.length >= maxCount) { return; }
+
+    const tag = node.tagName.toLowerCase();
+
+    // 跳过不相关的标签
+    if (IMT_SKIP_TAGS.has(tag)) { return; }
+
+    // 跳过隐藏元素
+    if (node instanceof HTMLElement) {
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') { return; }
+    }
+
+    // 跳过已注入的翻译段落
+    if (node.classList.contains('imt-translation')) { return; }
+
+    // 如果是段落级标签且有有效文本内容
+    if (IMT_PARAGRAPH_TAGS.has(tag)) {
+      const text = (node.textContent || '').trim();
+      // 跳过空段落和极短段落（少于2字符）
+      if (text.length >= 2) {
+        const id = `imt-${idCounter++}`;
+        node.setAttribute('data-imt-id', id);
+        paragraphs.push({ id, tag, text: text.slice(0, 2000) });
+      }
+      return; // 不再向下递归，避免重复提取
+    }
+
+    // 非段落级标签 → 继续向下遍历子元素
+    for (let i = 0; i < node.children.length; i++) {
+      walk(node.children[i]);
+    }
+  }
+
+  walk(scope as Element);
+
+  return {
+    success: true,
+    data: {
+      totalExtracted: paragraphs.length,
+      scope: action.scopeSelector || '(auto-detected)',
+      paragraphs,
+    },
+  };
+}
+
+/** 沉浸式翻译注入样式（只注入一次） */
+const IMT_STYLE_ID = 'imt-bilingual-style';
+const IMT_CSS = `
+.imt-translation {
+  margin: 4px 0 12px 0;
+  padding: 6px 12px;
+  border-left: 3px solid #4287f5;
+  background: rgba(66, 135, 245, 0.06);
+  color: #555;
+  font-size: 0.95em;
+  line-height: 1.6;
+  border-radius: 0 4px 4px 0;
+  font-style: normal;
+}
+.imt-translation.imt-hidden {
+  display: none;
+}
+`;
+
+/**
+ * 确保沉浸式翻译样式已注入
+ */
+function ensureImtStyle(): void {
+  if (!document.getElementById(IMT_STYLE_ID)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = IMT_STYLE_ID;
+    styleEl.textContent = IMT_CSS;
+    document.head.appendChild(styleEl);
+  }
+}
+
+/**
+ * 执行 injectBilingual 操作
+ * 支持三种模式: inject（注入翻译）/ toggle（切换显示/隐藏）/ clear（清除所有翻译）
+ */
+function executeInjectBilingual(action: BrowserAction): ActionResult {
+  const mode = action.injectMode || 'inject';
+
+  switch (mode) {
+    case 'inject': {
+      if (!action.translations) {
+        return { success: false, error: 'inject 模式需要 translations 参数（JSON 字符串）' };
+      }
+
+      let items: Array<{ id: string; translated: string }>;
+      try {
+        items = JSON.parse(action.translations);
+      } catch {
+        return { success: false, error: 'translations 参数 JSON 解析失败' };
+      }
+
+      if (!Array.isArray(items)) {
+        return { success: false, error: 'translations 必须是数组' };
+      }
+
+      ensureImtStyle();
+
+      let injected = 0;
+      let skipped = 0;
+
+      for (const item of items) {
+        if (!item.id || !item.translated) {
+          skipped++;
+          continue;
+        }
+
+        const original = document.querySelector(`[data-imt-id="${item.id}"]`);
+        if (!original) {
+          skipped++;
+          continue;
+        }
+
+        // 避免重复注入：检查是否已有同 id 的翻译
+        const existingTranslation = document.querySelector(`.imt-translation[data-imt-source="${item.id}"]`);
+        if (existingTranslation) {
+          // 更新现有翻译
+          existingTranslation.textContent = item.translated;
+          existingTranslation.classList.remove('imt-hidden');
+          injected++;
+          continue;
+        }
+
+        // 创建翻译段落
+        const translatedEl = document.createElement('div');
+        translatedEl.className = 'imt-translation';
+        translatedEl.setAttribute('data-imt-source', item.id);
+        translatedEl.textContent = item.translated;
+
+        // 插入到原文段落之后
+        original.parentNode?.insertBefore(translatedEl, original.nextSibling);
+        injected++;
+      }
+
+      return {
+        success: true,
+        data: { mode: 'inject', injected, skipped, total: items.length },
+      };
+    }
+
+    case 'toggle': {
+      const translations = document.querySelectorAll('.imt-translation');
+      if (translations.length === 0) {
+        return { success: true, data: { mode: 'toggle', message: '没有已注入的翻译', toggled: 0 } };
+      }
+
+      // 检查当前状态（根据第一个翻译段落判断）
+      const isHidden = translations[0].classList.contains('imt-hidden');
+
+      translations.forEach((el) => {
+        if (isHidden) {
+          el.classList.remove('imt-hidden');
+        } else {
+          el.classList.add('imt-hidden');
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          mode: 'toggle',
+          newState: isHidden ? 'visible' : 'hidden',
+          toggled: translations.length,
+        },
+      };
+    }
+
+    case 'clear': {
+      const translations = document.querySelectorAll('.imt-translation');
+      const count = translations.length;
+      translations.forEach((el) => el.remove());
+
+      // 同时移除 data-imt-id 属性
+      const tagged = document.querySelectorAll('[data-imt-id]');
+      tagged.forEach((el) => el.removeAttribute('data-imt-id'));
+
+      // 移除样式
+      const styleEl = document.getElementById(IMT_STYLE_ID);
+      if (styleEl) { styleEl.remove(); }
+
+      return {
+        success: true,
+        data: { mode: 'clear', removed: count },
+      };
+    }
+
+    default:
+      return { success: false, error: `不支持的 injectBilingual 模式: ${mode}` };
+  }
+}
+
 /**
  * 主执行入口 — 根据 action.type 分发到对应执行函数
  *
@@ -547,6 +812,13 @@ export async function executeAction(action: BrowserAction): Promise<ActionResult
 
       case 'getLinks':
         return executeGetLinks(action);
+
+      // ── evo_v19_001: 沉浸式翻译工具 ──
+      case 'extractParagraphs':
+        return executeExtractParagraphs(action);
+
+      case 'injectBilingual':
+        return executeInjectBilingual(action);
 
       default:
         return { success: false, error: `不支持的操作类型: ${(action as BrowserAction).type}` };
