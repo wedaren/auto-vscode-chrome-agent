@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v14_001",
+  "current_task": "evo_v14_002",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
-    "task_id": "evo_v14_001",
+    "task_id": "evo_v14_002",
     "result": "pass",
     "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "}, [onMessage, handleChatMessage]);\n\n// 连接状态变化：仅在状态从非 connected 转换为 connected 时请求模型列表\nPASS"
+    "acceptance_cmd_output": "PASS — [errorLog] 依赖数组仅含 errorLog，debugLogRef.current.logError 正确使用，build 0 error"
   },
   "last_tick": "2026-03-21T13:23:44.289066Z",
   "pm_done": true,
