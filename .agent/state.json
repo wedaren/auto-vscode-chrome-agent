@@ -4,13 +4,13 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 92,
+  "last_score": 95,
   "last_validation": {
     "task_id": "evo_v4_001",
     "result": "pass",
-    "score": 92,
+    "score": 95,
     "issues": [
-      "WARN: Duplicated imports 'Message' from useChat.ts and message-factory.ts（WXT 构建警告，非阻塞，上一轮遗留）"
+      "WARN: WXT 构建警告 Duplicated imports 'Message'（useChat.ts re-export 与 message-factory.ts 冲突，非阻塞，不影响运行）"
     ],
     "acceptance_cmd_output": "PASS"
   },

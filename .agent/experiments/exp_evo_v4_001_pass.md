@@ -26,3 +26,12 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- WARN: WXT 构建警告 Duplicated imports 'Message'（useChat.ts re-export 与 message-factory.ts 冲突，非阻塞，不影响运行，-5分）
+- acceptance_cmd: PASS（60/60）
+- TypeScript 构建无 error（18/20，扣 2 分因 WXT 重复导入警告）
+- program.md 约束全部符合：无外部 API key 依赖、Chrome 插件不内置模型、仅使用 chrome.storage.local（20/20）
