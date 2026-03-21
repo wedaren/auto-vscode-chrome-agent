@@ -1,12 +1,12 @@
 {
   "phase": "idle",
-  "current_task": "evo_v4_004",
+  "current_task": "evo_v4_005",
   "loop_count": 1,
-  "retry_count": 0,
+  "retry_count": 1,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v4_004",
+    "task_id": "evo_v4_005",
     "result": "pass",
     "score": 95,
     "issues": [
@@ -14,9 +14,10 @@
       "WARN: chunk size > 500kB（pre-existing，建议后续 code-split）"
     ],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-21T15:00:00.000000Z",
+    "validated_at": "2026-03-21T16:30:00.000000Z",
     "validator_run": 2
   },
-  "last_tick": "2026-03-21T15:00:00.000000Z",
-  "pm_done": true
+  "last_tick": "2026-03-21T16:30:00.000000Z",
+  "pm_done": true,
+  "last_research": "RESEARCH_RESULT: .agent/knowledge/fix_evo_v4_005_grep_case_sensitivity.md | acceptance_cmd 中 grep -q 大小写敏感导致无法匹配 camelCase 的 onRegenerate，改为 grep -qi 即可通过"
 }

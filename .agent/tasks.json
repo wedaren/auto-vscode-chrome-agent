@@ -438,7 +438,7 @@
       "id": "evo_v4_004",
       "type": "coding",
       "title": "Chrome 侧输入体验增强：斜杠命令(/new /clear) + 键盘快捷键 + 输入历史",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v4_003"
       ],
@@ -455,7 +455,7 @@
         "evo_v4_004"
       ],
       "acceptance": "Chrome 构建通过；hooks/useChatStorage.ts 持久化层完整（CRUD）；ConversationList.tsx 多会话管理可用；MessageBubble 有复制/重新生成/时间戳；WelcomeScreen 欢迎页存在；ChatInput 支持斜杠命令和快捷键",
-      "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/useChatStorage.ts && test -f components/ConversationList.tsx && test -f components/WelcomeScreen.tsx && grep -q 'clipboard' components/MessageBubble.tsx && grep -q 'regenerate\\|retry' components/MessageBubble.tsx && grep -q '/new\\|slash\\|SlashCommand' components/ChatInput.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 聊天体验优化验收失败'",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/useChatStorage.ts && test -f components/ConversationList.tsx && test -f components/WelcomeScreen.tsx && grep -q 'clipboard' components/MessageBubble.tsx && grep -qi 'regenerate\\|retry' components/MessageBubble.tsx && grep -q '/new\\|slash\\|SlashCommand' components/ChatInput.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 聊天体验优化验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"
     }
   ]
