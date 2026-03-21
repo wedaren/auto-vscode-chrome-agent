@@ -139,11 +139,11 @@ const PRESET_SKILLS: Skill[] = [
     ],
   },
 
-  // 3. 翻译当前页面主要内容
+  // 3. 沉浸式翻译：双语对照翻译当前页面（替代旧 translate_page）
   {
-    name: 'translate_page',
-    displayName: '翻译页面',
-    description: '提取当前页面主要文本内容，通过 LLM 翻译后高亮展示',
+    name: 'immersive_translate',
+    displayName: '沉浸式翻译',
+    description: '智能提取页面段落，通过 LLM 翻译后以双语对照形式注入页面，参考沉浸式翻译插件体验',
     category: 'preset',
     enabled: true,
     parameters: {
@@ -154,28 +154,35 @@ const PRESET_SKILLS: Skill[] = [
           description: '目标语言（如 中文、English、日本語）',
           default: '中文',
         },
-        selector: {
-          type: 'string',
-          description: '要翻译的内容区域选择器（默认 body）',
-          default: 'body',
-        },
       },
       required: [],
     },
     steps: [
       {
-        toolName: 'browser_get_text',
-        argsTemplate: { selector: '{{selector}}' },
-        description: '提取目标区域的文本内容',
+        toolName: 'browser_extract_paragraphs',
+        argsTemplate: {},
+        description: '智能提取页面主内容区段落文本',
       },
       {
-        toolName: 'browser_highlight',
+        toolName: 'llm_translate',
         argsTemplate: {
-          selector: '{{selector}}',
-          color: 'rgba(66, 135, 245, 0.15)',
-          duration: 3000,
+          paragraphs: '{{$prev}}',
+          targetLanguage: '{{targetLanguage}}',
         },
-        description: '高亮标记正在翻译的区域',
+        description: '调用 LLM 批量翻译提取到的段落',
+      },
+      {
+        toolName: 'browser_inject_bilingual',
+        argsTemplate: {
+          translations: '{{$prev}}',
+          mode: 'inject',
+        },
+        description: '将翻译结果以双语对照形式注入原文下方',
+      },
+      {
+        toolName: 'browser_screenshot',
+        argsTemplate: {},
+        description: '截图验证翻译效果',
         optional: true,
       },
     ],

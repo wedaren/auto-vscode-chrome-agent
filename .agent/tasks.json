@@ -1326,7 +1326,7 @@
       "id": "evo_v19_002",
       "type": "coding",
       "title": "SkillRunner LLM 工具路由：新增 llm_translate 批量翻译工具",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v19_001"
       ],
