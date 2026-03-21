@@ -1,7 +1,9 @@
 // useChat.ts — 自定义 Hook：封装 messages 状态、isStreaming、streamingMsgIdRef、handleSendMessage、handleCancel 逻辑
+// 支持普通聊天流式响应 + Agent 模式（agent_step / agent_complete）消息处理
 import { useState, useRef, useCallback } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
 import { createMessage, type Message } from '../utils/message-factory';
+import type { AgentStep } from '../components/AgentStepView';
 
 // 从 message-factory 统一导出 Message 类型
 export type { Message } from '../utils/message-factory';
@@ -31,7 +33,7 @@ export interface UseChatReturn {
   handleSendMessage: (content: string, context?: ChatContext) => void;
   /** 取消当前流式生成 */
   handleCancel: () => void;
-  /** 处理来自 WebSocket 的聊天相关消息（chat_response / chat_response_chunk / chat_response_end / echo） */
+  /** 处理来自 WebSocket 的聊天相关消息（chat_response / chat_response_chunk / chat_response_end / echo / agent_step / agent_complete） */
   handleChatMessage: (msg: BridgeMessage) => void;
   /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死） */
   resetStreamingState: () => void;
@@ -44,7 +46,7 @@ export interface UseChatReturn {
  * - messages 状态管理（添加用户消息、创建/更新 assistant 消息）
  * - isStreaming 状态管理（流式接收中 / 发送失败恢复 / 断连恢复）
  * - streamingMsgIdRef 生命周期管理
- * - 处理 4 种聊天相关 WebSocket 消息
+ * - 处理 6 种聊天相关 WebSocket 消息（含 agent_step / agent_complete）
  * - 发送消息（附加页面上下文）
  * - 取消流式生成
  */
@@ -108,6 +110,69 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
       case 'echo': {
         // 服务端回显消息
         setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
+        break;
+      }
+
+      case 'agent_step': {
+        // Agent ReAct 循环步骤：追加到当前 assistant message 的 steps 数组
+        const stepPayload = msg.payload as AgentStep;
+        if (!stepPayload) break;
+
+        if (!streamingMsgIdRef.current) {
+          // 首个 agent_step：创建新的 agent 模式 assistant message
+          const newMsg = createMessage('assistant', '', {
+            isAgentMode: true,
+            steps: [stepPayload],
+          });
+          streamingMsgIdRef.current = newMsg.id;
+          setIsStreaming(true);
+          setMessages((prev) => [...prev, newMsg]);
+        } else {
+          // 后续 agent_step：追加步骤到已有消息的 steps 数组
+          const targetId = streamingMsgIdRef.current;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === targetId
+                ? {
+                    ...m,
+                    isAgentMode: true,
+                    steps: [...(m.steps ?? []), stepPayload],
+                  }
+                : m,
+            ),
+          );
+        }
+        // isStreaming 保持 true，Agent 仍在执行
+        break;
+      }
+
+      case 'agent_complete': {
+        // Agent 循环结束：设置 finalAnswer 为 content，标记 isStreaming=false
+        const completePayload = msg.payload as { content?: string; cancelled?: boolean };
+        const targetId = streamingMsgIdRef.current;
+
+        if (targetId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === targetId
+                ? { ...m, content: completePayload?.content ?? m.content }
+                : m,
+            ),
+          );
+        } else if (completePayload?.content) {
+          // 没有对应的 streaming message（异常恢复）：直接创建新消息
+          setMessages((prev) => [
+            ...prev,
+            createMessage('assistant', completePayload.content!, { isAgentMode: true }),
+          ]);
+        }
+
+        streamingMsgIdRef.current = null;
+        setIsStreaming(false);
+        console.log(
+          '[useChat] Agent 循环结束',
+          completePayload?.cancelled ? '(已取消)' : '',
+        );
         break;
       }
     }

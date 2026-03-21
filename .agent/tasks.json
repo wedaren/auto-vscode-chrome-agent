@@ -366,7 +366,7 @@
       "id": "evo_v3_003",
       "type": "coding",
       "title": "Chrome: 创建 AgentStepView 组件，展示 Agent 思考和工具调用过程",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v3_002"
       ],

@@ -106,7 +106,14 @@ export default function App() {
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">输入消息开始对话</div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
+          <MessageBubble
+            key={msg.id}
+            role={msg.role}
+            content={msg.content}
+            steps={msg.steps}
+            isAgentMode={msg.isAgentMode}
+            isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
+          />
         ))}
         {isStreaming && (() => {
           const lastMsg = messages[messages.length - 1];

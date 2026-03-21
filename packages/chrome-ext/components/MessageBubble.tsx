@@ -1,12 +1,20 @@
 // MessageBubble.tsx — 消息气泡组件，assistant 消息支持 Markdown 渲染 + 代码语法高亮 + 代码块复制按钮
+// Agent 模式消息在正文上方渲染 AgentStepView 展示 ReAct 步骤
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import AgentStepView, { type AgentStep } from './AgentStepView';
 
 export interface MessageBubbleProps {
   role: 'user' | 'assistant';
   content: string;
+  /** Agent ReAct 循环步骤（仅 agent 模式消息） */
+  steps?: AgentStep[];
+  /** 是否为 Agent 模式消息 */
+  isAgentMode?: boolean;
+  /** Agent 是否仍在执行中（控制步骤加载动画） */
+  isRunning?: boolean;
 }
 
 /** 创建配置了 highlight.js 的 marked 实例 */
@@ -55,7 +63,7 @@ function escapeAttr(str: string): string {
 /** 全局单例 marked 实例 */
 const markedInstance = createMarkedInstance();
 
-export default function MessageBubble({ role, content }: MessageBubbleProps) {
+export default function MessageBubble({ role, content, steps, isAgentMode, isRunning }: MessageBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   /** 将 Markdown 转为 HTML（仅 assistant 消息） */
@@ -108,12 +116,25 @@ export default function MessageBubble({ role, content }: MessageBubbleProps) {
     );
   }
 
-  // Assistant 消息：Markdown 渲染
+  // Agent 模式消息：先渲染步骤，再渲染最终回答
+  const hasSteps = steps && steps.length > 0;
+
+  // Assistant 消息：Agent 步骤 + Markdown 渲染
   return (
-    <div
-      ref={containerRef}
-      className="max-w-[85%] mr-auto rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-800 message-bubble-markdown"
-      dangerouslySetInnerHTML={{ __html: renderedHtml }}
-    />
+    <div className="max-w-[85%] mr-auto">
+      {/* Agent 步骤展示（渲染在正文上方） */}
+      {hasSteps && (
+        <AgentStepView steps={steps} isRunning={isRunning} />
+      )}
+
+      {/* Markdown 正文（agent_complete 后才有 content） */}
+      {content && (
+        <div
+          ref={containerRef}
+          className="rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-800 message-bubble-markdown"
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      )}
+    </div>
   );
 }
