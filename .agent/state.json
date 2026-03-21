@@ -8,9 +8,9 @@
   "last_validation": {
     "task_id": "evo_v13_003",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "8\nPASS"
+    "acceptance_cmd_output": "8\n0 errors\nPASS"
   },
   "last_tick": "2026-03-21T13:23:44.289066Z",
   "pm_done": true,
