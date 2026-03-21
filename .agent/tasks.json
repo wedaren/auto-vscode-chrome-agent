@@ -955,7 +955,7 @@
       "id": "evo_v13_002",
       "type": "coding",
       "title": "VSCode 侧 handleListModels 节流防护：最小间隔 5 秒，防止高频 list_models 请求压垮 vscode.lm API",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v13_001"
       ],

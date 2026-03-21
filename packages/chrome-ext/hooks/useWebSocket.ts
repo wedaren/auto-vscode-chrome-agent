@@ -3,9 +3,25 @@
 // 同时支持 skill_list / skill_list_result / skill_execute / skill_progress / skill_complete 消息
 // （Skill 相关消息通过 onMessage 分发到 SkillPanel 组件处理）
 // 暴露手动重连方法和连接详情（重连次数、延迟、最后活跃时间）供 UI 展示
+// 优化：connectionDetails 使用浅比较，仅在 state/reconnectCount/latency 实际变化时才触发 setState，
+//       避免每条消息都产生不必要的 React 重渲染
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WsClient, type BridgeMessage, type ConnectionState, type ConnectionDetails } from '../src/ws-client';
 import { createToolBridgeHandler } from '../utils/tool-bridge';
+
+/**
+ * ConnectionDetails 浅比较：仅比较会影响 UI 渲染的关键字段
+ * （state / reconnectCount / latency / url）
+ * lastActiveTime 每条消息都变化但不影响 UI 渲染逻辑，跳过比较以减少无意义的 setState 调用
+ */
+function shallowEqualDetails(prev: ConnectionDetails, next: ConnectionDetails): boolean {
+  return (
+    prev.state === next.state &&
+    prev.reconnectCount === next.reconnectCount &&
+    prev.latency === next.latency &&
+    prev.url === next.url
+  );
+}
 
 /** useWebSocket Hook 返回值 */
 export interface UseWebSocketReturn {
@@ -46,6 +62,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   });
   const wsClientRef = useRef<WsClient | null>(null);
   const messageListenersRef = useRef<Set<(msg: BridgeMessage) => void>>(new Set());
+  /** 缓存上一次 connectionDetails，用于浅比较避免不必要的 setState */
+  const prevDetailsRef = useRef<ConnectionDetails>(connectionDetails);
 
   const isConnected = connectionState === 'connected';
 
@@ -82,16 +100,25 @@ export function useWebSocket(url: string): UseWebSocketReturn {
       return client.sendMessage(type, payload);
     });
 
-    // 监听连接状态变化 + 同步更新连接详情
+    // 监听连接状态变化 + 浅比较后同步更新连接详情（避免不必要的重渲染）
     const unsubState = client.onStateChange((state: ConnectionState) => {
       setConnectionState(state);
-      setConnectionDetails({ ...client.details });
+      const nextDetails = { ...client.details };
+      if (!shallowEqualDetails(prevDetailsRef.current, nextDetails)) {
+        prevDetailsRef.current = nextDetails;
+        setConnectionDetails(nextDetails);
+      }
     });
 
     // 将 WsClient 消息分发给所有已注册的监听器 + tool bridge（try-catch 防护每个 handler）
     const unsubMsg = client.onMessage((msg: BridgeMessage) => {
-      // 每次收到消息时更新连接详情（刷新 lastActiveTime / latency）
-      setConnectionDetails({ ...client.details });
+      // 浅比较 connectionDetails：仅在 state/reconnectCount/latency 实际变化时才 setState
+      // lastActiveTime 每条消息都变但不影响 UI，跳过以避免无意义的重渲染
+      const nextDetails = { ...client.details };
+      if (!shallowEqualDetails(prevDetailsRef.current, nextDetails)) {
+        prevDetailsRef.current = nextDetails;
+        setConnectionDetails(nextDetails);
+      }
 
       // tool_execute 消息由 tool bridge 自动处理（异步，不阻塞）
       try {
