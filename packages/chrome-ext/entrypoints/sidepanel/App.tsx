@@ -1,9 +1,11 @@
 // App.tsx — Side Panel 主组件，纯 UI 渲染层，所有逻辑由 Hook 管理
+// 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
 import MessageBubble from '../../components/MessageBubble';
 import TypingIndicator from '../../components/TypingIndicator';
+import ConversationList from '../../components/ConversationList';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
@@ -15,7 +17,19 @@ const WS_URL = 'ws://localhost:7777';
 export default function App() {
   // --- Hooks ---
   const { isConnected, connectionState, sendMessage, onMessage } = useWebSocket(WS_URL);
-  const { messages, isStreaming, handleSendMessage: chatSend, handleCancel, handleChatMessage, resetStreamingState } = useChat({ sendMessage });
+  const {
+    messages,
+    isStreaming,
+    conversationId,
+    conversations,
+    handleSendMessage: chatSend,
+    handleCancel,
+    handleChatMessage,
+    resetStreamingState,
+    createNewConversation,
+    switchConversation,
+    deleteConversation,
+  } = useChat({ sendMessage });
   const { pageContext } = usePageContext();
 
   // --- 模型选择状态 ---
@@ -23,6 +37,9 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
   const [modelsLoading, setModelsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // --- 侧栏抽屉状态 ---
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 注册 WebSocket 消息处理
   useEffect(() => {
@@ -75,16 +92,72 @@ export default function App() {
     handleSendMessage(action);
   }, [handleSendMessage]);
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
+
   // --- UI 渲染 ---
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="relative flex flex-col h-screen bg-white overflow-hidden">
+      {/* 侧栏遮罩层（点击关闭） */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+          onClick={closeSidebar}
+        />
+      )}
+
+      {/* 会话列表侧栏（左侧抽屉） */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-[280px] shadow-lg transform transition-transform duration-250 ease-in-out ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <ConversationList
+          conversations={conversations}
+          activeConversationId={conversationId}
+          onNewConversation={createNewConversation}
+          onSelectConversation={switchConversation}
+          onDeleteConversation={deleteConversation}
+          onClose={closeSidebar}
+        />
+      </div>
+
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h1 className="text-lg font-semibold text-gray-800">Browser Agent</h1>
-        <span
-          className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-400'}`}
-          title={isConnected ? '已连接' : '未连接'}
-        />
+        <div className="flex items-center gap-2">
+          {/* 侧栏切换按钮（汉堡菜单） */}
+          <button
+            onClick={toggleSidebar}
+            className="p-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="会话列表"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <h1 className="text-lg font-semibold text-gray-800">Browser Agent</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* 新建会话快捷按钮 */}
+          <button
+            onClick={createNewConversation}
+            className="p-1 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            title="新建会话"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          <span
+            className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-400'}`}
+            title={isConnected ? '已连接' : '未连接'}
+          />
+        </div>
       </header>
 
       {/* Model selector */}

@@ -402,8 +402,10 @@
       "id": "evo_v4_001",
       "type": "coding",
       "title": "Chrome 侧聊天记录持久化：chrome.storage.local 存储会话数据",
-      "status": "pending",
-      "depends_on": ["evo_v3_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v3_005"
+      ],
       "acceptance": "新建 hooks/useChatStorage.ts，定义 Conversation 数据模型（id/title/messages[]/createdAt/updatedAt）；使用 chrome.storage.local 实现 saveConversation/loadConversation/listConversations/deleteConversation；useChat.ts 集成 useChatStorage，消息变更时自动持久化；页面刷新后消息不丢失；会话标题自动取首条用户消息前20字；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/useChatStorage.ts && grep -q 'chrome.storage.local\\|storage.local\\|browser.storage.local' hooks/useChatStorage.ts && grep -q 'Conversation\\|conversation' hooks/useChatStorage.ts && grep -q 'saveConversation\\|save' hooks/useChatStorage.ts && grep -q 'loadConversation\\|load' hooks/useChatStorage.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 聊天记录持久化缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"
@@ -413,7 +415,9 @@
       "type": "coding",
       "title": "Chrome 侧多会话管理：会话列表侧栏 + 新建/切换/删除会话",
       "status": "pending",
-      "depends_on": ["evo_v4_001"],
+      "depends_on": [
+        "evo_v4_001"
+      ],
       "acceptance": "新建 components/ConversationList.tsx 侧栏组件，展示所有会话（标题 + 时间 + 消息数预览）；支持新建会话（按钮或快捷操作）、点击切换会话（加载对应历史消息）、滑动或按钮删除会话；App.tsx 集成 ConversationList，左侧或顶部抽屉式布局；当前活跃会话高亮；空会话列表显示引导文案；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ConversationList.tsx && grep -q 'ConversationList' components/ConversationList.tsx && grep -q 'ConversationList' entrypoints/sidepanel/App.tsx && grep -q 'delete\\|remove\\|onDelete' components/ConversationList.tsx && grep -q 'onClick\\|onSelect\\|onSwitch' components/ConversationList.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 多会话管理组件缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"
@@ -423,7 +427,9 @@
       "type": "coding",
       "title": "Chrome 侧消息交互增强：复制消息/重新生成/时间戳显示/欢迎引导页",
       "status": "pending",
-      "depends_on": ["evo_v4_002"],
+      "depends_on": [
+        "evo_v4_002"
+      ],
       "acceptance": "MessageBubble.tsx 新增 hover 时显示操作栏：复制整条消息按钮（navigator.clipboard）、assistant 消息有重新生成按钮（重发上一条 user 消息）；每条消息显示相对时间戳（刚刚/N分钟前/N小时前）；新建 components/WelcomeScreen.tsx 空会话引导页，包含欢迎文案和 3-4 个预设 prompt 建议按钮（点击直接发送）；App.tsx 在消息为空时显示 WelcomeScreen；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'clipboard\\|navigator.clipboard\\|copyToClipboard' components/MessageBubble.tsx && grep -q 'regenerate\\|retry\\|onRegenerate' components/MessageBubble.tsx && test -f components/WelcomeScreen.tsx && grep -q 'WelcomeScreen' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 消息交互增强或欢迎页缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"
@@ -433,7 +439,9 @@
       "type": "coding",
       "title": "Chrome 侧输入体验增强：斜杠命令(/new /clear) + 键盘快捷键 + 输入历史",
       "status": "pending",
-      "depends_on": ["evo_v4_003"],
+      "depends_on": [
+        "evo_v4_003"
+      ],
       "acceptance": "ChatInput.tsx 支持斜杠命令：输入 / 时弹出命令菜单面板，支持 /new（新建会话）、/clear（清空当前会话）、/models（切换模型）；键盘快捷键：Cmd/Ctrl+Shift+O 新建会话、Cmd/Ctrl+L 清空会话；上箭头键在输入框为空时填入上一条用户消息（方便重新编辑发送）；输入框最大高度提升到 200px，过渡动画平滑；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q '/new\\|/clear\\|slash\\|SlashCommand\\|commandMenu' components/ChatInput.tsx && grep -q 'ArrowUp\\|keydown\\|onKeyDown' components/ChatInput.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 输入体验增强缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"
@@ -443,7 +451,9 @@
       "type": "validate",
       "title": "聊天体验优化全量验收：持久化 + 多会话 + 消息交互 + 输入增强，构建通过",
       "status": "pending",
-      "depends_on": ["evo_v4_004"],
+      "depends_on": [
+        "evo_v4_004"
+      ],
       "acceptance": "Chrome 构建通过；hooks/useChatStorage.ts 持久化层完整（CRUD）；ConversationList.tsx 多会话管理可用；MessageBubble 有复制/重新生成/时间戳；WelcomeScreen 欢迎页存在；ChatInput 支持斜杠命令和快捷键",
       "acceptance_cmd": "cd packages/chrome-ext && test -f hooks/useChatStorage.ts && test -f components/ConversationList.tsx && test -f components/WelcomeScreen.tsx && grep -q 'clipboard' components/MessageBubble.tsx && grep -q 'regenerate\\|retry' components/MessageBubble.tsx && grep -q '/new\\|slash\\|SlashCommand' components/ChatInput.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 聊天体验优化验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，优化聊天体验"

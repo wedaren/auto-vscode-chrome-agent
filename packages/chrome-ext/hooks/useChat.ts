@@ -1,14 +1,17 @@
 // useChat.ts — 自定义 Hook：封装 messages 状态、isStreaming、streamingMsgIdRef、handleSendMessage、handleCancel 逻辑
 // 支持普通聊天流式响应 + Agent 模式（agent_step / agent_complete）消息处理
 // 集成 useChatStorage 实现消息持久化：页面刷新后自动恢复会话
+// 支持多会话管理：创建新会话、切换会话、删除会话
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
 import { createMessage, type Message } from '../utils/message-factory';
 import type { AgentStep } from '../components/AgentStepView';
-import { useChatStorage, type Conversation } from './useChatStorage';
+import { useChatStorage, type Conversation, type ConversationMeta } from './useChatStorage';
 
 // 从 message-factory 统一导出 Message 类型
 export type { Message } from '../utils/message-factory';
+// 导出 ConversationMeta 供 ConversationList 使用
+export type { ConversationMeta } from './useChatStorage';
 
 /** 页面上下文（发送消息时附加） */
 interface ChatContext {
@@ -31,6 +34,8 @@ export interface UseChatReturn {
   isStreaming: boolean;
   /** 当前会话 ID（持久化标识） */
   conversationId: string;
+  /** 会话列表元数据（用于侧栏展示） */
+  conversations: ConversationMeta[];
   /** 当前流式消息 ID ref（用于 TypingIndicator 显示判断） */
   streamingMsgIdRef: React.RefObject<string | null>;
   /** 发送用户消息 */
@@ -41,6 +46,14 @@ export interface UseChatReturn {
   handleChatMessage: (msg: BridgeMessage) => void;
   /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死） */
   resetStreamingState: () => void;
+  /** 创建新会话：清空消息、生成新 conversationId */
+  createNewConversation: () => void;
+  /** 切换到指定会话：加载历史消息 */
+  switchConversation: (id: string) => Promise<void>;
+  /** 删除指定会话：从存储中移除，若为当前会话则自动切换 */
+  deleteConversation: (id: string) => Promise<void>;
+  /** 刷新会话列表（手动触发） */
+  refreshConversations: () => Promise<void>;
 }
 
 /**
@@ -57,19 +70,31 @@ export interface UseChatReturn {
 export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const streamingMsgIdRef = useRef<string | null>(null);
 
   // --- 持久化：useChatStorage 集成 ---
-  const { saveConversation, loadConversation, listConversations } = useChatStorage();
+  const { saveConversation, loadConversation, listConversations, deleteConversation: storageDelete } = useChatStorage();
   const conversationIdRef = useRef<string>(crypto.randomUUID());
   const conversationCreatedAtRef = useRef<number>(Date.now());
   const isStorageInitializedRef = useRef(false);
 
-  // 挂载时加载最近一次会话
+  /** 刷新会话列表元数据 */
+  const refreshConversations = useCallback(async () => {
+    try {
+      const convList = await listConversations();
+      setConversations(convList);
+    } catch (err) {
+      console.error('[useChat] 刷新会话列表失败:', err);
+    }
+  }, [listConversations]);
+
+  // 挂载时加载最近一次会话 + 会话列表
   useEffect(() => {
     (async () => {
       try {
         const convList = await listConversations();
+        setConversations(convList);
         if (convList.length > 0) {
           const latestMeta = convList[0]; // 已按 updatedAt 降序排列
           const conv = await loadConversation(latestMeta.id);
@@ -89,12 +114,12 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 消息变更时自动持久化（防抖 500ms，避免流式 chunk 频繁写入）
+  // 消息变更时自动持久化（防抖 500ms，避免流式 chunk 频繁写入）+ 刷新会话列表
   useEffect(() => {
     if (!isStorageInitializedRef.current) return;
     if (messages.length === 0) return;
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const conversation: Conversation = {
         id: conversationIdRef.current,
         title: '', // saveConversation 内部自动生成
@@ -102,11 +127,70 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
         createdAt: conversationCreatedAtRef.current,
         updatedAt: Date.now(),
       };
-      saveConversation(conversation);
+      await saveConversation(conversation);
+      // 保存后刷新侧栏列表
+      await refreshConversations();
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [messages, saveConversation]);
+  }, [messages, saveConversation, refreshConversations]);
+
+  /** 创建新会话：重置消息列表，生成新会话 ID */
+  const createNewConversation = useCallback(() => {
+    if (isStreaming) return; // 流式生成中不允许切换
+    conversationIdRef.current = crypto.randomUUID();
+    conversationCreatedAtRef.current = Date.now();
+    setMessages([]);
+    console.log('[useChat] 新建会话:', conversationIdRef.current);
+  }, [isStreaming]);
+
+  /** 切换到指定会话：加载历史消息 */
+  const switchConversation = useCallback(async (id: string) => {
+    if (isStreaming) return; // 流式生成中不允许切换
+    if (id === conversationIdRef.current) return; // 已在当前会话
+    try {
+      const conv = await loadConversation(id);
+      if (conv) {
+        conversationIdRef.current = conv.id;
+        conversationCreatedAtRef.current = conv.createdAt;
+        setMessages(conv.messages);
+        console.log('[useChat] 已切换到会话:', conv.id, conv.title);
+      }
+    } catch (err) {
+      console.error('[useChat] 切换会话失败:', err);
+    }
+  }, [isStreaming, loadConversation]);
+
+  /** 删除指定会话：从存储移除，若为当前会话则自动切换到最近的会话或新建 */
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    if (isStreaming) return;
+    try {
+      await storageDelete(id);
+      const updatedList = await listConversations();
+      setConversations(updatedList);
+
+      // 如果删除的是当前会话，自动切换
+      if (id === conversationIdRef.current) {
+        if (updatedList.length > 0) {
+          // 切换到最近的会话
+          const next = await loadConversation(updatedList[0].id);
+          if (next) {
+            conversationIdRef.current = next.id;
+            conversationCreatedAtRef.current = next.createdAt;
+            setMessages(next.messages);
+          }
+        } else {
+          // 没有会话了，新建一个空会话
+          conversationIdRef.current = crypto.randomUUID();
+          conversationCreatedAtRef.current = Date.now();
+          setMessages([]);
+        }
+      }
+      console.log('[useChat] 已删除会话:', id);
+    } catch (err) {
+      console.error('[useChat] 删除会话失败:', err);
+    }
+  }, [isStreaming, storageDelete, listConversations, loadConversation]);
 
   /** 处理来自 WebSocket 的聊天相关消息 */
   const handleChatMessage = useCallback((msg: BridgeMessage) => {
@@ -286,10 +370,15 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
     messages,
     isStreaming,
     conversationId: conversationIdRef.current,
+    conversations,
     streamingMsgIdRef,
     handleSendMessage,
     handleCancel,
     handleChatMessage,
     resetStreamingState,
+    createNewConversation,
+    switchConversation,
+    deleteConversation: handleDeleteConversation,
+    refreshConversations,
   };
 }
