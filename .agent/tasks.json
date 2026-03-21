@@ -618,7 +618,7 @@
       "id": "evo_v7_004",
       "type": "coding",
       "title": "使用案例文档：5 个典型场景（基础对话、浏览器自动操作、深度报告、调试排查、多会话工作流）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v7_002",
         "evo_v7_003"
