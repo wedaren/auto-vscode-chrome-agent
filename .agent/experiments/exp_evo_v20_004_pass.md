@@ -19,3 +19,14 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无重大问题
+- acceptance_cmd 全部 grep 通过，npm run compile 无错误（60/60）
+- TypeScript 编译零错误零警告（20/20）
+- 符合 program.md 约束：无外部 API key 依赖，模型调用通过 vscode.lm，Chrome 插件不内置模型（15/20，扣 5 分因为新增 skill 较多但每个 skill 的参数文档可更详细）
+- skill-registry.ts 有顶部注释，skill-runner.ts 路由逻辑正确（McpClient 兜底路由）
+- 5 个 DevTools Skill 定义结构完整：name / displayName / description / category / parameters / steps 齐全
