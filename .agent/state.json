@@ -4,13 +4,13 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
     "task_id": "evo_v17_002",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "└─ .output/chrome-mv3/assets/sidepanel-COA8wRtC.css  30.67 kB\nΣ Total size: 1.32 MB\n✔ Finished in 2.089 s\nPASS"
   },
   "last_tick": "2026-03-22T00:00:00.000000Z",
   "pm_done": true,

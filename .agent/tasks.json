@@ -1189,7 +1189,7 @@
       "id": "evo_v17_001",
       "type": "coding",
       "title": "Context Budget 常量与截断工具模块：vscode-ext/src/context-budget.ts",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v16_005"
       ],
