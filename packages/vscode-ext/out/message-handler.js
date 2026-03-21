@@ -63,6 +63,8 @@ class MessageHandler {
     llmCollector = new llm_request_collector_1.LlmRequestCollector();
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     activeChatTokens = new Map();
+    /** 已注册 close 监听的 WebSocket 集合，避免重复注册 */
+    wsCloseRegistered = new WeakSet();
     constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner) {
         this.lmService = lmService;
         this.wsServer = wsServer;
@@ -71,6 +73,37 @@ class MessageHandler {
         this.browserToolProvider = browserToolProvider;
         this.skillRegistry = skillRegistry;
         this.skillRunner = skillRunner;
+    }
+    /**
+     * 注册 WebSocket close 事件监听器（每个 ws 只注册一次），
+     * 断开时自动 cancel + dispose 对应 CTS 并从 Map 中删除，防止内存泄漏。
+     */
+    ensureWsCloseHandler(ws) {
+        if (this.wsCloseRegistered.has(ws)) {
+            return;
+        }
+        this.wsCloseRegistered.add(ws);
+        ws.on('close', () => {
+            const cts = this.activeChatTokens.get(ws);
+            if (cts) {
+                this.outputChannel.appendLine('[BrowserAgent] WebSocket 断开，自动取消并清理 CancellationTokenSource');
+                cts.cancel();
+                cts.dispose();
+                this.activeChatTokens.delete(ws);
+            }
+        });
+    }
+    /**
+     * 若同一 WebSocket 上已有活跃的 CTS（如快速重发 chat），先取消并释放旧的。
+     */
+    disposeExistingCts(ws) {
+        const oldCts = this.activeChatTokens.get(ws);
+        if (oldCts) {
+            this.outputChannel.appendLine('[BrowserAgent] 同一 WebSocket 重发 chat，取消并清理旧 CancellationTokenSource');
+            oldCts.cancel();
+            oldCts.dispose();
+            this.activeChatTokens.delete(ws);
+        }
     }
     /**
      * 消息路由入口，根据 msg.type 分发到对应处理方法。
@@ -174,6 +207,10 @@ class MessageHandler {
         const browserOk = this.browserToolProvider.connected;
         this.outputChannel.appendLine(`[BrowserAgent] 进入 AgentLoop 模式 (MCP=${mcpOk ? '已连接' : '未连接'}, BrowserTools=${browserOk ? '已连接' : '未连接'})`);
         void (async () => {
+            // WebSocket 断开时自动清理 CTS，防止泄漏
+            this.ensureWsCloseHandler(ws);
+            // 同一 ws 快速重发 chat 时先 dispose 旧 CTS
+            this.disposeExistingCts(ws);
             const cts = new vscode.CancellationTokenSource();
             this.activeChatTokens.set(ws, cts);
             // 注册到 Agent 循环 TreeView（实时可视化）
@@ -277,6 +314,10 @@ class MessageHandler {
     handleChatStreamMode(ws, msg, text, systemPrompt) {
         this.outputChannel.appendLine('[BrowserAgent] McpClient 未连接，使用流式 LM 对话模式');
         void (async () => {
+            // WebSocket 断开时自动清理 CTS，防止泄漏
+            this.ensureWsCloseHandler(ws);
+            // 同一 ws 快速重发 chat 时先 dispose 旧 CTS
+            this.disposeExistingCts(ws);
             const cts = new vscode.CancellationTokenSource();
             this.activeChatTokens.set(ws, cts);
             // 采集 LLM 请求细节

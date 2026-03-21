@@ -71,7 +71,8 @@ export declare class AgentLoop {
      */
     run(userMessage: string, options?: AgentLoopOptions, token?: vscode.CancellationToken): Promise<AgentLoopResult>;
     /**
-     * 调用 LLM 并收集完整文本输出
+     * 调用 LLM 并收集完整文本输出。
+     * 当外部未提供 CancellationToken 时，创建临时 CTS 并在完成后自动 dispose，避免孤立资源泄漏。
      */
     private callLlm;
     /**

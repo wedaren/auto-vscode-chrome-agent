@@ -38,6 +38,9 @@ export class MessageHandler {
   /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
   private readonly activeChatTokens = new Map<WebSocket, vscode.CancellationTokenSource>();
 
+  /** 已注册 close 监听的 WebSocket 集合，避免重复注册 */
+  private readonly wsCloseRegistered = new WeakSet<WebSocket>();
+
   constructor(
     lmService: LmService,
     wsServer: WsServer,
@@ -54,6 +57,44 @@ export class MessageHandler {
     this.browserToolProvider = browserToolProvider;
     this.skillRegistry = skillRegistry;
     this.skillRunner = skillRunner;
+  }
+
+  /**
+   * 注册 WebSocket close 事件监听器（每个 ws 只注册一次），
+   * 断开时自动 cancel + dispose 对应 CTS 并从 Map 中删除，防止内存泄漏。
+   */
+  private ensureWsCloseHandler(ws: WebSocket): void {
+    if (this.wsCloseRegistered.has(ws)) {
+      return;
+    }
+    this.wsCloseRegistered.add(ws);
+
+    ws.on('close', () => {
+      const cts = this.activeChatTokens.get(ws);
+      if (cts) {
+        this.outputChannel.appendLine(
+          '[BrowserAgent] WebSocket 断开，自动取消并清理 CancellationTokenSource',
+        );
+        cts.cancel();
+        cts.dispose();
+        this.activeChatTokens.delete(ws);
+      }
+    });
+  }
+
+  /**
+   * 若同一 WebSocket 上已有活跃的 CTS（如快速重发 chat），先取消并释放旧的。
+   */
+  private disposeExistingCts(ws: WebSocket): void {
+    const oldCts = this.activeChatTokens.get(ws);
+    if (oldCts) {
+      this.outputChannel.appendLine(
+        '[BrowserAgent] 同一 WebSocket 重发 chat，取消并清理旧 CancellationTokenSource',
+      );
+      oldCts.cancel();
+      oldCts.dispose();
+      this.activeChatTokens.delete(ws);
+    }
   }
 
   /**
@@ -186,6 +227,11 @@ export class MessageHandler {
     );
 
     void (async () => {
+      // WebSocket 断开时自动清理 CTS，防止泄漏
+      this.ensureWsCloseHandler(ws);
+      // 同一 ws 快速重发 chat 时先 dispose 旧 CTS
+      this.disposeExistingCts(ws);
+
       const cts = new vscode.CancellationTokenSource();
       this.activeChatTokens.set(ws, cts);
 
@@ -328,6 +374,11 @@ export class MessageHandler {
     );
 
     void (async () => {
+      // WebSocket 断开时自动清理 CTS，防止泄漏
+      this.ensureWsCloseHandler(ws);
+      // 同一 ws 快速重发 chat 时先 dispose 旧 CTS
+      this.disposeExistingCts(ws);
+
       const cts = new vscode.CancellationTokenSource();
       this.activeChatTokens.set(ws, cts);
 

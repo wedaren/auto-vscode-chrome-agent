@@ -141,7 +141,8 @@ export class LmService {
     }
     messages.push(vscode.LanguageModelChatMessage.User(userMessage));
 
-    const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
+    let localCts: vscode.CancellationTokenSource | undefined;
+    const cancellationToken = token ?? (localCts = new vscode.CancellationTokenSource()).token;
 
     try {
       const response = await model.sendRequest(messages, {}, cancellationToken);
@@ -159,6 +160,8 @@ export class LmService {
         throw new Error(`语言模型调用失败: ${err.message}`);
       }
       throw err;
+    } finally {
+      localCts?.dispose();
     }
   }
 
@@ -186,16 +189,21 @@ export class LmService {
     }
     messages.push(vscode.LanguageModelChatMessage.User(userMessage));
 
-    const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
-    const response = await model.sendRequest(messages, {}, cancellationToken);
+    let localCts: vscode.CancellationTokenSource | undefined;
+    const cancellationToken = token ?? (localCts = new vscode.CancellationTokenSource()).token;
+    try {
+      const response = await model.sendRequest(messages, {}, cancellationToken);
 
-    let fullText = '';
-    for await (const fragment of response.text) {
-      fullText += fragment;
-      onFragment(fragment);
+      let fullText = '';
+      for await (const fragment of response.text) {
+        fullText += fragment;
+        onFragment(fragment);
+      }
+
+      this.outputChannel.appendLine(`[LmService] 流式响应完成，长度: ${fullText.length}`);
+      return fullText;
+    } finally {
+      localCts?.dispose();
     }
-
-    this.outputChannel.appendLine(`[LmService] 流式响应完成，长度: ${fullText.length}`);
-    return fullText;
   }
 }

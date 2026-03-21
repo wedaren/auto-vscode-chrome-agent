@@ -883,7 +883,7 @@
       "id": "evo_v12_001",
       "type": "coding",
       "title": "全局错误兜底 + 服务初始化健康检查：extension.ts activate() 中增加 process uncaughtException/unhandledRejection 处理器，服务初始化失败时标记不健康并阻断下游依赖",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v11_005"
       ],

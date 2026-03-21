@@ -28,7 +28,18 @@ export declare class MessageHandler {
     private readonly llmCollector;
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     private readonly activeChatTokens;
+    /** 已注册 close 监听的 WebSocket 集合，避免重复注册 */
+    private readonly wsCloseRegistered;
     constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
+    /**
+     * 注册 WebSocket close 事件监听器（每个 ws 只注册一次），
+     * 断开时自动 cancel + dispose 对应 CTS 并从 Map 中删除，防止内存泄漏。
+     */
+    private ensureWsCloseHandler;
+    /**
+     * 若同一 WebSocket 上已有活跃的 CTS（如快速重发 chat），先取消并释放旧的。
+     */
+    private disposeExistingCts;
     /**
      * 消息路由入口，根据 msg.type 分发到对应处理方法。
      * 应注册到 wsServer.onMessage()。

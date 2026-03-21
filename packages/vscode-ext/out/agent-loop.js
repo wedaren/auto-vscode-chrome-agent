@@ -165,16 +165,23 @@ class AgentLoop {
     // 私有方法
     // ────────────────────────────────────────────────────────────────
     /**
-     * 调用 LLM 并收集完整文本输出
+     * 调用 LLM 并收集完整文本输出。
+     * 当外部未提供 CancellationToken 时，创建临时 CTS 并在完成后自动 dispose，避免孤立资源泄漏。
      */
     async callLlm(model, messages, token) {
-        const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
-        const response = await model.sendRequest(messages, {}, cancellationToken);
-        let fullText = '';
-        for await (const fragment of response.text) {
-            fullText += fragment;
+        let localCts;
+        const cancellationToken = token ?? (localCts = new vscode.CancellationTokenSource()).token;
+        try {
+            const response = await model.sendRequest(messages, {}, cancellationToken);
+            let fullText = '';
+            for await (const fragment of response.text) {
+                fullText += fragment;
+            }
+            return fullText;
         }
-        return fullText;
+        finally {
+            localCts?.dispose();
+        }
     }
     /**
      * 获取所有可用工具描述列表（MCP + 原生浏览器工具），格式化为 LLM 可理解的文本。

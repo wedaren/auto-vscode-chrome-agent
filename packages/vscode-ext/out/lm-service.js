@@ -146,7 +146,8 @@ class LmService {
             messages.push(vscode.LanguageModelChatMessage.User(systemPrompt));
         }
         messages.push(vscode.LanguageModelChatMessage.User(userMessage));
-        const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
+        let localCts;
+        const cancellationToken = token ?? (localCts = new vscode.CancellationTokenSource()).token;
         try {
             const response = await model.sendRequest(messages, {}, cancellationToken);
             let fullText = '';
@@ -162,6 +163,9 @@ class LmService {
                 throw new Error(`语言模型调用失败: ${err.message}`);
             }
             throw err;
+        }
+        finally {
+            localCts?.dispose();
         }
     }
     /**
@@ -181,15 +185,21 @@ class LmService {
             messages.push(vscode.LanguageModelChatMessage.User(systemPrompt));
         }
         messages.push(vscode.LanguageModelChatMessage.User(userMessage));
-        const cancellationToken = token ?? new vscode.CancellationTokenSource().token;
-        const response = await model.sendRequest(messages, {}, cancellationToken);
-        let fullText = '';
-        for await (const fragment of response.text) {
-            fullText += fragment;
-            onFragment(fragment);
+        let localCts;
+        const cancellationToken = token ?? (localCts = new vscode.CancellationTokenSource()).token;
+        try {
+            const response = await model.sendRequest(messages, {}, cancellationToken);
+            let fullText = '';
+            for await (const fragment of response.text) {
+                fullText += fragment;
+                onFragment(fragment);
+            }
+            this.outputChannel.appendLine(`[LmService] 流式响应完成，长度: ${fullText.length}`);
+            return fullText;
         }
-        this.outputChannel.appendLine(`[LmService] 流式响应完成，长度: ${fullText.length}`);
-        return fullText;
+        finally {
+            localCts?.dispose();
+        }
     }
 }
 exports.LmService = LmService;
