@@ -17,3 +17,9 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无显著问题。welcome 握手实现完整，Server 发送 { type: 'welcome', payload: { replacedPrevious } }，Client 正确处理并 console.log，sessionId 追踪逻辑正确，双端编译零错误，符合 program.md 全部约束。

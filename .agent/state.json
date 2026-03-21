@@ -10,7 +10,7 @@
     "result": "pass",
     "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "PASS — welcome in ws-server.ts ✔, compile 0 errors ✔, welcome in ws-client.ts ✔, build 0 errors ✔"
   },
   "last_tick": "2026-03-21T15:25:36.619974Z",
   "pm_done": true,
