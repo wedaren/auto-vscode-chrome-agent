@@ -26,3 +26,12 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无重大问题
+- acceptance_cmd 全部 6 项 grep 条件均通过（60/60）
+- 纯文档任务，无 TypeScript 代码变更，无编译错误风险（20/20）
+- 符合 program.md 约束：未引入外部 API key 依赖，正确提及 vscode.lm API、localhost:7777 通信，Chrome 插件不内置模型（15/20，扣 5 分因文档未显式提及 vscode.lm API 全称，但整体描述一致）
