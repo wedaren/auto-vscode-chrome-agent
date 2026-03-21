@@ -25,3 +25,16 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收详情：
+- acceptance_cmd 输出 "4\nPASS"：grep 匹配到 4 处 useRef/prevConnectionState 引用，构建零错误 (+60)
+- TypeScript 编译通过，无 TS 错误 (+20)
+- 符合 program.md 约束：无外部 API key 依赖，Chrome 插件不内置模型，模型列表通过 WebSocket list_models 从 VSCode 获取 (+20)
+- connectionDetails 未出现在任何 useEffect 依赖数组中，仅通过 ref 读取
+- list_models 仅在 connectionState 从非 connected 转为 connected 时发送，防止死循环
