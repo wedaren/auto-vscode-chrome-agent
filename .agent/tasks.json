@@ -570,13 +570,63 @@
       "id": "evo_v6_005",
       "type": "validate",
       "title": "浏览器操作工具全量验收：Chrome 操作执行器 + WebSocket 工具协议 + BrowserToolProvider + AgentLoop 集成，双端构建通过",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v6_004"
       ],
       "acceptance": "完整工具链验证：Chrome 侧 action-executor.ts 定义所有浏览器操作类型且 content.ts/background.ts 集成 EXECUTE_ACTION 路由；WebSocket 协议 tool_execute/tool_result 双向通信在 ws-client.ts 和 ws-server.ts 中实现（含 requestId 匹配和超时）；VSCode 侧 browser-tools.ts 注册 10 个原生浏览器工具并通过 WebSocket 调用；agent-loop.ts 支持多工具源路由（browser_* → 原生，其他 → MCP）；message-handler.ts 在 Chrome 连接时自动启用 Agent 模式（不再依赖 MCP）；connection-tree.ts 展示原生工具状态；双端构建均通过，无回归",
       "acceptance_cmd": "cd packages/chrome-ext && test -f utils/action-executor.ts && grep -q 'EXECUTE_ACTION' entrypoints/content.ts && grep -q 'EXECUTE_ACTION' entrypoints/background.ts && grep -q 'tool_execute' src/ws-client.ts hooks/useWebSocket.ts utils/tool-bridge.ts 2>/dev/null && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && test -f src/browser-tools.ts && grep -q 'class BrowserToolProvider' src/browser-tools.ts && grep -q 'browserToolProvider\\|BrowserToolProvider' src/agent-loop.ts && grep -q 'browserToolProvider\\|BrowserToolProvider' src/message-handler.ts && grep -q 'sendAndWait\\|requestId' src/ws-server.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 浏览器操作工具全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"
+    },
+    {
+      "id": "evo_v7_001",
+      "type": "coding",
+      "title": "项目 README.md：项目简介、架构概览、快速开始（安装+启动）、目录结构说明",
+      "status": "pending",
+      "depends_on": ["evo_v6_005"],
+      "acceptance": "根目录创建 docs/README.md（或更新已有 README.md）；包含：项目简介（一句话描述 Chrome+VSCode Agent 系统）、系统架构图（文字版，Chrome Side Panel ↔ WebSocket ↔ VSCode LM）、快速开始（前置条件 Node18+/pnpm/VSCode+Copilot Chat、安装步骤 pnpm install、分别启动两个插件、Chrome 加载未打包扩展路径）、目录结构树形说明（packages/chrome-ext 和 packages/vscode-ext 的核心文件简述）；文档语言中英文皆可，使用 Markdown 格式",
+      "acceptance_cmd": "test -f docs/README.md && grep -q 'Chrome' docs/README.md && grep -q 'VSCode\\|vscode' docs/README.md && grep -q 'WebSocket\\|websocket\\|7777' docs/README.md && grep -q 'pnpm\\|npm' docs/README.md && grep -q 'install\\|安装\\|Quick Start\\|快速开始' docs/README.md && echo PASS || echo 'FAIL: README.md 缺失或内容不完整'",
+      "evolution_goal": "希望有简要的功能使用文档及使用案例，指导用户使用"
+    },
+    {
+      "id": "evo_v7_002",
+      "type": "coding",
+      "title": "Chrome 插件功能使用文档：Side Panel 对话、模型选择、多会话管理、斜杠命令、快捷键",
+      "status": "pending",
+      "depends_on": ["evo_v7_001"],
+      "acceptance": "创建 docs/chrome-extension-guide.md；涵盖：Side Panel 打开方式（Chrome 工具栏图标或右键菜单）；对话流程（输入消息 → 选择模型 → 发送 → 查看流式回复）；模型选择器使用说明（下拉选择可用 LLM）；多会话管理（新建会话、切换会话、删除会话、会话列表侧栏）；斜杠命令列表（/new /clear /models /help 的用途说明）；键盘快捷键列表（Cmd+L 清空、ArrowUp 历史、Cmd+Enter 发送、Cmd+Shift+O 新建会话）；页面上下文感知说明（自动附带当前 URL/标题/选中文本）；配有简要操作步骤编号",
+      "acceptance_cmd": "test -f docs/chrome-extension-guide.md && grep -q 'Side Panel\\|side panel\\|侧边栏' docs/chrome-extension-guide.md && grep -q '/new\\|/clear' docs/chrome-extension-guide.md && grep -q '会话\\|session\\|conversation' docs/chrome-extension-guide.md && grep -q '快捷键\\|shortcut\\|Cmd\\|Ctrl' docs/chrome-extension-guide.md && grep -q '模型\\|model' docs/chrome-extension-guide.md && echo PASS || echo 'FAIL: Chrome 插件使用文档缺失或内容不完整'",
+      "evolution_goal": "希望有简要的功能使用文档及使用案例，指导用户使用"
+    },
+    {
+      "id": "evo_v7_003",
+      "type": "coding",
+      "title": "VSCode 插件功能使用文档：调试视图、连接 MCP、Agent 模式、浏览器工具说明",
+      "status": "pending",
+      "depends_on": ["evo_v7_001"],
+      "acceptance": "创建 docs/vscode-extension-guide.md；涵盖：插件安装与激活方式（从 packages/vscode-ext 加载开发版或 F5 调试启动）；WebSocket 服务器说明（默认端口 7777、browserAgent.port 配置项）；Activity Bar 调试视图使用：连接状态 TreeView（WebSocket/MCP/模型信息）、消息检查器（查看 WebSocket 消息流、点击查看完整 JSON）、Agent 循环可视化（查看 ReAct 步骤历史）；连接 DevTools MCP 说明（命令 Browser Agent: 连接 DevTools MCP）；Agent 模式触发条件（连接 MCP 或 Chrome 浏览器已连接即自动启用）；原生浏览器工具列表（browser_click/type/navigate/scroll/screenshot 等 10+ 工具的简要说明）；常用命令列表（提问/连接 DevTools/生成报告/清空日志）",
+      "acceptance_cmd": "test -f docs/vscode-extension-guide.md && grep -q 'Activity Bar\\|TreeView\\|调试视图\\|Debug' docs/vscode-extension-guide.md && grep -q 'MCP\\|DevTools' docs/vscode-extension-guide.md && grep -q 'browser_click\\|browser_navigate\\|浏览器工具\\|Browser Tool' docs/vscode-extension-guide.md && grep -q 'Agent\\|agent' docs/vscode-extension-guide.md && grep -q '7777\\|port\\|端口' docs/vscode-extension-guide.md && echo PASS || echo 'FAIL: VSCode 插件使用文档缺失或内容不完整'",
+      "evolution_goal": "希望有简要的功能使用文档及使用案例，指导用户使用"
+    },
+    {
+      "id": "evo_v7_004",
+      "type": "coding",
+      "title": "使用案例文档：5 个典型场景（基础对话、浏览器自动操作、深度报告、调试排查、多会话工作流）",
+      "status": "pending",
+      "depends_on": ["evo_v7_002", "evo_v7_003"],
+      "acceptance": "创建 docs/use-cases.md；包含 5 个完整使用案例，每个案例包含：场景标题、适用场景描述、操作步骤（编号列表）、预期结果。案例 1：基础对话问答（打开 Side Panel → 选模型 → 发送问题 → 获得回答）；案例 2：让 Agent 自动操作浏览器（打开目标页面 → 描述操作意图如'帮我填写这个表单' → Agent 自动调用 browser_click/type 等工具 → 观察 Agent Step 展示）；案例 3：生成深度报告（打开多个相关页面 → 执行'生成深度报告'命令 → Agent 自动探索页面并生成 Markdown 报告）；案例 4：调试 WebSocket 通信问题（打开 VSCode Activity Bar → 查看连接状态 → 检查消息日志 → 定位问题）；案例 5：多会话工作流（使用 /new 创建新会话 → 不同会话处理不同任务 → 通过侧栏切换会话 → 历史记录持久化）",
+      "acceptance_cmd": "test -f docs/use-cases.md && grep -c '案例\\|Case\\|场景\\|Scenario\\|##' docs/use-cases.md | xargs -I{} test {} -ge 5 && grep -q 'browser_click\\|browser_type\\|自动操作\\|automat' docs/use-cases.md && grep -q '报告\\|report\\|Report' docs/use-cases.md && grep -q '调试\\|debug\\|Debug' docs/use-cases.md && grep -q '会话\\|session\\|conversation' docs/use-cases.md && echo PASS || echo 'FAIL: 使用案例文档缺失或案例数量不足'",
+      "evolution_goal": "希望有简要的功能使用文档及使用案例，指导用户使用"
+    },
+    {
+      "id": "evo_v7_005",
+      "type": "validate",
+      "title": "文档全量验收：README + Chrome 指南 + VSCode 指南 + 使用案例，文档齐全且内容覆盖所有核心功能",
+      "status": "pending",
+      "depends_on": ["evo_v7_004"],
+      "acceptance": "docs/ 目录下有 4 个文档文件（README.md、chrome-extension-guide.md、vscode-extension-guide.md、use-cases.md）；README 包含架构和快速开始；Chrome 指南覆盖对话/模型/会话/命令/快捷键；VSCode 指南覆盖调试视图/MCP/Agent/工具；使用案例不少于 5 个且每个含操作步骤；双端构建通过无回归",
+      "acceptance_cmd": "test -d docs && test -f docs/README.md && test -f docs/chrome-extension-guide.md && test -f docs/vscode-extension-guide.md && test -f docs/use-cases.md && grep -q 'WebSocket\\|websocket' docs/README.md && grep -q '/new\\|/clear' docs/chrome-extension-guide.md && grep -q 'TreeView\\|Activity Bar\\|调试' docs/vscode-extension-guide.md && grep -c '##' docs/use-cases.md | xargs -I{} test {} -ge 5 && cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 文档全量验收失败'",
+      "evolution_goal": "希望有简要的功能使用文档及使用案例，指导用户使用"
     }
   ]
 }
