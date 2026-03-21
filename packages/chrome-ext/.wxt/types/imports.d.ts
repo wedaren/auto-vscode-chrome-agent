@@ -23,6 +23,7 @@ declare global {
   const defineContentScript: typeof import('wxt/sandbox')['defineContentScript']
   const defineUnlistedScript: typeof import('wxt/sandbox')['defineUnlistedScript']
   const defineWxtPlugin: typeof import('wxt/sandbox')['defineWxtPlugin']
+  const executeAction: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor')['executeAction']
   const fakeBrowser: typeof import('wxt/testing')['fakeBrowser']
   const injectScript: typeof import('wxt/client')['injectScript']
   const storage: typeof import('wxt/storage')['storage']
@@ -68,6 +69,9 @@ declare global {
   // @ts-ignore
   export type { UseWebSocketReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')
+  // @ts-ignore
+  export type { ActionType, ScrollMode, BrowserAction, ActionResult, ElementInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor')
   // @ts-ignore
   export type { MessageRole, Message } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')
