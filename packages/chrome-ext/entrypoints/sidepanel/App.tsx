@@ -1,11 +1,13 @@
 // App.tsx — Side Panel 主组件，纯 UI 渲染层，所有逻辑由 Hook 管理
 // 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
+// 空会话时显示 WelcomeScreen 引导页
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
 import MessageBubble from '../../components/MessageBubble';
 import TypingIndicator from '../../components/TypingIndicator';
 import ConversationList from '../../components/ConversationList';
+import WelcomeScreen from '../../components/WelcomeScreen';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
@@ -100,6 +102,20 @@ export default function App() {
     setSidebarOpen(false);
   }, []);
 
+  /**
+   * 重新生成指定 assistant 消息：找到该消息之前最近的 user 消息并重发
+   */
+  const handleRegenerate = useCallback((assistantMsgIndex: number) => {
+    if (isStreaming) return;
+    // 向前搜索最近的 user 消息
+    for (let i = assistantMsgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        handleSendMessage(messages[i].content);
+        return;
+      }
+    }
+  }, [isStreaming, messages, handleSendMessage]);
+
   // --- UI 渲染 ---
   return (
     <div className="relative flex flex-col h-screen bg-white overflow-hidden">
@@ -175,23 +191,32 @@ export default function App() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">输入消息开始对话</div>
+        {messages.length === 0 && !isStreaming ? (
+          <WelcomeScreen onSendPrompt={handleSendMessage} />
+        ) : (
+          <>
+            {messages.map((msg, index) => (
+              <MessageBubble
+                key={msg.id}
+                role={msg.role}
+                content={msg.content}
+                timestamp={msg.timestamp}
+                steps={msg.steps}
+                isAgentMode={msg.isAgentMode}
+                isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
+                onRegenerate={
+                  msg.role === 'assistant' && !isStreaming
+                    ? () => handleRegenerate(index)
+                    : undefined
+                }
+              />
+            ))}
+            {isStreaming && (() => {
+              const lastMsg = messages[messages.length - 1];
+              return (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.content === '') ? <TypingIndicator /> : null;
+            })()}
+          </>
         )}
-        {messages.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            role={msg.role}
-            content={msg.content}
-            steps={msg.steps}
-            isAgentMode={msg.isAgentMode}
-            isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
-          />
-        ))}
-        {isStreaming && (() => {
-          const lastMsg = messages[messages.length - 1];
-          return (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.content === '') ? <TypingIndicator /> : null;
-        })()}
         <div ref={messagesEndRef} />
       </div>
 

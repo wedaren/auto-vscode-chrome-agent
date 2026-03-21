@@ -11,6 +11,7 @@ declare global {
   const MigrationError: typeof import('wxt/storage')['MigrationError']
   const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
   const TypingIndicator: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')['default']
+  const WelcomeScreen: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen')['default']
   const browser: typeof import('wxt/browser')['browser']
   const createIframeUi: typeof import('wxt/client')['createIframeUi']
   const createIntegratedUi: typeof import('wxt/client')['createIntegratedUi']
@@ -52,6 +53,9 @@ declare global {
   // @ts-ignore
   export type { TypingIndicatorProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')
+  // @ts-ignore
+  export type { WelcomeScreenProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen')
   // @ts-ignore
   export type { UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')

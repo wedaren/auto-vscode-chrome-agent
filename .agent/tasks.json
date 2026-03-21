@@ -414,7 +414,7 @@
       "id": "evo_v4_002",
       "type": "coding",
       "title": "Chrome 侧多会话管理：会话列表侧栏 + 新建/切换/删除会话",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v4_001"
       ],

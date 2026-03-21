@@ -141,6 +141,12 @@ body {
   font-weight: 600;
 }
 
+/* === MessageBubble 消息操作栏 === */
+
+.msg-action-bar {
+  white-space: nowrap;
+}
+
 /* === TypingIndicator 三点跳动动画 === */
 
 @keyframes typing-bounce {

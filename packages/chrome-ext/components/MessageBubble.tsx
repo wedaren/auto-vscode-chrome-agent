@@ -1,6 +1,7 @@
 // MessageBubble.tsx — 消息气泡组件，assistant 消息支持 Markdown 渲染 + 代码语法高亮 + 代码块复制按钮
+// Hover 时显示操作栏：复制整条消息、重新生成（仅 assistant）；底部显示相对时间戳
 // Agent 模式消息在正文上方渲染 AgentStepView 展示 ReAct 步骤
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
@@ -9,12 +10,16 @@ import AgentStepView, { type AgentStep } from './AgentStepView';
 export interface MessageBubbleProps {
   role: 'user' | 'assistant';
   content: string;
+  /** 消息创建时间戳（Date.now()） */
+  timestamp?: number;
   /** Agent ReAct 循环步骤（仅 agent 模式消息） */
   steps?: AgentStep[];
   /** 是否为 Agent 模式消息 */
   isAgentMode?: boolean;
   /** Agent 是否仍在执行中（控制步骤加载动画） */
   isRunning?: boolean;
+  /** 重新生成回调（仅 assistant 消息可用，点击后重发上一条 user 消息） */
+  onRegenerate?: () => void;
 }
 
 /** 创建配置了 highlight.js 的 marked 实例 */
@@ -60,17 +65,76 @@ function escapeAttr(str: string): string {
     .replace(/\n/g, '&#10;');
 }
 
+/**
+ * 格式化相对时间戳：刚刚 / N分钟前 / N小时前 / N天前
+ */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  if (diff < 0) return '刚刚';
+
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return '刚刚';
+  if (minutes < 60) return `${minutes}分钟前`;
+  if (hours < 24) return `${hours}小时前`;
+  if (days < 30) return `${days}天前`;
+
+  // 超过 30 天显示具体日期
+  const date = new Date(timestamp);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 /** 全局单例 marked 实例 */
 const markedInstance = createMarkedInstance();
 
-export default function MessageBubble({ role, content, steps, isAgentMode, isRunning }: MessageBubbleProps) {
+export default function MessageBubble({
+  role,
+  content,
+  timestamp,
+  steps,
+  isAgentMode,
+  isRunning,
+  onRegenerate,
+}: MessageBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   /** 将 Markdown 转为 HTML（仅 assistant 消息） */
   const renderedHtml = useMemo(() => {
     if (role !== 'assistant') return '';
     return markedInstance.parse(content) as string;
   }, [role, content]);
+
+  /** 复制整条消息文本到剪贴板 */
+  const copyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 1500);
+    } catch {
+      console.warn('[MessageBubble] 复制消息失败');
+    }
+  }, [content]);
+
+  /** 相对时间戳（每分钟刷新） */
+  const [relativeTime, setRelativeTime] = useState(() =>
+    timestamp ? formatRelativeTime(timestamp) : '',
+  );
+
+  useEffect(() => {
+    if (!timestamp) return;
+    setRelativeTime(formatRelativeTime(timestamp));
+    const timer = setInterval(() => {
+      setRelativeTime(formatRelativeTime(timestamp));
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [timestamp]);
 
   // 为代码块复制按钮绑定点击事件
   useEffect(() => {
@@ -107,11 +171,48 @@ export default function MessageBubble({ role, content, steps, isAgentMode, isRun
     };
   }, [role, renderedHtml]);
 
-  // User 消息：纯文本样式
+  // User 消息：纯文本样式 + hover 操作栏
   if (role === 'user') {
     return (
-      <div className="max-w-[85%] ml-auto rounded-lg px-3 py-2 text-sm bg-blue-500 text-white whitespace-pre-wrap break-words">
-        {content}
+      <div
+        className="group relative max-w-[85%] ml-auto"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Hover 操作栏 — user 消息仅复制 */}
+        <div
+          className={`msg-action-bar absolute -top-8 right-0 flex items-center gap-1 px-1 py-0.5 rounded-md bg-white border border-gray-200 shadow-sm transition-opacity duration-150 ${
+            isHovered ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <button
+            onClick={copyToClipboard}
+            className="flex items-center gap-1 px-1.5 py-1 rounded text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="复制消息"
+          >
+            {copyFeedback ? (
+              <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        <div className="rounded-lg px-3 py-2 text-sm bg-blue-500 text-white whitespace-pre-wrap break-words">
+          {content}
+        </div>
+
+        {/* 时间戳 */}
+        {relativeTime && (
+          <div className="text-[10px] text-gray-400 mt-0.5 text-right select-none">
+            {relativeTime}
+          </div>
+        )}
       </div>
     );
   }
@@ -119,9 +220,52 @@ export default function MessageBubble({ role, content, steps, isAgentMode, isRun
   // Agent 模式消息：先渲染步骤，再渲染最终回答
   const hasSteps = steps && steps.length > 0;
 
-  // Assistant 消息：Agent 步骤 + Markdown 渲染
+  // Assistant 消息：Agent 步骤 + Markdown 渲染 + hover 操作栏
   return (
-    <div className="max-w-[85%] mr-auto">
+    <div
+      className="group relative max-w-[85%] mr-auto"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Hover 操作栏 — assistant 消息：复制 + 重新生成 */}
+      {content && (
+        <div
+          className={`msg-action-bar absolute -top-8 left-0 flex items-center gap-1 px-1 py-0.5 rounded-md bg-white border border-gray-200 shadow-sm transition-opacity duration-150 z-10 ${
+            isHovered ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <button
+            onClick={copyToClipboard}
+            className="flex items-center gap-1 px-1.5 py-1 rounded text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="复制消息"
+          >
+            {copyFeedback ? (
+              <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
+
+          {/* 重新生成按钮（仅 assistant 消息） */}
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="flex items-center gap-1 px-1.5 py-1 rounded text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              title="重新生成"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Agent 步骤展示（渲染在正文上方） */}
       {hasSteps && (
         <AgentStepView steps={steps} isRunning={isRunning} />
@@ -134,6 +278,13 @@ export default function MessageBubble({ role, content, steps, isAgentMode, isRun
           className="rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-800 message-bubble-markdown"
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
+      )}
+
+      {/* 时间戳 */}
+      {relativeTime && (
+        <div className="text-[10px] text-gray-400 mt-0.5 select-none">
+          {relativeTime}
+        </div>
       )}
     </div>
   );
