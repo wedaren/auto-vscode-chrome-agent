@@ -1225,7 +1225,7 @@
       "id": "evo_v17_004",
       "type": "coding",
       "title": "AgentLoop 观察结果截断 + 消息窗口管理：防止 ReAct 循环 token 溢出",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v17_001"
       ],
@@ -1237,7 +1237,7 @@
       "id": "evo_v17_005",
       "type": "validation",
       "title": "上下文预算体系全量验收：双端构建 + 截断常量存在 + 关键路径覆盖",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v17_002",
         "evo_v17_003",
@@ -1246,6 +1246,69 @@
       "acceptance": "Chrome 插件构建通过 + VSCode 插件编译通过；context-budget.ts 存在且导出所有常量和工具函数；content.ts 有截断逻辑；buildSystemPrompt 有预算控制；agent-loop.ts 有观察截断和消息窗口管理",
       "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 && test -f src/context-budget.ts && grep -q 'smartTruncate' src/context-budget.ts && grep -q 'truncat\\|slice\\|8000' ../chrome-ext/entrypoints/content.ts && grep -q 'smartTruncate\\|MAX_SYSTEM' src/message-handler.ts && grep -q 'trimMessages\\|MAX_OBSERVATION' src/agent-loop.ts && echo PASS || echo FAIL",
       "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
+    },
+    {
+      "id": "evo_v18_001",
+      "type": "coding",
+      "title": "扩展核心浏览器工具集：browser-tools.ts 新增 5 个工具 + action-executor.ts 新增 3 个 ActionType",
+      "status": "pending",
+      "depends_on": [
+        "evo_v17_005"
+      ],
+      "acceptance": "browser-tools.ts 新增 browser_query_selector_all / browser_get_value / browser_evaluate / browser_select_option / browser_get_links 共 5 个工具定义和 TOOL_MAPPING；action-executor.ts 新增 evaluate / selectOption / getLinks 三种 ActionType 实现；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'browser_evaluate\\|browser_select_option\\|browser_get_links\\|browser_query_selector_all\\|browser_get_value' src/browser-tools.ts | xargs -I{} test {} -ge 10 && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && grep -c 'evaluate\\|selectOption\\|getLinks' utils/action-executor.ts | xargs -I{} test {} -ge 6 && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
+    },
+    {
+      "id": "evo_v18_002",
+      "type": "coding",
+      "title": "SkillRunner 步骤结果传递增强：支持 {{$prev}} 和 {{$step_N}} 插值语法",
+      "status": "pending",
+      "depends_on": [
+        "evo_v18_001"
+      ],
+      "acceptance": "SkillRunner.execute() 在逐步执行时收集 stepResults，interpolateValue() 支持 {{$prev}}（上一步结果文本）和 {{$step_0}} / {{$step_1}} / ...（指定步骤结果文本）占位符替换；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q '\\$prev\\|\\$step_' src/skill-runner.ts && grep -q 'stepResults\\|previousResult\\|resultMap' src/skill-runner.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
+    },
+    {
+      "id": "evo_v18_003",
+      "type": "coding",
+      "title": "新增 10 个高价值内置预设 Skill：read_article / capture_all_links / capture_table_data / search_in_page / auto_scroll_read / open_and_summarize / fill_and_submit / page_info / multi_step_extract / batch_screenshot",
+      "status": "pending",
+      "depends_on": [
+        "evo_v18_002"
+      ],
+      "acceptance": "skill-registry.ts 的 PRESET_SKILLS 数组包含至少 15 个预设 Skill（原 5 + 新 10）；每个 Skill 有完整的 name / displayName / description / steps 定义；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && node -e \"const fs=require('fs'); const c=fs.readFileSync('src/skill-registry.ts','utf8'); const m=c.match(/name:\\s*'[\\w_]+'/g); console.log('Preset count:', m?m.length:0); process.exit(m&&m.length>=15?0:1)\" && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
+    },
+    {
+      "id": "evo_v18_004",
+      "type": "coding",
+      "title": "AgentLoop 复杂任务编排增强：优化 system prompt 加入工具组合 few-shot 范例 + Skill 编排建议",
+      "status": "pending",
+      "depends_on": [
+        "evo_v18_003"
+      ],
+      "acceptance": "agent-loop.ts 的 buildAgentSystemPrompt 中包含工具组合使用范例（至少 2 个 few-shot example）、多步骤任务编排建议、错误恢复指导；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'Example\\|example\\|示例\\|few.shot\\|multi.step\\|EXAMPLE' src/agent-loop.ts | xargs -I{} test {} -ge 3 && grep -q 'run_skill\\|browser_' src/agent-loop.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
+    },
+    {
+      "id": "evo_v18_005",
+      "type": "validation",
+      "title": "Skill 体系增强全量验收：双端构建 + 15 个预设 Skill + 15 个浏览器工具 + 步骤传参 + few-shot prompt",
+      "status": "pending",
+      "depends_on": [
+        "evo_v18_001",
+        "evo_v18_002",
+        "evo_v18_003",
+        "evo_v18_004"
+      ],
+      "acceptance": "Chrome 插件构建通过 + VSCode 插件编译通过；browser-tools.ts 有 15 个工具定义；skill-registry.ts 有 15 个预设 Skill；skill-runner.ts 支持 $prev/$step_N 插值；agent-loop.ts 有 few-shot 范例",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 && node -e \"const fs=require('fs'); const b=fs.readFileSync('src/browser-tools.ts','utf8'); const s=fs.readFileSync('src/skill-registry.ts','utf8'); const r=fs.readFileSync('src/skill-runner.ts','utf8'); const a=fs.readFileSync('src/agent-loop.ts','utf8'); const tools=(b.match(/name:\\s*'browser_/g)||[]).length; const skills=(s.match(/name:\\s*'[\\w_]+'/g)||[]).length; const hasInterp=r.includes('\\$prev')||r.includes('\\$step_'); const hasFewShot=a.includes('Example')||a.includes('example'); console.log('Tools:',tools,'Skills:',skills,'Interp:',hasInterp,'FewShot:',hasFewShot); process.exit(tools>=15&&skills>=15&&hasInterp&&hasFewShot?0:1)\" && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，想优化内置 skill，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，如果需要可以补充核心工具"
     }
   ]
 }

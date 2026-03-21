@@ -63,3 +63,5 @@
 - [~] 结合 debug-log 日志文件优化（已拆解为 evo_v15_001, evo_v15_002, evo_v15_003, evo_v15_004, evo_v15_005 — 重连指数退避 + 导航等待页面加载 + 工具参数自动修正 + 心跳容错优化）
 - [x] 考虑只有唯一客户端，减少没必要的重连（已拆解为 evo_v16_001, evo_v16_002, evo_v16_003, evo_v16_004, evo_v16_005 — 单客户端优化：Server activeClient 单引用 + 踢旧连接 + Client 连接去重 + 可见性感知重连 + welcome 握手）
 - [x] 不考虑时间，使用最优解，处理浏览器上下文爆炸的问题（已拆解为 evo_v17_001, evo_v17_002, evo_v17_003, evo_v17_004, evo_v17_005 — 上下文预算体系：Context Budget 常量与截断工具 + Chrome 侧采集预截断 + System Prompt 预算控制 + AgentLoop 观察截断与消息窗口管理）
+- [~] 不考虑时间，使用最优解，想优化 内置 skill ，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，复杂复杂，如果需要可以补充核心工具；（已拆解为 evo_v18_001, evo_v18_002, evo_v18_003, evo_v18_004, evo_v18_005 — Skill 体系增强：5 个新核心浏览器工具 + SkillRunner 步骤结果传递 + 10 个新预设 Skill + AgentLoop few-shot 编排增强）
+- [ ] 不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件 沉浸式翻译，提供最好的用户体验
