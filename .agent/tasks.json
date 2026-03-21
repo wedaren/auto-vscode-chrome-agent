@@ -1389,7 +1389,7 @@
       "id": "evo_v20_002",
       "type": "coding",
       "title": "McpClient 子进程健壮性：崩溃自动重启 + 健康检查 + 连接状态生命周期管理",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v20_001"
       ],

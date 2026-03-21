@@ -85,9 +85,19 @@ export declare class AgentLoop {
      * 合并策略：
      * - browser_* 前缀工具优先来自 BrowserToolProvider（原生通道，更快更可靠）
      * - 若 MCP 也提供同名 browser_* 工具，原生版本优先，MCP 版本跳过
-     * - 非 browser_* 的 MCP 工具正常列出
+     * - 非 browser_* 的 MCP 工具正常列出，且渲染完整参数签名（inputSchema）
      */
     private getToolDescriptions;
+    /**
+     * 将 MCP 工具的 inputSchema（JSON Schema）渲染为 LLM 可读的函数签名。
+     *
+     * 输出格式示例：
+     *   - navigate_page(url: string [必填] — 要导航到的 URL, waitUntil?: string — 等待条件) — 导航到指定 URL
+     *
+     * 如果 inputSchema 不存在或无 properties，则退化为简洁格式：
+     *   - navigate_page: 导航到指定 URL
+     */
+    private formatMcpToolSignature;
     /**
      * 构建 Agent 系统提示词，包含 ReAct 格式指令、可用工具列表、
      * 工具组合 few-shot 范例、多步骤编排建议、错误恢复指导

@@ -232,23 +232,22 @@ class AgentLoop {
      * 合并策略：
      * - browser_* 前缀工具优先来自 BrowserToolProvider（原生通道，更快更可靠）
      * - 若 MCP 也提供同名 browser_* 工具，原生版本优先，MCP 版本跳过
-     * - 非 browser_* 的 MCP 工具正常列出
+     * - 非 browser_* 的 MCP 工具正常列出，且渲染完整参数签名（inputSchema）
      */
     async getToolDescriptions() {
-        const allTools = [];
+        const lines = [];
         // 收集已登记的 browser_* 工具名（用于去重）
         const browserToolNames = new Set();
-        // 1. 原生浏览器工具（BrowserToolProvider）
+        let browserCount = 0;
+        let mcpCount = 0;
+        // 1. 原生浏览器工具（BrowserToolProvider）—— 保持现有简洁格式
         if (this.browserToolProvider?.connected) {
             try {
                 const browserTools = await this.browserToolProvider.listTools();
                 for (const t of browserTools) {
                     browserToolNames.add(t.name);
-                    allTools.push({
-                        name: t.name,
-                        description: t.description ?? '无描述',
-                        source: 'browser',
-                    });
+                    lines.push(`- ${t.name}: ${t.description ?? '无描述'}`);
+                    browserCount++;
                 }
                 this.outputChannel.appendLine(`[AgentLoop] 加载 ${browserTools.length} 个原生浏览器工具`);
             }
@@ -257,6 +256,7 @@ class AgentLoop {
             }
         }
         // 2. MCP 工具（跳过已被原生浏览器工具覆盖的 browser_* 同名工具）
+        //    渲染完整 inputSchema 参数签名，让 LLM 知晓参数名、类型、是否必填、描述
         if (this.mcpClient.connected) {
             try {
                 const mcpTools = await this.mcpClient.listTools();
@@ -265,13 +265,10 @@ class AgentLoop {
                         this.outputChannel.appendLine(`[AgentLoop] MCP 工具 ${t.name} 被原生浏览器工具覆盖，跳过`);
                         continue;
                     }
-                    allTools.push({
-                        name: t.name,
-                        description: t.description ?? '无描述',
-                        source: 'mcp',
-                    });
+                    lines.push(this.formatMcpToolSignature(t.name, t.description, t.inputSchema));
+                    mcpCount++;
                 }
-                this.outputChannel.appendLine(`[AgentLoop] 加载 ${mcpTools.length} 个 MCP 工具（去重后）`);
+                this.outputChannel.appendLine(`[AgentLoop] 加载 ${mcpTools.length} 个 MCP 工具（去重后保留 ${mcpCount} 个）`);
             }
             catch (err) {
                 this.outputChannel.appendLine(`[AgentLoop] 获取 MCP 工具列表失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -289,22 +286,55 @@ class AgentLoop {
                     return `  - ${s.name}: ${s.description}${paramDesc ? ` [参数: ${paramDesc}]` : ''}`;
                 })
                     .join('\n');
-                allTools.push({
-                    name: 'run_skill',
-                    description: `执行预定义 Skill（多步骤浏览器操作序列）。参数: {"skill_name": "技能名称", "params": {"参数名": "值"}}。可用 Skill:\n${skillList}`,
-                    source: 'skill',
-                });
+                lines.push(`- run_skill: 执行预定义 Skill（多步骤浏览器操作序列）。参数: {"skill_name": "技能名称", "params": {"参数名": "值"}}。可用 Skill:\n${skillList}`);
                 this.outputChannel.appendLine(`[AgentLoop] 注册 run_skill 工具，${enabledSkills.length} 个可用 Skill`);
             }
         }
-        if (allTools.length === 0) {
+        if (lines.length === 0) {
             this.outputChannel.appendLine('[AgentLoop] 无可用工具');
             return '(无可用工具)';
         }
-        this.outputChannel.appendLine(`[AgentLoop] 共加载 ${allTools.length} 个工具（browser: ${browserToolNames.size}, mcp: ${allTools.length - browserToolNames.size}）`);
-        return allTools
-            .map((t) => `- ${t.name}: ${t.description}`)
-            .join('\n');
+        this.outputChannel.appendLine(`[AgentLoop] 共加载 ${lines.length} 个工具（browser: ${browserCount}, mcp: ${mcpCount}）`);
+        return lines.join('\n');
+    }
+    /**
+     * 将 MCP 工具的 inputSchema（JSON Schema）渲染为 LLM 可读的函数签名。
+     *
+     * 输出格式示例：
+     *   - navigate_page(url: string [必填] — 要导航到的 URL, waitUntil?: string — 等待条件) — 导航到指定 URL
+     *
+     * 如果 inputSchema 不存在或无 properties，则退化为简洁格式：
+     *   - navigate_page: 导航到指定 URL
+     */
+    formatMcpToolSignature(name, description, inputSchema) {
+        const desc = description ?? '无描述';
+        // 无 schema 或无 properties —— 退化为简洁格式
+        if (!inputSchema) {
+            return `- ${name}: ${desc}`;
+        }
+        const properties = inputSchema.properties;
+        if (!properties || Object.keys(properties).length === 0) {
+            return `- ${name}(): ${desc}`;
+        }
+        // 必填参数集合
+        const requiredSet = new Set(Array.isArray(inputSchema.required)
+            ? inputSchema.required
+            : []);
+        // 渲染每个参数：name: type [必填] — description
+        const paramParts = [];
+        for (const [paramName, paramSchema] of Object.entries(properties)) {
+            const paramType = paramSchema.type ?? 'any';
+            const isRequired = requiredSet.has(paramName);
+            const paramDesc = paramSchema.description;
+            let part = isRequired
+                ? `${paramName}: ${paramType} [必填]`
+                : `${paramName}?: ${paramType}`;
+            if (paramDesc) {
+                part += ` — ${paramDesc}`;
+            }
+            paramParts.push(part);
+        }
+        return `- ${name}(${paramParts.join(', ')}) — ${desc}`;
     }
     /**
      * 构建 Agent 系统提示词，包含 ReAct 格式指令、可用工具列表、
