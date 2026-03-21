@@ -1,18 +1,18 @@
 {
   "phase": "idle",
-  "current_task": "evo_v16_004",
+  "current_task": "evo_v17_001",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v16_004",
+    "task_id": "evo_v17_001",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS — welcome in ws-server.ts ✔, compile 0 errors ✔, welcome in ws-client.ts ✔, build 0 errors ✔"
+    "acceptance_cmd_output": "PASS"
   },
-  "last_tick": "2026-03-21T15:25:36.619974Z",
+  "last_tick": "2026-03-22T00:00:00.000000Z",
   "pm_done": true,
   "last_research": "RESEARCH_RESULT: knowledge/fix_evo_v9_005_acceptance_cmd_path_mismatch.md | acceptance_cmd 路径错误 utils/ws-client.ts 应为 src/ws-client.ts，需执行 sed 修正 tasks.json（已失败3次，修复从未被执行）"
 }

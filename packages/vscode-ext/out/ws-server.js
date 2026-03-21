@@ -212,6 +212,9 @@ class WsServer {
             case 'ping':
                 this.send(ws, { type: 'pong', payload: null, sessionId: msg.sessionId });
                 break;
+            case 'heartbeat_ping':
+                this.send(ws, { type: 'heartbeat_pong', payload: msg.payload, sessionId: msg.sessionId });
+                break;
             case 'chat': {
                 // 收到 Chrome 侧的用户聊天消息
                 const text = msg.payload?.text ?? '';

@@ -1164,7 +1164,7 @@
       "id": "evo_v16_004",
       "type": "coding",
       "title": "Server welcome 握手：新连接发送 welcome 消息 + 记录 sessionId + Client 处理 welcome",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v16_001"
       ],
@@ -1176,7 +1176,7 @@
       "id": "evo_v16_005",
       "type": "validation",
       "title": "单客户端优化全量验收：双端构建通过 + activeClient 单引用 + 连接去重 + 可见性感知 + welcome 握手",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v16_003",
         "evo_v16_004"
@@ -1184,6 +1184,68 @@
       "acceptance": "pnpm 全量构建通过；ws-server.ts 使用 activeClient（非 Set）+ 新连接踢旧 + welcome 握手；ws-client.ts 连接去重 + maxAttempts=10 + visibilitychange 暂停/恢复；无 TS 编译错误",
       "acceptance_cmd": "cd packages/vscode-ext && grep -c 'activeClient' src/ws-server.ts | xargs -I{} test {} -ge 3 && grep -c 'welcome' src/ws-server.ts | xargs -I{} test {} -ge 1 && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../../packages/chrome-ext && grep -c 'visibilitychange' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep 'DEFAULT_MAX_RECONNECT_ATTEMPTS.*=.*10' src/ws-client.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
       "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
+    },
+    {
+      "id": "evo_v17_001",
+      "type": "coding",
+      "title": "Context Budget 常量与截断工具模块：vscode-ext/src/context-budget.ts",
+      "status": "pending",
+      "depends_on": [
+        "evo_v16_005"
+      ],
+      "acceptance": "新建 context-budget.ts，导出 MAX_SELECTED_TEXT_CHARS(8000)、MAX_URL_CHARS(2000)、MAX_TITLE_CHARS(500)、MAX_SYSTEM_PROMPT_CONTEXT_CHARS(12000)、MAX_OBSERVATION_CHARS(6000)、MAX_MESSAGES_CHARS(80000) 常量；导出 estimateTokens(text)、smartTruncate(text, maxChars, options?) 函数；smartTruncate 保留头尾并插入 ...[已截断 N 字符]... 占位符；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'MAX_SELECTED_TEXT_CHARS' src/context-budget.ts && grep -q 'smartTruncate' src/context-budget.ts && grep -q 'estimateTokens' src/context-budget.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
+    },
+    {
+      "id": "evo_v17_002",
+      "type": "coding",
+      "title": "Chrome 侧上下文采集预截断：content.ts selectedText 限制 + usePageContext 防护",
+      "status": "pending",
+      "depends_on": [
+        "evo_v17_001"
+      ],
+      "acceptance": "content.ts 中 selectedText 在采集时截断到 MAX_SELECTED_TEXT_CHARS(8000 字符)；selectionchange 事件同样限制；usePageContext hook 对 url/title/selectedText 做二次防护截断；Chrome 插件构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q '8000\\|MAX_SELECTED' entrypoints/content.ts && grep -q 'substring\\|slice\\|truncat' entrypoints/content.ts && npm run build 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
+    },
+    {
+      "id": "evo_v17_003",
+      "type": "coding",
+      "title": "VSCode 侧 System Prompt 上下文预算：buildSystemPrompt 截断 + 日志监控",
+      "status": "pending",
+      "depends_on": [
+        "evo_v17_001"
+      ],
+      "acceptance": "message-handler.ts 的 buildSystemPrompt() 使用 smartTruncate 对 selectedText 截断；总上下文部分不超过 MAX_SYSTEM_PROMPT_CONTEXT_CHARS；日志输出上下文字符数和 token 估算值；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'smartTruncate\\|truncat' src/message-handler.ts && grep -q 'MAX_SYSTEM_PROMPT_CONTEXT_CHARS\\|contextBudget\\|12000' src/message-handler.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
+    },
+    {
+      "id": "evo_v17_004",
+      "type": "coding",
+      "title": "AgentLoop 观察结果截断 + 消息窗口管理：防止 ReAct 循环 token 溢出",
+      "status": "pending",
+      "depends_on": [
+        "evo_v17_001"
+      ],
+      "acceptance": "agent-loop.ts 中 OBSERVATION 结果在添加到 messages 前通过 smartTruncate 截断到 MAX_OBSERVATION_CHARS；新增 trimMessages() 方法，当 messages 总字符数超过 MAX_MESSAGES_CHARS 时移除最早的非系统消息轮次（保留 system prompt + 最近 N 轮）；日志记录截断事件；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'MAX_OBSERVATION_CHARS\\|truncat.*observation\\|trimMessages' src/agent-loop.ts && grep -q 'MAX_MESSAGES_CHARS\\|messageBudget\\|80000' src/agent-loop.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
+    },
+    {
+      "id": "evo_v17_005",
+      "type": "validation",
+      "title": "上下文预算体系全量验收：双端构建 + 截断常量存在 + 关键路径覆盖",
+      "status": "pending",
+      "depends_on": [
+        "evo_v17_002",
+        "evo_v17_003",
+        "evo_v17_004"
+      ],
+      "acceptance": "Chrome 插件构建通过 + VSCode 插件编译通过；context-budget.ts 存在且导出所有常量和工具函数；content.ts 有截断逻辑；buildSystemPrompt 有预算控制；agent-loop.ts 有观察截断和消息窗口管理",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 && test -f src/context-budget.ts && grep -q 'smartTruncate' src/context-budget.ts && grep -q 'truncat\\|slice\\|8000' ../chrome-ext/entrypoints/content.ts && grep -q 'smartTruncate\\|MAX_SYSTEM' src/message-handler.ts && grep -q 'trimMessages\\|MAX_OBSERVATION' src/agent-loop.ts && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，处理浏览器上下文爆炸的问题"
     }
   ]
 }
