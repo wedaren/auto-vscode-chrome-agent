@@ -35,14 +35,52 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.McpClient = void 0;
 // mcp-client.ts — chrome-devtools-mcp 集成，通过 stdio 子进程启动 MCP Server 并提供工具调用接口
+// 支持 VSCode settings 可配置启动参数 + 完整工具 Schema（含 inputSchema）存储
 const vscode = __importStar(require("vscode"));
 const index_js_1 = require("@modelcontextprotocol/sdk/client/index.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/client/stdio.js");
+/**
+ * 从 VSCode settings 读取 browserAgent.mcp.* 配置，构建 npx 启动参数列表。
+ *
+ * 支持的配置项：
+ * - browserAgent.mcp.browserUrl: 连接已运行的 Chrome 实例
+ * - browserAgent.mcp.autoConnect: 自动连接本地 Chrome
+ * - browserAgent.mcp.headless: 无头模式
+ * - browserAgent.mcp.slim: 精简模式
+ * - browserAgent.mcp.noUsageStatistics: 关闭使用统计
+ * - browserAgent.mcp.extraArgs: 额外命令行参数
+ */
+function buildMcpArgs() {
+    const cfg = vscode.workspace.getConfiguration('browserAgent.mcp');
+    const args = ['-y', 'chrome-devtools-mcp@latest'];
+    const browserUrl = cfg.get('browserUrl', '');
+    if (browserUrl) {
+        args.push('--browserUrl', browserUrl);
+    }
+    if (cfg.get('autoConnect', false)) {
+        args.push('--autoConnect');
+    }
+    if (cfg.get('headless', false)) {
+        args.push('--headless');
+    }
+    if (cfg.get('slim', false)) {
+        args.push('--slim');
+    }
+    if (cfg.get('noUsageStatistics', true)) {
+        args.push('--no-usage-statistics');
+    }
+    const extraArgs = cfg.get('extraArgs', []);
+    if (extraArgs.length > 0) {
+        args.push(...extraArgs);
+    }
+    return args;
+}
 /**
  * McpClient 封装与 chrome-devtools-mcp 的 MCP 协议通信。
  *
  * 通过 stdio transport 启动 `npx chrome-devtools-mcp@latest` 子进程，
  * 使用 @modelcontextprotocol/sdk 进行工具发现和调用。
+ * 启动参数通过 VSCode settings (browserAgent.mcp.*) 动态构建。
  *
  * 生命周期：在 activate() 时可选启动，deactivate() 时自动关闭子进程。
  */
@@ -62,12 +100,13 @@ class McpClient {
     get connected() {
         return this._connected;
     }
-    /** 已发现的 MCP 工具列表（缓存） */
+    /** 已发现的 MCP 工具列表（缓存），包含完整 inputSchema */
     get discoveredTools() {
         return this._discoveredTools;
     }
     /**
-     * 启动 chrome-devtools-mcp 子进程并建立 MCP 连接
+     * 启动 chrome-devtools-mcp 子进程并建立 MCP 连接。
+     * 启动参数从 VSCode settings (browserAgent.mcp.*) 动态读取。
      */
     async connect() {
         if (this._connected) {
@@ -76,10 +115,13 @@ class McpClient {
         }
         this.outputChannel.appendLine('[McpClient] 正在启动 chrome-devtools-mcp...');
         try {
+            // 从 VSCode settings 动态构建启动参数
+            const mcpArgs = buildMcpArgs();
+            this.outputChannel.appendLine(`[McpClient] 启动参数: npx ${mcpArgs.join(' ')}`);
             // 创建 stdio transport，启动 npx chrome-devtools-mcp@latest 子进程
             this.transport = new stdio_js_1.StdioClientTransport({
                 command: 'npx',
-                args: ['-y', 'chrome-devtools-mcp@latest'],
+                args: mcpArgs,
             });
             // 创建 MCP Client 实例
             this.client = new index_js_1.Client({
@@ -90,7 +132,7 @@ class McpClient {
             await this.client.connect(this.transport);
             this._connected = true;
             this._onDidChangeState.fire();
-            // 连接成功后自动发现工具并缓存
+            // 连接成功后自动发现工具并缓存（含完整 inputSchema）
             try {
                 const tools = await this.listTools();
                 this._discoveredTools = tools;
@@ -112,7 +154,7 @@ class McpClient {
         }
     }
     /**
-     * 列出 MCP Server 提供的所有可用工具
+     * 列出 MCP Server 提供的所有可用工具（含完整 inputSchema）
      */
     async listTools() {
         if (!this.client || !this._connected) {
@@ -122,8 +164,11 @@ class McpClient {
         const tools = result.tools.map((t) => ({
             name: t.name,
             description: t.description,
+            inputSchema: t.inputSchema,
         }));
         this.outputChannel.appendLine(`[McpClient] 可用工具 (${tools.length}): ${tools.map((t) => t.name).join(', ')}`);
+        // 更新缓存
+        this._discoveredTools = tools;
         return tools;
     }
     /**

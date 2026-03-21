@@ -137,6 +137,39 @@
           "type": "string",
           "default": "~/.browser-agent",
           "description": "用户数据持久化目录路径（支持 ~ 展开为用户 home 目录），存放 Skills、配置、会话记录等"
+        },
+        "browserAgent.mcp.browserUrl": {
+          "type": "string",
+          "default": "",
+          "description": "连接已运行的 Chrome 实例 URL（如 http://127.0.0.1:9222）。留空则由 MCP Server 自动启动 Chrome"
+        },
+        "browserAgent.mcp.autoConnect": {
+          "type": "boolean",
+          "default": false,
+          "description": "自动连接本地 Chrome（需要 Chrome 144+）"
+        },
+        "browserAgent.mcp.headless": {
+          "type": "boolean",
+          "default": false,
+          "description": "以无头模式启动 Chrome（无界面）"
+        },
+        "browserAgent.mcp.slim": {
+          "type": "boolean",
+          "default": false,
+          "description": "精简模式，仅暴露 3 个核心工具"
+        },
+        "browserAgent.mcp.noUsageStatistics": {
+          "type": "boolean",
+          "default": true,
+          "description": "关闭 chrome-devtools-mcp 使用统计"
+        },
+        "browserAgent.mcp.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "传递给 chrome-devtools-mcp 的额外命令行参数（如 [\"--viewport\", \"1280x720\", \"--executablePath\", \"/path/to/chrome\"]）"
         }
       }
     }
