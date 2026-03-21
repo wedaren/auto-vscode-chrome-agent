@@ -70,9 +70,13 @@ export function activate(context: vscode.ExtensionContext): void {
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
 
-  // 初始化 Skill 注册表（加载预设 + 自定义 Skill）
-  skillRegistry = new SkillRegistry(outputChannel);
-  skillRegistry.loadSkills();
+  // 初始化 Skill 注册表（加载预设 + 自定义 Skill，使用 UserDataManager 文件持久化）
+  skillRegistry = new SkillRegistry(userDataManager, outputChannel);
+  skillRegistry.loadSkills().catch((err: unknown) => {
+    outputChannel.appendLine(
+      `[BrowserAgent] SkillRegistry 加载失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
   outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
 
   // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）

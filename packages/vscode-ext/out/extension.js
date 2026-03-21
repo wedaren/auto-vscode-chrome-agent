@@ -93,9 +93,11 @@ function activate(context) {
     });
     // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
     browserToolProvider = new browser_tools_1.BrowserToolProvider(wsServer, outputChannel);
-    // 初始化 Skill 注册表（加载预设 + 自定义 Skill）
-    skillRegistry = new skill_registry_1.SkillRegistry(outputChannel);
-    skillRegistry.loadSkills();
+    // 初始化 Skill 注册表（加载预设 + 自定义 Skill，使用 UserDataManager 文件持久化）
+    skillRegistry = new skill_registry_1.SkillRegistry(userDataManager, outputChannel);
+    skillRegistry.loadSkills().catch((err) => {
+        outputChannel.appendLine(`[BrowserAgent] SkillRegistry 加载失败: ${err instanceof Error ? err.message : String(err)}`);
+    });
     outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
     // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）
     skillRunner = new skill_runner_1.SkillRunner(browserToolProvider, mcpClient, outputChannel);

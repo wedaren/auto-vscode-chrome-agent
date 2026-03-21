@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { UserDataManager } from './user-data-manager';
 /** JSON Schema 属性定义（与 browser-tools.ts 中 JsonSchemaProperty 一致） */
 export interface SkillParameterProperty {
     type: string;
@@ -58,12 +59,13 @@ export interface Skill {
  *
  * 数据来源：
  * - 内置预设：PRESET_SKILLS 硬编码（category=preset），始终存在
- * - 用户自定义：从 workspace configuration `browserAgent.skills` 加载
+ * - 用户自定义：从 ~/.browser-agent/skills/custom-skills.json 加载
+ * - 预设开关覆盖：从 ~/.browser-agent/skills/preset-overrides.json 加载
  *
  * 合并策略：
  * - loadSkills() 将预设 + 自定义合并到内存 Map
- * - saveSkills() 只持久化 category=custom 的 Skill 到 workspace config
- * - 预设 Skill 的 enabled 状态变更也会通过 saveSkills() 持久化
+ * - saveSkills() 将 custom Skill 写入 custom-skills.json，预设开关写入 preset-overrides.json
+ * - 首次加载时自动迁移旧 workspace config 数据到文件存储
  *
  * 事件：
  * - onDidChange 在任何增删改操作后触发，供 TreeView / Chrome 面板刷新
@@ -73,20 +75,26 @@ export declare class SkillRegistry {
     private readonly skills;
     /** 输出日志通道 */
     private readonly outputChannel;
+    /** 用户数据目录管理器（持久化存储层） */
+    private readonly userDataManager;
     /** Skill 变更事件 */
     private readonly _onDidChange;
     readonly onDidChange: vscode.Event<void>;
-    /** 预设 Skill 的 enabled 状态覆盖（从 workspace config 加载） */
+    /** 预设 Skill 的 enabled 状态覆盖（从文件加载） */
     private presetEnabledOverrides;
-    constructor(outputChannel: vscode.OutputChannel);
+    constructor(userDataManager: UserDataManager, outputChannel: vscode.OutputChannel);
     /**
-     * 加载所有 Skill：内置预设 + workspace config 中的自定义 Skill
+     * 加载所有 Skill：内置预设 + 文件存储中的自定义 Skill
      *
      * 调用时机：插件激活时（extension.ts activate）
+     * 首次加载时自动检测旧 workspace config 数据并迁移到文件存储。
      */
-    loadSkills(): void;
+    loadSkills(): Promise<void>;
     /**
-     * 持久化自定义 Skill 和预设 Skill 的 enabled 状态到 workspace config
+     * 持久化自定义 Skill 和预设 Skill 的 enabled 状态到文件存储
+     *
+     * - custom-skills.json: 所有 category=custom 的 Skill
+     * - preset-overrides.json: 预设 Skill 与默认值不同的 enabled 状态
      */
     saveSkills(): Promise<void>;
     /**
@@ -131,5 +139,14 @@ export declare class SkillRegistry {
      * 检查名称是否属于内置预设 Skill
      */
     private isPresetName;
+    /**
+     * 从旧 workspace config 迁移数据到 UserDataManager 文件存储
+     *
+     * 迁移条件：custom-skills.json 文件不存在（说明从未使用过文件存储）
+     * 且 workspace config 中存在 browserAgent.skills 或 browserAgent.skillPresetEnabled 数据。
+     *
+     * 迁移完成后清除旧 workspace config 数据，确保只迁移一次。
+     */
+    private migrateFromWorkspaceConfig;
 }
 //# sourceMappingURL=skill-registry.d.ts.map

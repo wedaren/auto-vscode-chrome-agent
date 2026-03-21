@@ -835,7 +835,7 @@
       "id": "evo_v11_002",
       "type": "coding",
       "title": "在 extension.ts 中集成 UserDataManager 生命周期：激活时初始化目录，监听配置变更",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v11_001"
       ],

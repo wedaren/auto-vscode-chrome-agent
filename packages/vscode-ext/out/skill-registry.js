@@ -38,6 +38,7 @@ exports.SkillRegistry = void 0;
 // 职责：定义 MCP Tool Schema 风格的 Skill / SkillStep 接口，
 //       管理内置预设 Skill 和用户自定义 Skill 的注册、加载、持久化。
 //       SkillRegistry 是 Skill 系统的核心数据层，供 SkillRunner / SkillTreeView / Chrome 面板消费。
+//       持久化层使用 UserDataManager，数据存储在 ~/.browser-agent/skills/ 目录下。
 const vscode = __importStar(require("vscode"));
 // ────────────────────────────────────────────────────────────────
 // 内置 5 个预设 Skill
@@ -241,17 +242,22 @@ const PRESET_SKILLS = [
 // ────────────────────────────────────────────────────────────────
 // SkillRegistry 类
 // ────────────────────────────────────────────────────────────────
+/** 自定义 Skill 文件路径（相对于 UserDataManager 根目录） */
+const CUSTOM_SKILLS_FILE = ['skills', 'custom-skills.json'];
+/** 预设开关覆盖文件路径（相对于 UserDataManager 根目录） */
+const PRESET_OVERRIDES_FILE = ['skills', 'preset-overrides.json'];
 /**
  * SkillRegistry 管理所有 Skill（预设 + 自定义）的注册、查询、持久化。
  *
  * 数据来源：
  * - 内置预设：PRESET_SKILLS 硬编码（category=preset），始终存在
- * - 用户自定义：从 workspace configuration `browserAgent.skills` 加载
+ * - 用户自定义：从 ~/.browser-agent/skills/custom-skills.json 加载
+ * - 预设开关覆盖：从 ~/.browser-agent/skills/preset-overrides.json 加载
  *
  * 合并策略：
  * - loadSkills() 将预设 + 自定义合并到内存 Map
- * - saveSkills() 只持久化 category=custom 的 Skill 到 workspace config
- * - 预设 Skill 的 enabled 状态变更也会通过 saveSkills() 持久化
+ * - saveSkills() 将 custom Skill 写入 custom-skills.json，预设开关写入 preset-overrides.json
+ * - 首次加载时自动迁移旧 workspace config 数据到文件存储
  *
  * 事件：
  * - onDidChange 在任何增删改操作后触发，供 TreeView / Chrome 面板刷新
@@ -261,25 +267,30 @@ class SkillRegistry {
     skills = new Map();
     /** 输出日志通道 */
     outputChannel;
+    /** 用户数据目录管理器（持久化存储层） */
+    userDataManager;
     /** Skill 变更事件 */
     _onDidChange = new vscode.EventEmitter();
     onDidChange = this._onDidChange.event;
-    /** 预设 Skill 的 enabled 状态覆盖（从 workspace config 加载） */
+    /** 预设 Skill 的 enabled 状态覆盖（从文件加载） */
     presetEnabledOverrides = new Map();
-    constructor(outputChannel) {
+    constructor(userDataManager, outputChannel) {
+        this.userDataManager = userDataManager;
         this.outputChannel = outputChannel;
     }
     /**
-     * 加载所有 Skill：内置预设 + workspace config 中的自定义 Skill
+     * 加载所有 Skill：内置预设 + 文件存储中的自定义 Skill
      *
      * 调用时机：插件激活时（extension.ts activate）
+     * 首次加载时自动检测旧 workspace config 数据并迁移到文件存储。
      */
-    loadSkills() {
+    async loadSkills() {
         this.skills.clear();
-        // 1. 加载预设 Skill enabled 状态覆盖
-        const config = vscode.workspace.getConfiguration('browserAgent');
-        const presetOverrides = config.get('skillPresetEnabled', {});
-        this.presetEnabledOverrides = new Map(Object.entries(presetOverrides));
+        // 0. 首次加载时自动迁移旧 workspace config 数据
+        await this.migrateFromWorkspaceConfig();
+        // 1. 从 preset-overrides.json 加载预设 Skill enabled 状态覆盖
+        const presetOverrides = await this.userDataManager.readJSON(...PRESET_OVERRIDES_FILE);
+        this.presetEnabledOverrides = new Map(Object.entries(presetOverrides ?? {}));
         // 2. 注册内置预设 Skill（应用 enabled 状态覆盖）
         for (const preset of PRESET_SKILLS) {
             const skill = {
@@ -290,8 +301,8 @@ class SkillRegistry {
             };
             this.skills.set(skill.name, skill);
         }
-        // 3. 加载用户自定义 Skill（从 workspace config）
-        const customSkills = config.get('skills', []);
+        // 3. 从 custom-skills.json 加载用户自定义 Skill
+        const customSkills = await this.userDataManager.readJSON(...CUSTOM_SKILLS_FILE) ?? [];
         for (const custom of customSkills) {
             // 确保自定义 Skill 不覆盖内置预设
             if (this.isPresetName(custom.name)) {
@@ -305,14 +316,16 @@ class SkillRegistry {
         this._onDidChange.fire();
     }
     /**
-     * 持久化自定义 Skill 和预设 Skill 的 enabled 状态到 workspace config
+     * 持久化自定义 Skill 和预设 Skill 的 enabled 状态到文件存储
+     *
+     * - custom-skills.json: 所有 category=custom 的 Skill
+     * - preset-overrides.json: 预设 Skill 与默认值不同的 enabled 状态
      */
     async saveSkills() {
-        const config = vscode.workspace.getConfiguration('browserAgent');
-        // 保存自定义 Skill
+        // 保存自定义 Skill 到 custom-skills.json
         const customSkills = this.getAllCustom();
-        await config.update('skills', customSkills, vscode.ConfigurationTarget.Workspace);
-        // 保存预设 Skill 的 enabled 状态覆盖
+        await this.userDataManager.writeJSON(customSkills, ...CUSTOM_SKILLS_FILE);
+        // 保存预设 Skill 的 enabled 状态覆盖到 preset-overrides.json
         const presetOverrides = {};
         for (const preset of PRESET_SKILLS) {
             const current = this.skills.get(preset.name);
@@ -320,8 +333,8 @@ class SkillRegistry {
                 presetOverrides[preset.name] = current.enabled;
             }
         }
-        await config.update('skillPresetEnabled', presetOverrides, vscode.ConfigurationTarget.Workspace);
-        this.outputChannel.appendLine(`[SkillRegistry] 已保存 ${customSkills.length} 个自定义 Skill`);
+        await this.userDataManager.writeJSON(presetOverrides, ...PRESET_OVERRIDES_FILE);
+        this.outputChannel.appendLine(`[SkillRegistry] 已保存 ${customSkills.length} 个自定义 Skill 到 custom-skills.json`);
     }
     /**
      * 获取所有 Skill 列表
@@ -413,6 +426,51 @@ class SkillRegistry {
      */
     isPresetName(name) {
         return PRESET_SKILLS.some((s) => s.name === name);
+    }
+    /**
+     * 从旧 workspace config 迁移数据到 UserDataManager 文件存储
+     *
+     * 迁移条件：custom-skills.json 文件不存在（说明从未使用过文件存储）
+     * 且 workspace config 中存在 browserAgent.skills 或 browserAgent.skillPresetEnabled 数据。
+     *
+     * 迁移完成后清除旧 workspace config 数据，确保只迁移一次。
+     */
+    async migrateFromWorkspaceConfig() {
+        // 如果文件存储已有数据，跳过迁移
+        const hasCustomSkillsFile = await this.userDataManager.exists(...CUSTOM_SKILLS_FILE);
+        const hasPresetOverridesFile = await this.userDataManager.exists(...PRESET_OVERRIDES_FILE);
+        if (hasCustomSkillsFile || hasPresetOverridesFile) {
+            return;
+        }
+        const config = vscode.workspace.getConfiguration('browserAgent');
+        const oldCustomSkills = config.get('skills', []);
+        const oldPresetOverrides = config.get('skillPresetEnabled', {});
+        const hasOldData = oldCustomSkills.length > 0 ||
+            Object.keys(oldPresetOverrides).length > 0;
+        if (!hasOldData) {
+            return;
+        }
+        this.outputChannel.appendLine(`[SkillRegistry] 检测到旧 workspace config 数据，开始迁移到文件存储...`);
+        try {
+            // 迁移自定义 Skill
+            if (oldCustomSkills.length > 0) {
+                await this.userDataManager.writeJSON(oldCustomSkills, ...CUSTOM_SKILLS_FILE);
+                this.outputChannel.appendLine(`[SkillRegistry] 已迁移 ${oldCustomSkills.length} 个自定义 Skill 到 custom-skills.json`);
+            }
+            // 迁移预设开关覆盖
+            if (Object.keys(oldPresetOverrides).length > 0) {
+                await this.userDataManager.writeJSON(oldPresetOverrides, ...PRESET_OVERRIDES_FILE);
+                this.outputChannel.appendLine(`[SkillRegistry] 已迁移预设开关覆盖到 preset-overrides.json`);
+            }
+            // 清除旧 workspace config 数据
+            await config.update('skills', undefined, vscode.ConfigurationTarget.Workspace);
+            await config.update('skillPresetEnabled', undefined, vscode.ConfigurationTarget.Workspace);
+            this.outputChannel.appendLine(`[SkillRegistry] 旧 workspace config 数据已清除，迁移完成`);
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.outputChannel.appendLine(`[SkillRegistry] 迁移失败（将继续使用旧数据源）: ${message}`);
+        }
     }
 }
 exports.SkillRegistry = SkillRegistry;
