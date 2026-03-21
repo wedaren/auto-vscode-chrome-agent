@@ -1377,8 +1377,10 @@
       "id": "evo_v20_001",
       "type": "coding",
       "title": "McpClient 配置增强：VSCode settings 可配置 MCP 启动参数 + 完整工具 Schema 存储",
-      "status": "pending",
-      "depends_on": ["evo_v19_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v19_005"
+      ],
       "acceptance": "package.json 中声明 browserAgent.mcp.* 配置项（browserUrl / autoConnect / headless / slim / extraArgs / noUsageStatistics）；McpClient.connect() 读取 VSCode settings 动态构建 npx 启动参数列表；listTools() 返回包含 inputSchema 的完整工具信息（不再仅存 name+description）；_discoveredTools 类型扩展为含 inputSchema 的接口",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'browserAgent.mcp' package.json && grep -q 'browserUrl\\|autoConnect\\|headless' src/mcp-client.ts && grep -q 'inputSchema' src/mcp-client.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
@@ -1388,7 +1390,9 @@
       "type": "coding",
       "title": "McpClient 子进程健壮性：崩溃自动重启 + 健康检查 + 连接状态生命周期管理",
       "status": "pending",
-      "depends_on": ["evo_v20_001"],
+      "depends_on": [
+        "evo_v20_001"
+      ],
       "acceptance": "McpClient 实现 restartOnCrash 逻辑（transport close 事件监听 → 自动 reconnect，最多 3 次指数退避重试）；周期性健康检查（每 60s 调用 listTools 验证子进程存活）；dispose() 清理所有定时器和监听器；日志输出完整的生命周期事件",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'restartOnCrash\\|autoRestart\\|reconnect' src/mcp-client.ts && grep -q 'healthCheck\\|health_check\\|HEALTH' src/mcp-client.ts && grep -q 'MAX_RESTART\\|maxRestart\\|retryCount' src/mcp-client.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
@@ -1398,7 +1402,9 @@
       "type": "coding",
       "title": "AgentLoop 工具 Schema 增强：将 MCP 工具的完整 inputSchema 注入 LLM 系统提示词",
       "status": "pending",
-      "depends_on": ["evo_v20_001"],
+      "depends_on": [
+        "evo_v20_001"
+      ],
       "acceptance": "agent-loop.ts 的 getToolDescriptions() 对 MCP 工具渲染完整参数签名（参数名、类型、是否必填、描述）；LLM 系统提示词中能看到如 'navigate_page(url: string [必填]) — 导航到指定 URL' 格式的工具描述；非 MCP 工具（browser_*）保持现有格式不受影响",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'inputSchema\\|input_schema\\|parameterSchema' src/agent-loop.ts && grep -q 'required\\|必填' src/agent-loop.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
@@ -1408,7 +1414,10 @@
       "type": "coding",
       "title": "5 个 DevTools MCP 专属预设 Skill：性能审计 / 网络分析 / Lighthouse / 多页面工作流 / DOM 快照",
       "status": "pending",
-      "depends_on": ["evo_v20_001", "evo_v20_003"],
+      "depends_on": [
+        "evo_v20_001",
+        "evo_v20_003"
+      ],
       "acceptance": "skill-registry.ts 新增 5 个 preset Skill：devtools_performance_audit（start_trace → stop_trace → analyze_insight）、devtools_network_analysis（list_network_requests → get_network_request）、devtools_lighthouse_audit（lighthouse_audit → take_screenshot）、devtools_multi_page_workflow（new_page → navigate_page → evaluate_script → close_page）、devtools_dom_snapshot（take_snapshot → take_screenshot）；skill-runner.ts 工具路由支持 MCP 工具名（非 browser_* 前缀直接走 McpClient）",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'devtools_performance_audit' src/skill-registry.ts && grep -q 'devtools_network_analysis' src/skill-registry.ts && grep -q 'devtools_lighthouse_audit' src/skill-registry.ts && grep -q 'devtools_multi_page_workflow' src/skill-registry.ts && grep -q 'devtools_dom_snapshot' src/skill-registry.ts && grep -q 'mcpClient\\|mcp_client\\|McpClient' src/skill-runner.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
@@ -1418,7 +1427,12 @@
       "type": "validation",
       "title": "DevTools MCP 深度集成全量验收：配置 + Schema + 健壮性 + 5 个 Skill + 双端构建",
       "status": "pending",
-      "depends_on": ["evo_v20_001", "evo_v20_002", "evo_v20_003", "evo_v20_004"],
+      "depends_on": [
+        "evo_v20_001",
+        "evo_v20_002",
+        "evo_v20_003",
+        "evo_v20_004"
+      ],
       "acceptance": "VSCode 插件编译通过 + Chrome 插件构建通过；package.json 有 browserAgent.mcp.* 配置声明；McpClient 支持可配置启动参数 + 崩溃自动重启；AgentLoop 系统提示词含完整 MCP 工具参数签名；5 个 DevTools MCP Skill 均已注册且可被 run_skill 调用",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -q 'browserAgent.mcp' package.json && grep -q 'inputSchema' src/mcp-client.ts && grep -q 'restartOnCrash\\|autoRestart\\|reconnect' src/mcp-client.ts && grep -q 'inputSchema\\|parameterSchema' src/agent-loop.ts && grep -c 'devtools_' src/skill-registry.ts | xargs -I{} test {} -ge 5 && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
