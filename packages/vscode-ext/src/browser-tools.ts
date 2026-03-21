@@ -56,6 +56,11 @@ const TOOL_MAPPINGS: Record<string, ToolMapping> = {
   browser_get_attribute: { actionType: 'getAttribute' },
   browser_wait: { actionType: 'waitForElement' },
   browser_highlight: { actionType: 'highlight', argMapping: { color: 'highlightColor', duration: 'highlightDuration' } },
+  browser_query_selector_all: { actionType: 'querySelectorAll', argMapping: { limit: 'maxCount' } },
+  browser_get_value: { actionType: 'getValue' },
+  browser_evaluate: { actionType: 'evaluate', argMapping: { code: 'expression' } },
+  browser_select_option: { actionType: 'selectOption', argMapping: { value: 'optionValue', text: 'optionText' } },
+  browser_get_links: { actionType: 'getLinks', argMapping: { limit: 'maxCount' } },
 };
 
 /** 完整的工具定义列表 */
@@ -185,6 +190,66 @@ const BROWSER_TOOLS: BrowserToolDef[] = [
         duration: { type: 'number', description: 'How long the highlight lasts in milliseconds (default: 2000)' },
       },
       required: ['selector'],
+    },
+  },
+  // ── 以下为 evo_v18_001 新增的 5 个工具 ──
+  {
+    name: 'browser_query_selector_all',
+    description: 'Query all DOM elements matching a CSS selector and return an array of their key attributes (tagName, id, className, textContent, href, src, value). Returns at most `limit` elements (default 50).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector to match elements' },
+        limit: { type: 'number', description: 'Maximum number of elements to return (default: 50)' },
+      },
+      required: ['selector'],
+    },
+  },
+  {
+    name: 'browser_get_value',
+    description: 'Get the current value of an input, textarea, or select element.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector to locate the input/textarea/select element' },
+      },
+      required: ['selector'],
+    },
+  },
+  {
+    name: 'browser_evaluate',
+    description: 'Execute arbitrary JavaScript code in the page context and return the result. The code is evaluated via `new Function(code)()`. Use for reading computed styles, calling page APIs, or any logic not covered by other tools. Return value is JSON-serialized.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'JavaScript code to evaluate. The last expression is returned as the result.' },
+      },
+      required: ['code'],
+    },
+  },
+  {
+    name: 'browser_select_option',
+    description: 'Select an option in a <select> dropdown element. Specify the target option by its value attribute or visible text. Fires change event after selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector to locate the <select> element' },
+        value: { type: 'string', description: 'The value attribute of the option to select' },
+        text: { type: 'string', description: 'The visible text of the option to select (used when value is not provided)' },
+      },
+      required: ['selector'],
+    },
+  },
+  {
+    name: 'browser_get_links',
+    description: 'Extract all hyperlinks (<a> elements with href) from the current page. Returns an array of { href, text } objects. Useful for discovering navigation targets, building sitemaps, or finding specific links.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'Optional CSS scope selector to limit link extraction (default: whole page, i.e. "a[href]")' },
+        limit: { type: 'number', description: 'Maximum number of links to return (default: 100)' },
+      },
+      required: [],
     },
   },
 ];

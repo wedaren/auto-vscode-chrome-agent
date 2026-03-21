@@ -15,7 +15,10 @@ export type ActionType =
   | 'getValue'
   | 'screenshot'
   | 'waitForElement'
-  | 'highlight';
+  | 'highlight'
+  | 'evaluate'
+  | 'selectOption'
+  | 'getLinks';
 
 /** 滚动模式 */
 export type ScrollMode = 'to-top' | 'to-bottom' | 'by-pixels' | 'to-element';
@@ -44,6 +47,14 @@ export interface BrowserAction {
   highlightColor?: string;
   /** highlight 持续时间毫秒数（默认 2000） */
   highlightDuration?: number;
+  /** evaluate 操作要执行的 JavaScript 表达式 */
+  expression?: string;
+  /** selectOption 操作要选择的 option value 属性 */
+  optionValue?: string;
+  /** selectOption 操作要选择的 option 可见文本 */
+  optionText?: string;
+  /** getLinks / querySelectorAll 返回的最大元素数 */
+  maxCount?: number;
 }
 
 /** 操作执行结果 */
@@ -231,8 +242,8 @@ function executeQuerySelectorAll(action: BrowserAction): ActionResult {
   }
   const elements = document.querySelectorAll(action.selector);
   const results: ElementInfo[] = [];
-  // 最多返回 50 个元素，防止数据过大
-  const limit = Math.min(elements.length, 50);
+  // 最多返回 maxCount 个元素（默认 50），防止数据过大
+  const limit = Math.min(elements.length, action.maxCount || 50);
   for (let i = 0; i < limit; i++) {
     results.push(extractElementInfo(elements[i]));
   }
@@ -360,6 +371,124 @@ function executeHighlight(action: BrowserAction): ActionResult {
 }
 
 /**
+ * 执行 evaluate 操作
+ * 在页面上下文中执行任意 JavaScript 代码并返回结果
+ */
+async function executeEvaluate(action: BrowserAction): Promise<ActionResult> {
+  if (!action.expression) {
+    return { success: false, error: 'evaluate 操作需要 expression 参数' };
+  }
+  try {
+    // 使用 new Function 以便支持 return 语句
+    // eslint-disable-next-line no-new-func
+    const fn = new Function(action.expression);
+    const result = await fn();
+    // 安全序列化：undefined → null，其余 JSON 化
+    const serialized = result === undefined ? null : JSON.parse(JSON.stringify(result));
+    return { success: true, data: { result: serialized } };
+  } catch (err) {
+    return {
+      success: false,
+      error: `evaluate 执行失败: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * 执行 selectOption 操作
+ * 通过 value 或 text 选择 <select> 下拉框选项，触发 change 事件
+ */
+function executeSelectOption(action: BrowserAction): ActionResult {
+  if (!action.selector) {
+    return { success: false, error: 'selectOption 操作需要 selector 参数' };
+  }
+  const el = document.querySelector(action.selector) as HTMLSelectElement | null;
+  if (!el) {
+    return { success: false, error: `未找到元素: ${action.selector}` };
+  }
+  if (el.tagName.toLowerCase() !== 'select') {
+    return { success: false, error: `目标元素不是 <select>，而是 <${el.tagName.toLowerCase()}>` };
+  }
+
+  let matched = false;
+  const options = el.options;
+
+  if (action.optionValue !== undefined) {
+    // 按 value 匹配
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].value === action.optionValue) {
+        el.selectedIndex = i;
+        matched = true;
+        break;
+      }
+    }
+  } else if (action.optionText !== undefined) {
+    // 按可见文本匹配
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].text.trim() === action.optionText.trim()) {
+        el.selectedIndex = i;
+        matched = true;
+        break;
+      }
+    }
+  } else {
+    return { success: false, error: 'selectOption 需要 optionValue 或 optionText 参数' };
+  }
+
+  if (!matched) {
+    return {
+      success: false,
+      error: `未找到匹配的选项: ${action.optionValue !== undefined ? `value="${action.optionValue}"` : `text="${action.optionText}"`}`,
+    };
+  }
+
+  // 触发 change 事件
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+
+  const selected = options[el.selectedIndex];
+  return {
+    success: true,
+    data: {
+      selectedIndex: el.selectedIndex,
+      selectedValue: selected.value,
+      selectedText: selected.text.trim(),
+    },
+  };
+}
+
+/**
+ * 执行 getLinks 操作
+ * 提取页面中所有含 href 的 <a> 元素，返回 { href, text } 数组
+ */
+function executeGetLinks(action: BrowserAction): ActionResult {
+  const maxCount = action.maxCount || 100;
+  const scope = action.selector
+    ? document.querySelector(action.selector)
+    : document;
+
+  if (action.selector && !scope) {
+    return { success: false, error: `未找到范围元素: ${action.selector}` };
+  }
+
+  const anchors = (scope || document).querySelectorAll('a[href]');
+  const links: Array<{ href: string; text: string }> = [];
+  const limit = Math.min(anchors.length, maxCount);
+
+  for (let i = 0; i < limit; i++) {
+    const a = anchors[i] as HTMLAnchorElement;
+    links.push({
+      href: a.href,
+      text: (a.textContent || '').trim().slice(0, 200),
+    });
+  }
+
+  return {
+    success: true,
+    data: { totalFound: anchors.length, returned: links.length, links },
+  };
+}
+
+/**
  * 主执行入口 — 根据 action.type 分发到对应执行函数
  *
  * 注意：screenshot 操作需要在 background script 中使用 chrome.tabs.captureVisibleTab，
@@ -409,6 +538,15 @@ export async function executeAction(action: BrowserAction): Promise<ActionResult
 
       case 'highlight':
         return executeHighlight(action);
+
+      case 'evaluate':
+        return executeEvaluate(action);
+
+      case 'selectOption':
+        return executeSelectOption(action);
+
+      case 'getLinks':
+        return executeGetLinks(action);
 
       default:
         return { success: false, error: `不支持的操作类型: ${(action as BrowserAction).type}` };
