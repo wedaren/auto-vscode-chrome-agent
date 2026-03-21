@@ -12,6 +12,7 @@ import { SkillRegistry } from './skill-registry';
 import { SkillRunner } from './skill-runner';
 import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
+import { LlmRequestCollector, LlmRequestDetail } from './llm-request-collector';
 
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
@@ -30,6 +31,9 @@ export class MessageHandler {
   private readonly skillRegistry?: SkillRegistry;
   private readonly skillRunner?: SkillRunner;
   private readonly outputChannel: vscode.OutputChannel;
+
+  /** LLM 请求细节采集器，记录每次 chat/agent 请求的完整链路数据 */
+  private readonly llmCollector = new LlmRequestCollector();
 
   /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
   private readonly activeChatTokens = new Map<WebSocket, vscode.CancellationTokenSource>();
@@ -188,6 +192,15 @@ export class MessageHandler {
       // 注册到 Agent 循环 TreeView（实时可视化）
       const runId = startAgentRun(text);
 
+      // 采集 LLM 请求细节
+      const modelInfo = this.lmService.currentModel;
+      const collectId = this.llmCollector.startRequest(
+        'agent',
+        modelInfo?.name ?? modelInfo?.id ?? 'unknown',
+        systemPrompt,
+      );
+      this.llmCollector.addMessage(collectId, 'user', text);
+
       try {
         const agentLoop = new AgentLoop(
           this.lmService,
@@ -218,6 +231,15 @@ export class MessageHandler {
 
               // 同步追加到 Agent 循环 TreeView（→ VSCode 调试面板）
               addAgentStep(runId, step);
+
+              // 采集 Agent 步骤
+              this.llmCollector.addAgentStep(collectId, {
+                step: step.step,
+                type: step.type,
+                content: step.content,
+                toolName: step.toolName,
+                toolArgs: step.toolArgs,
+              });
             },
           },
           cts.token,
@@ -226,13 +248,19 @@ export class MessageHandler {
         // AgentLoop 完成，标记运行结束
         completeAgentRun(runId, 'completed');
 
-        // 发送 agent_complete 消息
+        // 结束采集：记录最终响应
+        this.llmCollector.addMessage(collectId, 'assistant', result.finalAnswer);
+        this.llmCollector.endRequest(collectId, result.finalAnswer);
+        const llmDetail = this.llmCollector.getDetail(collectId);
+
+        // 发送 agent_complete 消息（附加 llmDetail）
         this.wsServer.send(ws, {
           type: 'agent_complete',
           payload: {
             finalAnswer: result.finalAnswer,
             steps: result.steps,
             totalSteps: result.totalSteps,
+            llmDetail,
           },
           sessionId: msg.sessionId,
         });
@@ -245,6 +273,7 @@ export class MessageHandler {
         if (isCancelled) {
           // 被取消时标记为 cancelled
           completeAgentRun(runId, 'cancelled');
+          this.llmCollector.endRequest(collectId, '', undefined, true);
 
           this.wsServer.send(ws, {
             type: 'agent_complete',
@@ -263,6 +292,7 @@ export class MessageHandler {
           // 错误时标记为 error
           const errMsg = err instanceof Error ? err.message : String(err);
           completeAgentRun(runId, 'error', errMsg);
+          this.llmCollector.endRequest(collectId, '', errMsg);
 
           this.wsServer.send(ws, {
             type: 'agent_complete',
@@ -301,6 +331,15 @@ export class MessageHandler {
       const cts = new vscode.CancellationTokenSource();
       this.activeChatTokens.set(ws, cts);
 
+      // 采集 LLM 请求细节
+      const modelInfo = this.lmService.currentModel;
+      const collectId = this.llmCollector.startRequest(
+        'stream',
+        modelInfo?.name ?? modelInfo?.id ?? 'unknown',
+        systemPrompt,
+      );
+      this.llmCollector.addMessage(collectId, 'user', text);
+
       try {
         const fullText = await this.lmService.sendMessageStreaming(
           text,
@@ -315,26 +354,41 @@ export class MessageHandler {
           cts.token,
         );
 
+        // 结束采集：记录最终响应
+        this.llmCollector.addMessage(collectId, 'assistant', fullText);
+        this.llmCollector.endRequest(collectId, fullText);
+        const llmDetail = this.llmCollector.getDetail(collectId);
+
         this.wsServer.send(ws, {
           type: 'chat_response_end',
-          payload: { fullText },
+          payload: { fullText, llmDetail },
           sessionId: msg.sessionId,
         });
       } catch (err) {
         const isCancelled = cts.token.isCancellationRequested;
+        const errMsg = isCancelled ? '' : (err instanceof Error ? err.message : String(err));
+
+        // 结束采集：记录错误
+        this.llmCollector.endRequest(
+          collectId,
+          '',
+          isCancelled ? undefined : errMsg,
+          isCancelled,
+        );
+
         this.wsServer.send(ws, {
           type: 'chat_response_end',
           payload: {
             fullText: isCancelled
               ? ''
-              : `错误: ${err instanceof Error ? err.message : String(err)}`,
+              : `错误: ${errMsg}`,
             cancelled: isCancelled,
           },
           sessionId: msg.sessionId,
         });
         if (!isCancelled) {
           this.outputChannel.appendLine(
-            `[BrowserAgent] chat 流式响应错误: ${err instanceof Error ? err.message : String(err)}`,
+            `[BrowserAgent] chat 流式响应错误: ${errMsg}`,
           );
         }
       } finally {
@@ -487,6 +541,13 @@ export class MessageHandler {
         );
       }
     })();
+  }
+
+  /**
+   * 获取 LLM 请求采集器实例（供外部读取请求细节）
+   */
+  getLlmCollector(): LlmRequestCollector {
+    return this.llmCollector;
   }
 
   /**
