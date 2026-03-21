@@ -10,11 +10,13 @@ import { ConnectionTreeDataProvider } from './connection-tree';
 import { MessageTreeDataProvider, MessageDocumentProvider, MESSAGE_SCHEME, getCapturedMessageById } from './message-tree';
 import { AgentTreeDataProvider } from './agent-tree';
 import { BrowserToolProvider } from './browser-tools';
+import { SkillRegistry } from './skill-registry';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
 let mcpClient: McpClient | undefined;
 let browserToolProvider: BrowserToolProvider | undefined;
+let skillRegistry: SkillRegistry | undefined;
 let reportGenerator: ReportGenerator | undefined;
 let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
@@ -40,6 +42,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
+
+  // 初始化 Skill 注册表（加载预设 + 自定义 Skill）
+  skillRegistry = new SkillRegistry(outputChannel);
+  skillRegistry.loadSkills();
+  outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
 
   // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider 以支持多工具源 AgentLoop 模式）
   const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider);
@@ -115,6 +122,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
+    { dispose: () => skillRegistry?.dispose() },
     { dispose: () => browserToolProvider?.dispose() },
     { dispose: () => wsServer?.dispose() },
     { dispose: () => { void mcpClient?.dispose(); } },
@@ -127,6 +135,8 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   reportGenerator?.cancel();
   reportGenerator = undefined;
+  skillRegistry?.dispose();
+  skillRegistry = undefined;
   browserToolProvider?.dispose();
   browserToolProvider = undefined;
   connectionTree?.dispose();
