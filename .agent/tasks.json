@@ -354,7 +354,7 @@
       "id": "evo_v3_002",
       "type": "coding",
       "title": "VSCode: MessageHandler 集成 AgentLoop，新增 agent_step/agent_complete 消息类型",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v3_001"
       ],

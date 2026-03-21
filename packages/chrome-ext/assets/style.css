@@ -170,3 +170,42 @@ body {
 .typing-dot:nth-child(3) {
   animation-delay: 0.3s;
 }
+
+/* === AgentStepView 动画 === */
+
+/* 脉冲圆点 — 步骤执行中指示 */
+@keyframes agent-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.agent-step-pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: agent-pulse 1.4s ease-in-out infinite;
+}
+
+/* 旋转加载器 — Agent 全局运行指示 */
+@keyframes agent-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.agent-step-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #d1d5db;
+  border-top-color: #9ca3af;
+  border-radius: 50%;
+  animation: agent-spin 0.8s linear infinite;
+}
