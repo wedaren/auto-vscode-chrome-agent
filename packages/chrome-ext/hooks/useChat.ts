@@ -192,169 +192,194 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
     }
   }, [isStreaming, storageDelete, listConversations, loadConversation]);
 
-  /** 处理来自 WebSocket 的聊天相关消息 */
+  /** 处理来自 WebSocket 的聊天相关消息（try-catch 防护，防止单条消息处理失败导致整个 Hook 崩溃） */
   const handleChatMessage = useCallback((msg: BridgeMessage) => {
-    switch (msg.type) {
-      case 'chat_response': {
-        // 兼容旧式全量响应
-        setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
-        break;
-      }
-      case 'chat_response_chunk': {
-        // 流式响应：增量追加到当前 assistant message
-        const chunkPayload = msg.payload as { text: string; done: boolean };
-        const fragment = chunkPayload?.text ?? '';
+    try {
+      switch (msg.type) {
+        case 'chat_response': {
+          // 兼容旧式全量响应
+          setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
+          break;
+        }
+        case 'chat_response_chunk': {
+          // 流式响应：增量追加到当前 assistant message
+          const chunkPayload = msg.payload as { text: string; done: boolean };
+          const fragment = chunkPayload?.text ?? '';
 
-        if (!streamingMsgIdRef.current) {
-          // 首个 chunk：创建新的 assistant message
-          const newMsg = createMessage('assistant', fragment);
-          streamingMsgIdRef.current = newMsg.id;
-          setIsStreaming(true);
-          setMessages((prev) => [...prev, newMsg]);
-        } else {
-          // 后续 chunk：追加到已有消息
+          if (!streamingMsgIdRef.current) {
+            // 首个 chunk：创建新的 assistant message
+            const newMsg = createMessage('assistant', fragment);
+            streamingMsgIdRef.current = newMsg.id;
+            setIsStreaming(true);
+            setMessages((prev) => [...prev, newMsg]);
+          } else {
+            // 后续 chunk：追加到已有消息
+            const targetId = streamingMsgIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId ? { ...m, content: m.content + fragment } : m,
+              ),
+            );
+          }
+          break;
+        }
+        case 'chat_response_end': {
+          // 流式结束：标记完成，清除流式状态
+          const endPayload = msg.payload as { fullText?: string; cancelled?: boolean };
           const targetId = streamingMsgIdRef.current;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === targetId ? { ...m, content: m.content + fragment } : m,
-            ),
+
+          if (targetId && typeof endPayload?.fullText === 'string') {
+            // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId ? { ...m, content: endPayload.fullText! } : m,
+              ),
+            );
+          }
+
+          streamingMsgIdRef.current = null;
+          setIsStreaming(false);
+          console.log(
+            '[useChat] 流式响应结束',
+            endPayload?.cancelled ? '(已取消)' : '',
           );
+          break;
         }
-        break;
+        case 'echo': {
+          // 服务端回显消息
+          setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
+          break;
+        }
+
+        case 'agent_step': {
+          // Agent ReAct 循环步骤：追加到当前 assistant message 的 steps 数组
+          const stepPayload = msg.payload as AgentStep;
+          if (!stepPayload) break;
+
+          if (!streamingMsgIdRef.current) {
+            // 首个 agent_step：创建新的 agent 模式 assistant message
+            const newMsg = createMessage('assistant', '', {
+              isAgentMode: true,
+              steps: [stepPayload],
+            });
+            streamingMsgIdRef.current = newMsg.id;
+            setIsStreaming(true);
+            setMessages((prev) => [...prev, newMsg]);
+          } else {
+            // 后续 agent_step：追加步骤到已有消息的 steps 数组
+            const targetId = streamingMsgIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId
+                  ? {
+                      ...m,
+                      isAgentMode: true,
+                      steps: [...(m.steps ?? []), stepPayload],
+                    }
+                  : m,
+              ),
+            );
+          }
+          // isStreaming 保持 true，Agent 仍在执行
+          break;
+        }
+
+        case 'agent_complete': {
+          // Agent 循环结束：设置 finalAnswer 为 content，标记 isStreaming=false
+          const completePayload = msg.payload as { content?: string; cancelled?: boolean };
+          const targetId = streamingMsgIdRef.current;
+
+          if (targetId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === targetId
+                  ? { ...m, content: completePayload?.content ?? m.content }
+                  : m,
+              ),
+            );
+          } else if (completePayload?.content) {
+            // 没有对应的 streaming message（异常恢复）：直接创建新消息
+            setMessages((prev) => [
+              ...prev,
+              createMessage('assistant', completePayload.content!, { isAgentMode: true }),
+            ]);
+          }
+
+          streamingMsgIdRef.current = null;
+          setIsStreaming(false);
+          console.log(
+            '[useChat] Agent 循环结束',
+            completePayload?.cancelled ? '(已取消)' : '',
+          );
+          break;
+        }
       }
-      case 'chat_response_end': {
-        // 流式结束：标记完成，清除流式状态
-        const endPayload = msg.payload as { fullText?: string; cancelled?: boolean };
-        const targetId = streamingMsgIdRef.current;
-
-        if (targetId && typeof endPayload?.fullText === 'string') {
-          // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === targetId ? { ...m, content: endPayload.fullText! } : m,
-            ),
-          );
-        }
-
+    } catch (err) {
+      console.error('[useChat] handleChatMessage 处理消息时出错:', err, '消息类型:', msg.type);
+      // 确保异常不会导致流式状态锁死
+      if (streamingMsgIdRef.current) {
         streamingMsgIdRef.current = null;
         setIsStreaming(false);
-        console.log(
-          '[useChat] 流式响应结束',
-          endPayload?.cancelled ? '(已取消)' : '',
-        );
-        break;
-      }
-      case 'echo': {
-        // 服务端回显消息
-        setMessages((prev) => [...prev, createMessage('assistant', String(msg.payload ?? ''))]);
-        break;
-      }
-
-      case 'agent_step': {
-        // Agent ReAct 循环步骤：追加到当前 assistant message 的 steps 数组
-        const stepPayload = msg.payload as AgentStep;
-        if (!stepPayload) break;
-
-        if (!streamingMsgIdRef.current) {
-          // 首个 agent_step：创建新的 agent 模式 assistant message
-          const newMsg = createMessage('assistant', '', {
-            isAgentMode: true,
-            steps: [stepPayload],
-          });
-          streamingMsgIdRef.current = newMsg.id;
-          setIsStreaming(true);
-          setMessages((prev) => [...prev, newMsg]);
-        } else {
-          // 后续 agent_step：追加步骤到已有消息的 steps 数组
-          const targetId = streamingMsgIdRef.current;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === targetId
-                ? {
-                    ...m,
-                    isAgentMode: true,
-                    steps: [...(m.steps ?? []), stepPayload],
-                  }
-                : m,
-            ),
-          );
-        }
-        // isStreaming 保持 true，Agent 仍在执行
-        break;
-      }
-
-      case 'agent_complete': {
-        // Agent 循环结束：设置 finalAnswer 为 content，标记 isStreaming=false
-        const completePayload = msg.payload as { content?: string; cancelled?: boolean };
-        const targetId = streamingMsgIdRef.current;
-
-        if (targetId) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === targetId
-                ? { ...m, content: completePayload?.content ?? m.content }
-                : m,
-            ),
-          );
-        } else if (completePayload?.content) {
-          // 没有对应的 streaming message（异常恢复）：直接创建新消息
-          setMessages((prev) => [
-            ...prev,
-            createMessage('assistant', completePayload.content!, { isAgentMode: true }),
-          ]);
-        }
-
-        streamingMsgIdRef.current = null;
-        setIsStreaming(false);
-        console.log(
-          '[useChat] Agent 循环结束',
-          completePayload?.cancelled ? '(已取消)' : '',
-        );
-        break;
       }
     }
   }, []);
 
-  /** 发送用户消息 */
+  /** 发送用户消息（try-catch 防护，防止发送过程异常导致 UI 卡死） */
   const handleSendMessage = useCallback(
     (content: string, context?: ChatContext) => {
-      // 流式生成中不允许发送新消息
-      if (isStreaming) return;
+      try {
+        // 流式生成中不允许发送新消息
+        if (isStreaming) return;
 
-      setMessages((prev) => [...prev, createMessage('user', content)]);
+        setMessages((prev) => [...prev, createMessage('user', content)]);
 
-      // 进入等待状态（TypingIndicator 立即显示）
-      setIsStreaming(true);
+        // 进入等待状态（TypingIndicator 立即显示）
+        setIsStreaming(true);
 
-      // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
-      const sent = sendMessage('chat', {
-        text: content,
-        context: context
-          ? {
-              url: context.url,
-              title: context.title,
-              selectedText: context.selectedText,
-            }
-          : undefined,
-      });
+        // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
+        const sent = sendMessage('chat', {
+          text: content,
+          context: context
+            ? {
+                url: context.url,
+                title: context.title,
+                selectedText: context.selectedText,
+              }
+            : undefined,
+        });
 
-      if (!sent) {
-        // 发送失败：恢复 isStreaming 状态并显示错误提示
+        if (!sent) {
+          // 发送失败：恢复 isStreaming 状态并显示错误提示
+          setIsStreaming(false);
+          setMessages((prev) => [
+            ...prev,
+            createMessage('assistant', '\u26A0\uFE0F 消息发送失败，请检查 WebSocket 连接状态。'),
+          ]);
+        }
+      } catch (err) {
+        console.error('[useChat] handleSendMessage 发送消息时出错:', err);
         setIsStreaming(false);
         setMessages((prev) => [
           ...prev,
-          createMessage('assistant', '\u26A0\uFE0F 消息发送失败，请检查 WebSocket 连接状态。'),
+          createMessage('assistant', '\u26A0\uFE0F 发送消息时发生异常，请重试。'),
         ]);
       }
     },
     [isStreaming, sendMessage],
   );
 
-  /** 取消当前流式生成 */
+  /** 取消当前流式生成（try-catch 防护） */
   const handleCancel = useCallback(() => {
-    if (isStreaming) {
-      sendMessage('cancel_chat', null);
-      console.log('[useChat] 已发送 cancel_chat');
+    try {
+      if (isStreaming) {
+        sendMessage('cancel_chat', null);
+        console.log('[useChat] 已发送 cancel_chat');
+      }
+    } catch (err) {
+      console.error('[useChat] handleCancel 取消生成时出错:', err);
+      // 即使发送 cancel 失败，也确保 UI 状态恢复
+      streamingMsgIdRef.current = null;
+      setIsStreaming(false);
     }
   }, [isStreaming, sendMessage]);
 

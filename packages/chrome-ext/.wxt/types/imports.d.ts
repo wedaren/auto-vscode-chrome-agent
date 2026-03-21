@@ -5,6 +5,7 @@ declare global {
   const ChatInput: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ChatInput')['default']
   const ContentScriptContext: typeof import('wxt/client')['ContentScriptContext']
   const ConversationList: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ConversationList')['default']
+  const ErrorBoundary: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ErrorBoundary')['default']
   const InvalidMatchPattern: typeof import('wxt/sandbox')['InvalidMatchPattern']
   const MatchPattern: typeof import('wxt/sandbox')['MatchPattern']
   const MessageBubble: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')['default']
@@ -48,6 +49,9 @@ declare global {
   // @ts-ignore
   export type { AgentStep, AgentStepViewProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/AgentStepView'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/AgentStepView')
+  // @ts-ignore
+  export type { ErrorBoundary, ErrorLogEntry } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ErrorBoundary'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ErrorBoundary')
   // @ts-ignore
   export type { MessageBubbleProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')

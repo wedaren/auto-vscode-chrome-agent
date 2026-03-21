@@ -51,11 +51,15 @@ export function usePageContext(): UsePageContextReturn {
     }
   }, []);
 
-  // 监听来自 background 的上下文变化消息 + 初始化时主动拉取一次
+  // 监听来自 background 的上下文变化消息 + 初始化时主动拉取一次（try-catch 防护消息处理）
   useEffect(() => {
     const handleMessage = (message: { type: string; payload?: PageContext }) => {
-      if (CONTEXT_MESSAGE_TYPES.has(message.type) && message.payload) {
-        setPageContext(message.payload);
+      try {
+        if (CONTEXT_MESSAGE_TYPES.has(message.type) && message.payload) {
+          setPageContext(message.payload);
+        }
+      } catch (err) {
+        console.error('[usePageContext] 处理上下文消息时出错:', err);
       }
     };
     browser.runtime.onMessage.addListener(handleMessage);

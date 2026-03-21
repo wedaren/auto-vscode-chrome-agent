@@ -36,9 +36,14 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
   const isConnected = connectionState === 'connected';
 
-  /** 发送消息到 VSCode 侧 */
+  /** 发送消息到 VSCode 侧（try-catch 防护，防止序列化或发送异常导致调用方崩溃） */
   const sendMessage = useCallback((type: string, payload: unknown): boolean => {
-    return wsClientRef.current?.sendMessage(type, payload) ?? false;
+    try {
+      return wsClientRef.current?.sendMessage(type, payload) ?? false;
+    } catch (err) {
+      console.error('[useWebSocket] sendMessage 发送失败:', err, '类型:', type);
+      return false;
+    }
   }, []);
 
   /** 注册消息监听器，返回取消注册函数 */
@@ -64,14 +69,22 @@ export function useWebSocket(url: string): UseWebSocketReturn {
       setConnectionState(state);
     });
 
-    // 将 WsClient 消息分发给所有已注册的监听器 + tool bridge
+    // 将 WsClient 消息分发给所有已注册的监听器 + tool bridge（try-catch 防护每个 handler）
     const unsubMsg = client.onMessage((msg: BridgeMessage) => {
       // tool_execute 消息由 tool bridge 自动处理（异步，不阻塞）
-      toolBridgeHandler(msg);
+      try {
+        toolBridgeHandler(msg);
+      } catch (err) {
+        console.error('[useWebSocket] toolBridgeHandler 处理异常:', err);
+      }
 
       // 其他消息分发给所有已注册的监听器（聊天 UI 等）
       for (const handler of messageListenersRef.current) {
-        handler(msg);
+        try {
+          handler(msg);
+        } catch (err) {
+          console.error('[useWebSocket] 消息监听器处理异常:', err);
+        }
       }
     });
 

@@ -2,6 +2,7 @@
 // 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
 // 顶部 Tab 切换 Chat / Skills 两个视图
 // 空会话时显示 WelcomeScreen 引导页
+// 集成 ErrorBoundary 组件 + 全局错误拦截层（window.onerror / unhandledrejection）
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
@@ -10,6 +11,7 @@ import TypingIndicator from '../../components/TypingIndicator';
 import ConversationList from '../../components/ConversationList';
 import WelcomeScreen from '../../components/WelcomeScreen';
 import SkillPanel from '../../components/SkillPanel';
+import ErrorBoundary, { type ErrorLogEntry } from '../../components/ErrorBoundary';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
@@ -21,7 +23,77 @@ type ActiveTab = 'chat' | 'skills';
 /** WebSocket 服务端地址（VSCode 插件侧） */
 const WS_URL = 'ws://localhost:7777';
 
-export default function App() {
+/** 错误日志最大条目数 */
+const MAX_ERROR_LOG_SIZE = 50;
+
+/**
+ * AppRoot — 顶层包装组件，提供 ErrorBoundary + 全局错误拦截
+ * 拦截 window.onerror 和 unhandledrejection 异步错误并记录到 errorLog 状态
+ * ErrorBoundary 捕获组件渲染错误，崩溃时显示 fallback UI
+ * 恢复后保留当前会话 ID 和已持久化的消息
+ */
+export default function AppRoot() {
+  const [errorLog, setErrorLog] = useState<ErrorLogEntry[]>([]);
+
+  /** 添加错误日志条目（限制最大条目数） */
+  const addErrorLog = useCallback((entry: ErrorLogEntry) => {
+    setErrorLog((prev) => {
+      const next = [entry, ...prev];
+      return next.length > MAX_ERROR_LOG_SIZE ? next.slice(0, MAX_ERROR_LOG_SIZE) : next;
+    });
+    console.warn('[AppRoot] 错误已记录:', entry.source, entry.message);
+  }, []);
+
+  // 全局错误拦截：window.onerror（同步错误 / 资源加载错误）
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      addErrorLog({
+        timestamp: Date.now(),
+        source: 'global',
+        message: event.message || '未知全局错误',
+        stack: event.error?.stack,
+      });
+    };
+    window.addEventListener('error', handleGlobalError);
+    return () => window.removeEventListener('error', handleGlobalError);
+  }, [addErrorLog]);
+
+  // 全局错误拦截：unhandledrejection（未捕获的 Promise 拒绝）
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === 'string'
+            ? reason
+            : '未捕获的 Promise 拒绝';
+      const stack = reason instanceof Error ? reason.stack : undefined;
+
+      addErrorLog({
+        timestamp: Date.now(),
+        source: 'promise',
+        message,
+        stack,
+      });
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+  }, [addErrorLog]);
+
+  return (
+    <ErrorBoundary onError={addErrorLog}>
+      <AppContent errorLog={errorLog} />
+    </ErrorBoundary>
+  );
+}
+
+/** AppContent Props（接收 errorLog 供未来 Debug 面板使用） */
+interface AppContentProps {
+  errorLog: ErrorLogEntry[];
+}
+
+function AppContent({ errorLog: _errorLog }: AppContentProps) {
   // --- Hooks ---
   const { isConnected, connectionState, sendMessage, onMessage } = useWebSocket(WS_URL);
   const {
