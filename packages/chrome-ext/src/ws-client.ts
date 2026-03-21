@@ -3,7 +3,8 @@
 //
 // === 连接状态机 ===
 // disconnected → connecting → connected ⇄ reconnecting → failed
-// 心跳：每 15 秒发送 ping，10 秒内未收到 pong 则判定失效并触发重连
+// 心跳：每 15 秒发送 ping，10 秒内未收到 pong 或任何业务消息则判定失效并触发重连
+// 心跳容错：收到任何有效 BridgeMessage（不限于 pong）都会重置超时计时器
 // 重连：指数退避 1s→2s→4s→8s→...→max30s + 随机 jitter，最多 20 次
 //
 // === 支持的消息类型 ===
@@ -194,6 +195,10 @@ export class WsClient {
         // 更新最后活跃时间
         this._lastActiveTime = Date.now();
 
+        // ★ 心跳容错：收到任何有效业务消息时重置 pong 超时计时器
+        // 只要有数据流动就认为连接存活，避免 Agent 执行期间误判断连
+        this.resetPongTimeout();
+
         // 处理心跳 pong 响应（内部消息，不分发给外部 handler）
         if (bridgeMsg.type === 'heartbeat_pong' || bridgeMsg.type === 'pong') {
           this.handlePong();
@@ -305,27 +310,37 @@ export class WsClient {
     this.lastPingSentAt = Date.now();
     this.send({ type: 'heartbeat_ping', payload: { timestamp: this.lastPingSentAt }, sessionId: this.sessionId });
 
-    // 启动 pong 超时检测：heartbeatTimeout 内未收到 pong 则判定失效
-    if (this.pongTimeoutTimer) {
-      clearTimeout(this.pongTimeoutTimer);
-    }
-    this.pongTimeoutTimer = setTimeout(() => {
-      this.pongTimeoutTimer = null;
-      console.warn('[WsClient] 心跳超时，未收到 pong，判定连接失效');
-      this._latency = -1;
-      // 关闭当前连接，触发 reconnect
-      this.cleanup();
-      this.setState('reconnecting');
-      this.scheduleReconnect();
-    }, this.heartbeatTimeout);
+    // 启动 pong 超时检测（复用 resetPongTimeout 统一管理超时计时器）
+    this.resetPongTimeout();
   }
 
-  /** 处理 pong 响应：计算延迟、清除超时定时器 */
-  private handlePong(): void {
+  /**
+   * 重置 pong 超时计时器：收到任何有效业务消息时调用
+   * 只要有数据流动（不限于 pong），就认为连接存活，
+   * 避免 Agent 执行期间 VSCode 忙于 LLM 调用导致心跳超时误判断连
+   */
+  private resetPongTimeout(): void {
+    // 清除现有超时
     if (this.pongTimeoutTimer) {
       clearTimeout(this.pongTimeoutTimer);
       this.pongTimeoutTimer = null;
     }
+    // 仅在心跳运行中才重新启动超时计时器（连接断开后不再重启）
+    if (this.heartbeatTimer) {
+      this.pongTimeoutTimer = setTimeout(() => {
+        this.pongTimeoutTimer = null;
+        console.warn('[WsClient] 心跳超时，未收到 pong 或任何业务消息，判定连接失效');
+        this._latency = -1;
+        this.cleanup();
+        this.setState('reconnecting');
+        this.scheduleReconnect();
+      }, this.heartbeatTimeout);
+    }
+  }
+
+  /** 处理 pong 响应：计算延迟 + 重置超时计时器 */
+  private handlePong(): void {
+    this.resetPongTimeout();
     if (this.lastPingSentAt > 0) {
       this._latency = Date.now() - this.lastPingSentAt;
     }

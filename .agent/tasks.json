@@ -1090,7 +1090,7 @@
       "id": "evo_v15_003",
       "type": "coding",
       "title": "工具参数自动修正：tool-bridge.ts toAction 增加 type 操作 text→value 兼容映射 + browser-tools.ts 优化 browser_type 描述防止 LLM 混淆",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_001"
       ],
