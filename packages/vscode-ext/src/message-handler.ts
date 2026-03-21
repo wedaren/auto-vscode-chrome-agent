@@ -1,12 +1,13 @@
 // message-handler.ts — WebSocket 消息路由类，封装所有消息处理逻辑
 // 职责：list_models / select_model / chat / cancel_chat 消息路由、
 //       浏览器上下文→system prompt 构建、CancellationToken 生命周期管理、
-//       McpClient 已连接时自动切换为 AgentLoop（agent_step/agent_complete 推送）
+//       McpClient 或 BrowserToolProvider 可用时自动切换为 AgentLoop（agent_step/agent_complete 推送）
 import * as vscode from 'vscode';
 import { WebSocket } from 'ws';
 import { LmService } from './lm-service';
 import { WsServer, BridgeMessage } from './ws-server';
 import { McpClient } from './mcp-client';
+import { BrowserToolProvider } from './browser-tools';
 import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
 
@@ -14,14 +15,16 @@ import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
  *
- * 当 McpClient 已连接时，handleChat 使用 AgentLoop.run() 进行 ReAct 循环，
+ * 当 McpClient 或 BrowserToolProvider 可用时，handleChat 使用 AgentLoop.run() 进行 ReAct 循环，
  * 每步通过 agent_step 消息实时推送，循环结束发送 agent_complete。
- * 当 McpClient 未连接时，保持原有 LM 流式对话行为。
+ * 只要 Chrome 有 WebSocket 连接就有原生浏览器工具可用，无需 MCP 也能进入 Agent 模式。
+ * 当两者都不可用时，保持原有 LM 流式对话行为。
  */
 export class MessageHandler {
   private readonly lmService: LmService;
   private readonly wsServer: WsServer;
   private readonly mcpClient: McpClient;
+  private readonly browserToolProvider: BrowserToolProvider;
   private readonly outputChannel: vscode.OutputChannel;
 
   /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
@@ -32,11 +35,13 @@ export class MessageHandler {
     wsServer: WsServer,
     mcpClient: McpClient,
     outputChannel: vscode.OutputChannel,
+    browserToolProvider: BrowserToolProvider,
   ) {
     this.lmService = lmService;
     this.wsServer = wsServer;
     this.mcpClient = mcpClient;
     this.outputChannel = outputChannel;
+    this.browserToolProvider = browserToolProvider;
   }
 
   /**
@@ -118,9 +123,9 @@ export class MessageHandler {
   }
 
   /**
-   * 处理 chat：根据 McpClient 连接状态选择路径
-   * - McpClient 已连接 → AgentLoop 模式（agent_step / agent_complete）
-   * - McpClient 未连接 → 原有 LM 流式对话模式（chat_response_chunk / chat_response_end）
+   * 处理 chat：根据工具可用性选择路径
+   * - McpClient 已连接 或 BrowserToolProvider 有已连接客户端 → AgentLoop 模式（agent_step / agent_complete）
+   * - 两者都不可用 → 原有 LM 流式对话模式（chat_response_chunk / chat_response_end）
    */
   private handleChat(ws: WebSocket, msg: BridgeMessage): void {
     const chatPayload = msg.payload as {
@@ -136,7 +141,10 @@ export class MessageHandler {
       `[BrowserAgent] chat 收到消息，context: url=${context?.url ?? '无'}, title=${context?.title ?? '无'}, selectedText=${context?.selectedText ? `${context.selectedText.length}字` : '无'}`,
     );
 
-    if (this.mcpClient.connected) {
+    // 只要 MCP 或原生浏览器工具任一可用，就进入 Agent 模式
+    const hasToolSource = this.mcpClient.connected || this.browserToolProvider.connected;
+
+    if (hasToolSource) {
       this.handleChatAgentMode(ws, msg, text, systemPrompt);
     } else {
       this.handleChatStreamMode(ws, msg, text, systemPrompt);
@@ -144,7 +152,7 @@ export class MessageHandler {
   }
 
   /**
-   * Agent 模式：McpClient 已连接时使用 AgentLoop.run() 进行 ReAct 循环
+   * Agent 模式：McpClient 或 BrowserToolProvider 可用时使用 AgentLoop.run() 进行 ReAct 循环
    * 每步通过 agent_step 实时推送，循环结束发送 agent_complete
    */
   private handleChatAgentMode(
@@ -153,8 +161,10 @@ export class MessageHandler {
     text: string,
     systemPrompt: string,
   ): void {
+    const mcpOk = this.mcpClient.connected;
+    const browserOk = this.browserToolProvider.connected;
     this.outputChannel.appendLine(
-      '[BrowserAgent] McpClient 已连接，使用 AgentLoop 模式',
+      `[BrowserAgent] 进入 AgentLoop 模式 (MCP=${mcpOk ? '已连接' : '未连接'}, BrowserTools=${browserOk ? '已连接' : '未连接'})`,
     );
 
     void (async () => {
@@ -169,6 +179,7 @@ export class MessageHandler {
           this.lmService,
           this.mcpClient,
           this.outputChannel,
+          this.browserToolProvider,
         );
 
         const result = await agentLoop.run(

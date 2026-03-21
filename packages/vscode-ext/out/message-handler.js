@@ -37,7 +37,7 @@ exports.MessageHandler = void 0;
 // message-handler.ts — WebSocket 消息路由类，封装所有消息处理逻辑
 // 职责：list_models / select_model / chat / cancel_chat 消息路由、
 //       浏览器上下文→system prompt 构建、CancellationToken 生命周期管理、
-//       McpClient 已连接时自动切换为 AgentLoop（agent_step/agent_complete 推送）
+//       McpClient 或 BrowserToolProvider 可用时自动切换为 AgentLoop（agent_step/agent_complete 推送）
 const vscode = __importStar(require("vscode"));
 const agent_loop_1 = require("./agent-loop");
 const agent_tree_1 = require("./agent-tree");
@@ -45,22 +45,25 @@ const agent_tree_1 = require("./agent-tree");
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
  *
- * 当 McpClient 已连接时，handleChat 使用 AgentLoop.run() 进行 ReAct 循环，
+ * 当 McpClient 或 BrowserToolProvider 可用时，handleChat 使用 AgentLoop.run() 进行 ReAct 循环，
  * 每步通过 agent_step 消息实时推送，循环结束发送 agent_complete。
- * 当 McpClient 未连接时，保持原有 LM 流式对话行为。
+ * 只要 Chrome 有 WebSocket 连接就有原生浏览器工具可用，无需 MCP 也能进入 Agent 模式。
+ * 当两者都不可用时，保持原有 LM 流式对话行为。
  */
 class MessageHandler {
     lmService;
     wsServer;
     mcpClient;
+    browserToolProvider;
     outputChannel;
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     activeChatTokens = new Map();
-    constructor(lmService, wsServer, mcpClient, outputChannel) {
+    constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider) {
         this.lmService = lmService;
         this.wsServer = wsServer;
         this.mcpClient = mcpClient;
         this.outputChannel = outputChannel;
+        this.browserToolProvider = browserToolProvider;
     }
     /**
      * 消息路由入口，根据 msg.type 分发到对应处理方法。
@@ -130,9 +133,9 @@ class MessageHandler {
         })();
     }
     /**
-     * 处理 chat：根据 McpClient 连接状态选择路径
-     * - McpClient 已连接 → AgentLoop 模式（agent_step / agent_complete）
-     * - McpClient 未连接 → 原有 LM 流式对话模式（chat_response_chunk / chat_response_end）
+     * 处理 chat：根据工具可用性选择路径
+     * - McpClient 已连接 或 BrowserToolProvider 有已连接客户端 → AgentLoop 模式（agent_step / agent_complete）
+     * - 两者都不可用 → 原有 LM 流式对话模式（chat_response_chunk / chat_response_end）
      */
     handleChat(ws, msg) {
         const chatPayload = msg.payload;
@@ -140,7 +143,9 @@ class MessageHandler {
         const context = chatPayload?.context;
         const systemPrompt = this.buildSystemPrompt(context);
         this.outputChannel.appendLine(`[BrowserAgent] chat 收到消息，context: url=${context?.url ?? '无'}, title=${context?.title ?? '无'}, selectedText=${context?.selectedText ? `${context.selectedText.length}字` : '无'}`);
-        if (this.mcpClient.connected) {
+        // 只要 MCP 或原生浏览器工具任一可用，就进入 Agent 模式
+        const hasToolSource = this.mcpClient.connected || this.browserToolProvider.connected;
+        if (hasToolSource) {
             this.handleChatAgentMode(ws, msg, text, systemPrompt);
         }
         else {
@@ -148,18 +153,20 @@ class MessageHandler {
         }
     }
     /**
-     * Agent 模式：McpClient 已连接时使用 AgentLoop.run() 进行 ReAct 循环
+     * Agent 模式：McpClient 或 BrowserToolProvider 可用时使用 AgentLoop.run() 进行 ReAct 循环
      * 每步通过 agent_step 实时推送，循环结束发送 agent_complete
      */
     handleChatAgentMode(ws, msg, text, systemPrompt) {
-        this.outputChannel.appendLine('[BrowserAgent] McpClient 已连接，使用 AgentLoop 模式');
+        const mcpOk = this.mcpClient.connected;
+        const browserOk = this.browserToolProvider.connected;
+        this.outputChannel.appendLine(`[BrowserAgent] 进入 AgentLoop 模式 (MCP=${mcpOk ? '已连接' : '未连接'}, BrowserTools=${browserOk ? '已连接' : '未连接'})`);
         void (async () => {
             const cts = new vscode.CancellationTokenSource();
             this.activeChatTokens.set(ws, cts);
             // 注册到 Agent 循环 TreeView（实时可视化）
             const runId = (0, agent_tree_1.startAgentRun)(text);
             try {
-                const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel);
+                const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel, this.browserToolProvider);
                 const result = await agentLoop.run(text, {
                     systemPrompt,
                     onStep: (step) => {

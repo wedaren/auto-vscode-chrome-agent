@@ -41,8 +41,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
 
-  // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
-  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel);
+  // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider 以支持多工具源 AgentLoop 模式）
+  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider);
   wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
 
   // 初始化报告生成器
@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 注册 Activity Bar TreeView（调试视图）
   connectionTree = new ConnectionTreeDataProvider();
-  connectionTree.bind(wsServer, mcpClient, lmService);
+  connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider);
   messageTree = new MessageTreeDataProvider();
   agentTree = new AgentTreeDataProvider();
 

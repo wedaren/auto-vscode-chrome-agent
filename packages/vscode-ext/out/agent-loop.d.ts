@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LmService } from './lm-service';
 import { McpClient } from './mcp-client';
+import { BrowserToolProvider } from './browser-tools';
 /** Agent 单步执行记录 */
 export interface AgentStep {
     /** 当前步序号（从 1 开始） */
@@ -43,6 +44,8 @@ export interface AgentLoopResult {
  * 3. 重复步骤 2 直到 FINAL_ANSWER 或达到 maxSteps 上限
  *
  * 设计要点：
+ * - 多工具源支持：MCP 工具 + 原生浏览器工具（browser_* 前缀），无 MCP 也能进入 Agent 模式
+ * - 工具路由：browser_* 前缀工具通过 BrowserToolProvider 原生通道执行，其余通过 McpClient
  * - 每一步（think/act/observe）通过 onStep 回调实时通知外部（WebSocket → Chrome UI）
  * - 支持 CancellationToken 随时中断循环
  * - 对话历史累积在 messages 数组中，LLM 可看到完整上下文
@@ -50,10 +53,11 @@ export interface AgentLoopResult {
 export declare class AgentLoop {
     private readonly lmService;
     private readonly mcpClient;
+    private readonly browserToolProvider?;
     private readonly outputChannel;
     /** 默认最大步数（LLM 调用轮数） */
     static readonly MAX_STEPS = 15;
-    constructor(lmService: LmService, mcpClient: McpClient, outputChannel: vscode.OutputChannel);
+    constructor(lmService: LmService, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider?: BrowserToolProvider);
     /**
      * 执行 ReAct Agent 循环
      * @param userMessage 用户输入的指令/问题
@@ -67,7 +71,12 @@ export declare class AgentLoop {
      */
     private callLlm;
     /**
-     * 获取 MCP 工具描述列表，格式化为 LLM 可理解的文本
+     * 获取所有可用工具描述列表（MCP + 原生浏览器工具），格式化为 LLM 可理解的文本。
+     *
+     * 合并策略：
+     * - browser_* 前缀工具优先来自 BrowserToolProvider（原生通道，更快更可靠）
+     * - 若 MCP 也提供同名 browser_* 工具，原生版本优先，MCP 版本跳过
+     * - 非 browser_* 的 MCP 工具正常列出
      */
     private getToolDescriptions;
     /**
@@ -79,7 +88,11 @@ export declare class AgentLoop {
      */
     private parseLlmOutput;
     /**
-     * 执行 MCP 工具调用并格式化结果
+     * 执行工具调用并格式化结果。
+     *
+     * 路由策略：
+     * - browser_* 前缀 且 BrowserToolProvider 可用 → BrowserToolProvider.callTool（原生通道）
+     * - 其他 → McpClient.callTool
      */
     private executeTool;
     /**

@@ -1,9 +1,11 @@
 // agent-loop.ts — ReAct 风格的 Agent 循环，实现 think→act→observe 闭环
-// 职责：接收用户指令，通过 LLM 推理和 MCP 工具执行的迭代循环，产出最终答案
+// 职责：接收用户指令，通过 LLM 推理和多工具源（MCP + BrowserTools）执行的迭代循环，产出最终答案
+// 支持：MCP 工具（chrome-devtools-mcp）和原生浏览器工具（browser_* 前缀，通过 WebSocket 直连 Chrome）
 // 参考：ReportGenerator 的 MCP/LM 调用模式，但更通用——适用于任意对话场景
 import * as vscode from 'vscode';
 import { LmService } from './lm-service';
 import { McpClient, McpToolResult } from './mcp-client';
+import { BrowserToolProvider } from './browser-tools';
 
 /** Agent 单步执行记录 */
 export interface AgentStep {
@@ -59,6 +61,8 @@ interface ParsedLlmOutput {
  * 3. 重复步骤 2 直到 FINAL_ANSWER 或达到 maxSteps 上限
  *
  * 设计要点：
+ * - 多工具源支持：MCP 工具 + 原生浏览器工具（browser_* 前缀），无 MCP 也能进入 Agent 模式
+ * - 工具路由：browser_* 前缀工具通过 BrowserToolProvider 原生通道执行，其余通过 McpClient
  * - 每一步（think/act/observe）通过 onStep 回调实时通知外部（WebSocket → Chrome UI）
  * - 支持 CancellationToken 随时中断循环
  * - 对话历史累积在 messages 数组中，LLM 可看到完整上下文
@@ -66,6 +70,7 @@ interface ParsedLlmOutput {
 export class AgentLoop {
   private readonly lmService: LmService;
   private readonly mcpClient: McpClient;
+  private readonly browserToolProvider?: BrowserToolProvider;
   private readonly outputChannel: vscode.OutputChannel;
 
   /** 默认最大步数（LLM 调用轮数） */
@@ -75,10 +80,12 @@ export class AgentLoop {
     lmService: LmService,
     mcpClient: McpClient,
     outputChannel: vscode.OutputChannel,
+    browserToolProvider?: BrowserToolProvider,
   ) {
     this.lmService = lmService;
     this.mcpClient = mcpClient;
     this.outputChannel = outputChannel;
+    this.browserToolProvider = browserToolProvider;
   }
 
   /**
@@ -248,33 +255,80 @@ export class AgentLoop {
   }
 
   /**
-   * 获取 MCP 工具描述列表，格式化为 LLM 可理解的文本
+   * 获取所有可用工具描述列表（MCP + 原生浏览器工具），格式化为 LLM 可理解的文本。
+   *
+   * 合并策略：
+   * - browser_* 前缀工具优先来自 BrowserToolProvider（原生通道，更快更可靠）
+   * - 若 MCP 也提供同名 browser_* 工具，原生版本优先，MCP 版本跳过
+   * - 非 browser_* 的 MCP 工具正常列出
    */
   private async getToolDescriptions(): Promise<string> {
-    if (!this.mcpClient.connected) {
-      this.outputChannel.appendLine('[AgentLoop] MCP 未连接，无可用工具');
-      return '(无可用工具 — MCP 未连接)';
-    }
+    const allTools: { name: string; description: string; source: string }[] = [];
 
-    try {
-      const tools = await this.mcpClient.listTools();
-      if (tools.length === 0) {
-        return '(无可用工具)';
+    // 收集已登记的 browser_* 工具名（用于去重）
+    const browserToolNames = new Set<string>();
+
+    // 1. 原生浏览器工具（BrowserToolProvider）
+    if (this.browserToolProvider?.connected) {
+      try {
+        const browserTools = await this.browserToolProvider.listTools();
+        for (const t of browserTools) {
+          browserToolNames.add(t.name);
+          allTools.push({
+            name: t.name,
+            description: t.description ?? '无描述',
+            source: 'browser',
+          });
+        }
+        this.outputChannel.appendLine(
+          `[AgentLoop] 加载 ${browserTools.length} 个原生浏览器工具`,
+        );
+      } catch (err) {
+        this.outputChannel.appendLine(
+          `[AgentLoop] 获取浏览器工具列表失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-
-      this.outputChannel.appendLine(
-        `[AgentLoop] 加载 ${tools.length} 个 MCP 工具`,
-      );
-
-      return tools
-        .map((t) => `- ${t.name}: ${t.description ?? '无描述'}`)
-        .join('\n');
-    } catch (err) {
-      this.outputChannel.appendLine(
-        `[AgentLoop] 获取工具列表失败: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return '(获取工具列表失败)';
     }
+
+    // 2. MCP 工具（跳过已被原生浏览器工具覆盖的 browser_* 同名工具）
+    if (this.mcpClient.connected) {
+      try {
+        const mcpTools = await this.mcpClient.listTools();
+        for (const t of mcpTools) {
+          if (browserToolNames.has(t.name)) {
+            this.outputChannel.appendLine(
+              `[AgentLoop] MCP 工具 ${t.name} 被原生浏览器工具覆盖，跳过`,
+            );
+            continue;
+          }
+          allTools.push({
+            name: t.name,
+            description: t.description ?? '无描述',
+            source: 'mcp',
+          });
+        }
+        this.outputChannel.appendLine(
+          `[AgentLoop] 加载 ${mcpTools.length} 个 MCP 工具（去重后）`,
+        );
+      } catch (err) {
+        this.outputChannel.appendLine(
+          `[AgentLoop] 获取 MCP 工具列表失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    if (allTools.length === 0) {
+      this.outputChannel.appendLine('[AgentLoop] 无可用工具');
+      return '(无可用工具)';
+    }
+
+    this.outputChannel.appendLine(
+      `[AgentLoop] 共加载 ${allTools.length} 个工具（browser: ${browserToolNames.size}, mcp: ${allTools.length - browserToolNames.size}）`,
+    );
+
+    return allTools
+      .map((t) => `- ${t.name}: ${t.description}`)
+      .join('\n');
   }
 
   /**
@@ -375,21 +429,35 @@ FINAL_ANSWER: <your complete answer to the user>
   }
 
   /**
-   * 执行 MCP 工具调用并格式化结果
+   * 执行工具调用并格式化结果。
+   *
+   * 路由策略：
+   * - browser_* 前缀 且 BrowserToolProvider 可用 → BrowserToolProvider.callTool（原生通道）
+   * - 其他 → McpClient.callTool
    */
   private async executeTool(
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): Promise<string> {
+    const useBrowserChannel =
+      toolName.startsWith('browser_') &&
+      this.browserToolProvider?.connected === true;
+
+    const source = useBrowserChannel ? 'BrowserToolProvider' : 'McpClient';
     this.outputChannel.appendLine(
-      `[AgentLoop] 执行工具: ${toolName}, 参数: ${JSON.stringify(toolArgs)}`,
+      `[AgentLoop] 执行工具: ${toolName} (via ${source}), 参数: ${JSON.stringify(toolArgs)}`,
     );
 
     try {
-      const result: McpToolResult = await this.mcpClient.callTool(toolName, toolArgs);
+      let result: McpToolResult;
+      if (useBrowserChannel) {
+        result = await this.browserToolProvider!.callTool(toolName, toolArgs);
+      } else {
+        result = await this.mcpClient.callTool(toolName, toolArgs);
+      }
       return this.formatToolResult(result);
     } catch (err) {
-      const errMsg = `工具调用失败 (${toolName}): ${err instanceof Error ? err.message : String(err)}`;
+      const errMsg = `工具调用失败 (${toolName} via ${source}): ${err instanceof Error ? err.message : String(err)}`;
       this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
       return errMsg;
     }

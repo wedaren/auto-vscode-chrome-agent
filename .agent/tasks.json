@@ -546,7 +546,7 @@
       "id": "evo_v6_003",
       "type": "coding",
       "title": "VSCode 侧浏览器工具提供者 BrowserToolProvider：定义原生浏览器工具注册表 + 通过 WebSocket 执行工具调用",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v6_002"
       ],

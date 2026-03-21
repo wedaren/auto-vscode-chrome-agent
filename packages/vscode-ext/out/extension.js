@@ -70,8 +70,8 @@ function activate(context) {
     });
     // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
     browserToolProvider = new browser_tools_1.BrowserToolProvider(wsServer, outputChannel);
-    // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
-    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel);
+    // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider 以支持多工具源 AgentLoop 模式）
+    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider);
     wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
     // 初始化报告生成器
     reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
@@ -80,7 +80,7 @@ function activate(context) {
     const commandDisposables = commandRegistry.registerAll();
     // 注册 Activity Bar TreeView（调试视图）
     connectionTree = new connection_tree_1.ConnectionTreeDataProvider();
-    connectionTree.bind(wsServer, mcpClient, lmService);
+    connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider);
     messageTree = new message_tree_1.MessageTreeDataProvider();
     agentTree = new agent_tree_1.AgentTreeDataProvider();
     const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {

@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConnectionTreeDataProvider = exports.ConnectionTreeItem = void 0;
 // connection-tree.ts — 连接状态 TreeView 的 TreeDataProvider 实现
-// 展示 3 个顶级节点：WebSocket Server / MCP 连接 / 当前模型
+// 展示 4 个顶级节点：WebSocket Server / MCP 连接 / 原生浏览器工具 / 当前模型
 // 订阅各服务的状态变更事件实现自动刷新
 const vscode = __importStar(require("vscode"));
 /** 连接状态树节点 */
@@ -55,6 +55,7 @@ class ConnectionTreeDataProvider {
     wsServer;
     mcpClient;
     lmService;
+    browserToolProvider;
     constructor() {
         // 默认构造；通过 bind() 注入服务实例
     }
@@ -62,16 +63,21 @@ class ConnectionTreeDataProvider {
      * 绑定核心服务并订阅状态变更事件
      * 在 extension.ts 中创建服务后调用
      */
-    bind(wsServer, mcpClient, lmService) {
+    bind(wsServer, mcpClient, lmService, browserToolProvider) {
         this.wsServer = wsServer;
         this.mcpClient = mcpClient;
         this.lmService = lmService;
-        // 订阅 WsServer 状态变更
+        this.browserToolProvider = browserToolProvider;
+        // 订阅 WsServer 状态变更（也影响 BrowserToolProvider 的连接状态）
         this.disposables.push(wsServer.onDidChangeState(() => this.refresh()));
         // 订阅 McpClient 状态变更
         this.disposables.push(mcpClient.onDidChangeState(() => this.refresh()));
         // 订阅 LmService 模型变更
         this.disposables.push(lmService.onDidChangeModel(() => this.refresh()));
+        // 订阅 BrowserToolProvider 状态变更
+        if (browserToolProvider) {
+            this.disposables.push(browserToolProvider.onDidChangeState(() => this.refresh()));
+        }
         // 首次刷新
         this.refresh();
     }
@@ -92,6 +98,8 @@ class ConnectionTreeDataProvider {
                 return this.getWsChildren();
             case 'mcp':
                 return this.getMcpChildren();
+            case 'browser-tools':
+                return this.getBrowserToolsChildren();
             case 'model':
                 return this.getModelChildren();
             default:
@@ -119,7 +127,19 @@ class ConnectionTreeDataProvider {
             ? `chrome-devtools-mcp 已连接，发现 ${this.mcpClient?.discoveredTools.length ?? 0} 个工具`
             : 'chrome-devtools-mcp 未连接';
         items.push(mcpItem);
-        // 3. 当前模型节点
+        // 3. 原生浏览器工具节点
+        const browserConnected = this.browserToolProvider?.connected ?? false;
+        const browserToolCount = this.browserToolProvider?.discoveredTools.length ?? 0;
+        const browserStatus = browserConnected
+            ? `$(check) 可用 (${browserToolCount} 个工具)`
+            : '$(circle-slash) 不可用';
+        const browserItem = new ConnectionTreeItem(`原生浏览器工具 — ${browserStatus}`, vscode.TreeItemCollapsibleState.Expanded, 'browser-tools');
+        browserItem.iconPath = new vscode.ThemeIcon(browserConnected ? 'browser' : 'debug-disconnect');
+        browserItem.tooltip = browserConnected
+            ? `Chrome 已连接，${browserToolCount} 个原生浏览器操作工具可用（无需 MCP）`
+            : '需要 Chrome 插件通过 WebSocket 连接后才能使用原生浏览器工具';
+        items.push(browserItem);
+        // 4. 当前模型节点
         const modelInfo = this.lmService?.currentModel;
         const modelStatus = modelInfo ? `$(check) ${modelInfo.name}` : '$(circle-slash) 未选择';
         const modelItem = new ConnectionTreeItem(`当前模型 — ${modelStatus}`, vscode.TreeItemCollapsibleState.Expanded, 'model');
@@ -162,6 +182,28 @@ class ConnectionTreeDataProvider {
             const noToolItem = new ConnectionTreeItem('工具发现中...', vscode.TreeItemCollapsibleState.None, 'detail');
             noToolItem.iconPath = new vscode.ThemeIcon('loading~spin');
             items.push(noToolItem);
+        }
+        return items;
+    }
+    /** 原生浏览器工具子节点：连接状态 + 可用工具列表 */
+    getBrowserToolsChildren() {
+        const connected = this.browserToolProvider?.connected ?? false;
+        const tools = this.browserToolProvider?.discoveredTools ?? [];
+        const statusItem = new ConnectionTreeItem(`状态: ${connected ? '已连接（Chrome WebSocket）' : '未连接'}`, vscode.TreeItemCollapsibleState.None, 'detail');
+        statusItem.iconPath = new vscode.ThemeIcon(connected ? 'pass' : 'circle-slash');
+        const items = [statusItem];
+        if (connected && tools.length > 0) {
+            for (const tool of tools) {
+                const toolItem = new ConnectionTreeItem(`🔧 ${tool.name}`, vscode.TreeItemCollapsibleState.None, 'browser-tool');
+                toolItem.iconPath = new vscode.ThemeIcon('wrench');
+                toolItem.tooltip = tool.description ?? tool.name;
+                items.push(toolItem);
+            }
+        }
+        else if (!connected) {
+            const hintItem = new ConnectionTreeItem('请打开 Chrome 插件并连接 WebSocket', vscode.TreeItemCollapsibleState.None, 'detail');
+            hintItem.iconPath = new vscode.ThemeIcon('info');
+            items.push(hintItem);
         }
         return items;
     }
