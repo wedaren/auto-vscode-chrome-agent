@@ -41,6 +41,7 @@ exports.MessageHandler = void 0;
 const vscode = __importStar(require("vscode"));
 const agent_loop_1 = require("./agent-loop");
 const agent_tree_1 = require("./agent-tree");
+const llm_request_collector_1 = require("./llm-request-collector");
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
@@ -58,6 +59,8 @@ class MessageHandler {
     skillRegistry;
     skillRunner;
     outputChannel;
+    /** LLM 请求细节采集器，记录每次 chat/agent 请求的完整链路数据 */
+    llmCollector = new llm_request_collector_1.LlmRequestCollector();
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     activeChatTokens = new Map();
     constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner) {
@@ -175,6 +178,10 @@ class MessageHandler {
             this.activeChatTokens.set(ws, cts);
             // 注册到 Agent 循环 TreeView（实时可视化）
             const runId = (0, agent_tree_1.startAgentRun)(text);
+            // 采集 LLM 请求细节
+            const modelInfo = this.lmService.currentModel;
+            const collectId = this.llmCollector.startRequest('agent', modelInfo?.name ?? modelInfo?.id ?? 'unknown', systemPrompt);
+            this.llmCollector.addMessage(collectId, 'user', text);
             try {
                 const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel, this.browserToolProvider, this.skillRegistry, this.skillRunner);
                 const result = await agentLoop.run(text, {
@@ -194,17 +201,30 @@ class MessageHandler {
                         });
                         // 同步追加到 Agent 循环 TreeView（→ VSCode 调试面板）
                         (0, agent_tree_1.addAgentStep)(runId, step);
+                        // 采集 Agent 步骤
+                        this.llmCollector.addAgentStep(collectId, {
+                            step: step.step,
+                            type: step.type,
+                            content: step.content,
+                            toolName: step.toolName,
+                            toolArgs: step.toolArgs,
+                        });
                     },
                 }, cts.token);
                 // AgentLoop 完成，标记运行结束
                 (0, agent_tree_1.completeAgentRun)(runId, 'completed');
-                // 发送 agent_complete 消息
+                // 结束采集：记录最终响应
+                this.llmCollector.addMessage(collectId, 'assistant', result.finalAnswer);
+                this.llmCollector.endRequest(collectId, result.finalAnswer);
+                const llmDetail = this.llmCollector.getDetail(collectId);
+                // 发送 agent_complete 消息（附加 llmDetail）
                 this.wsServer.send(ws, {
                     type: 'agent_complete',
                     payload: {
                         finalAnswer: result.finalAnswer,
                         steps: result.steps,
                         totalSteps: result.totalSteps,
+                        llmDetail,
                     },
                     sessionId: msg.sessionId,
                 });
@@ -215,6 +235,7 @@ class MessageHandler {
                 if (isCancelled) {
                     // 被取消时标记为 cancelled
                     (0, agent_tree_1.completeAgentRun)(runId, 'cancelled');
+                    this.llmCollector.endRequest(collectId, '', undefined, true);
                     this.wsServer.send(ws, {
                         type: 'agent_complete',
                         payload: {
@@ -231,6 +252,7 @@ class MessageHandler {
                     // 错误时标记为 error
                     const errMsg = err instanceof Error ? err.message : String(err);
                     (0, agent_tree_1.completeAgentRun)(runId, 'error', errMsg);
+                    this.llmCollector.endRequest(collectId, '', errMsg);
                     this.wsServer.send(ws, {
                         type: 'agent_complete',
                         payload: {
@@ -257,6 +279,10 @@ class MessageHandler {
         void (async () => {
             const cts = new vscode.CancellationTokenSource();
             this.activeChatTokens.set(ws, cts);
+            // 采集 LLM 请求细节
+            const modelInfo = this.lmService.currentModel;
+            const collectId = this.llmCollector.startRequest('stream', modelInfo?.name ?? modelInfo?.id ?? 'unknown', systemPrompt);
+            this.llmCollector.addMessage(collectId, 'user', text);
             try {
                 const fullText = await this.lmService.sendMessageStreaming(text, (fragment) => {
                     this.wsServer.send(ws, {
@@ -265,26 +291,33 @@ class MessageHandler {
                         sessionId: msg.sessionId,
                     });
                 }, systemPrompt, cts.token);
+                // 结束采集：记录最终响应
+                this.llmCollector.addMessage(collectId, 'assistant', fullText);
+                this.llmCollector.endRequest(collectId, fullText);
+                const llmDetail = this.llmCollector.getDetail(collectId);
                 this.wsServer.send(ws, {
                     type: 'chat_response_end',
-                    payload: { fullText },
+                    payload: { fullText, llmDetail },
                     sessionId: msg.sessionId,
                 });
             }
             catch (err) {
                 const isCancelled = cts.token.isCancellationRequested;
+                const errMsg = isCancelled ? '' : (err instanceof Error ? err.message : String(err));
+                // 结束采集：记录错误
+                this.llmCollector.endRequest(collectId, '', isCancelled ? undefined : errMsg, isCancelled);
                 this.wsServer.send(ws, {
                     type: 'chat_response_end',
                     payload: {
                         fullText: isCancelled
                             ? ''
-                            : `错误: ${err instanceof Error ? err.message : String(err)}`,
+                            : `错误: ${errMsg}`,
                         cancelled: isCancelled,
                     },
                     sessionId: msg.sessionId,
                 });
                 if (!isCancelled) {
-                    this.outputChannel.appendLine(`[BrowserAgent] chat 流式响应错误: ${err instanceof Error ? err.message : String(err)}`);
+                    this.outputChannel.appendLine(`[BrowserAgent] chat 流式响应错误: ${errMsg}`);
                 }
             }
             finally {
@@ -408,6 +441,12 @@ class MessageHandler {
                 this.outputChannel.appendLine(`[BrowserAgent] Skill "${skillName}" 执行异常: ${errMsg}`);
             }
         })();
+    }
+    /**
+     * 获取 LLM 请求采集器实例（供外部读取请求细节）
+     */
+    getLlmCollector() {
+        return this.llmCollector;
     }
     /**
      * 根据浏览器上下文动态构建 system prompt

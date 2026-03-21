@@ -6,6 +6,7 @@ import { McpClient } from './mcp-client';
 import { BrowserToolProvider } from './browser-tools';
 import { SkillRegistry } from './skill-registry';
 import { SkillRunner } from './skill-runner';
+import { LlmRequestCollector } from './llm-request-collector';
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
@@ -23,6 +24,8 @@ export declare class MessageHandler {
     private readonly skillRegistry?;
     private readonly skillRunner?;
     private readonly outputChannel;
+    /** LLM 请求细节采集器，记录每次 chat/agent 请求的完整链路数据 */
+    private readonly llmCollector;
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     private readonly activeChatTokens;
     constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
@@ -67,6 +70,10 @@ export declare class MessageHandler {
      * 完成后发送 skill_complete
      */
     private handleSkillExecute;
+    /**
+     * 获取 LLM 请求采集器实例（供外部读取请求细节）
+     */
+    getLlmCollector(): LlmRequestCollector;
     /**
      * 根据浏览器上下文动态构建 system prompt
      */
