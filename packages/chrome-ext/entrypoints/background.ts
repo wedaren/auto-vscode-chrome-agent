@@ -31,6 +31,59 @@ export default defineBackground(() => {
     }
   }
 
+  /**
+   * 等待指定 tab 页面加载完成（监听 onUpdated status='complete'）
+   * @param tabId 目标 tab ID
+   * @param timeoutMs 超时毫秒数
+   */
+  function waitForTabComplete(tabId: number, timeoutMs: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        browser.tabs.onUpdated.removeListener(listener);
+        reject(new Error(`页面加载超时 (${timeoutMs}ms)`));
+      }, timeoutMs);
+
+      function listener(updatedTabId: number, changeInfo: { status?: string }) {
+        if (updatedTabId === tabId && changeInfo.status === 'complete') {
+          clearTimeout(timer);
+          browser.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      }
+
+      browser.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  /**
+   * 等待 content script 就绪（通过发送 ping 消息验证）
+   * 导航后 content script 需要重新注入，可能有短暂延迟
+   * @param tabId 目标 tab ID
+   * @param maxRetries 最大重试次数
+   * @param retryIntervalMs 重试间隔毫秒数
+   * @returns true 表示就绪，false 表示超时未就绪
+   */
+  async function waitForContentScriptReady(
+    tabId: number,
+    maxRetries: number = 10,
+    retryIntervalMs: number = 500,
+  ): Promise<boolean> {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        await browser.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' });
+        console.log(`[background] Content script 就绪 (第 ${i + 1} 次尝试)`);
+        return true;
+      } catch {
+        // content script 尚未注入或未就绪，等待后重试
+        if (i < maxRetries - 1) {
+          await new Promise((r) => setTimeout(r, retryIntervalMs));
+        }
+      }
+    }
+    console.warn(`[background] Content script 在 ${maxRetries} 次尝试后仍未就绪`);
+    return false;
+  }
+
   // 消息路由：content script ↔ side panel
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[background] received message:', message.type, 'from:', sender.id);
@@ -77,9 +130,12 @@ export default defineBackground(() => {
           return true; // 异步响应
         }
 
-        // navigate 操作：如果有 url，使用 chrome.tabs.update（比 content script location.href 更可靠）
+        // navigate 操作：tabs.update + 等待 onUpdated(status=complete) + 验证 content script 就绪
         if (action.type === 'navigate' && action.url) {
-          browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+          const NAVIGATE_TIMEOUT_MS = 15000; // 15s 超时保护
+          const targetUrl = action.url;
+
+          browser.tabs.query({ active: true, currentWindow: true }).then(async (tabs) => {
             const tabId = tabs[0]?.id;
             if (!tabId) {
               sendResponse({
@@ -88,16 +144,51 @@ export default defineBackground(() => {
               });
               return;
             }
-            browser.tabs.update(tabId, { url: action.url }).then(() => {
+
+            try {
+              // 1. 发起导航
+              console.log(`[background] 导航到: ${targetUrl}`);
+              await browser.tabs.update(tabId, { url: targetUrl });
+
+              // 2. 等待页面加载完成（onUpdated status='complete'）
+              console.log(`[background] 等待页面加载完成...`);
+              await waitForTabComplete(tabId, NAVIGATE_TIMEOUT_MS);
+              console.log(`[background] 页面加载完成`);
+
+              // 3. 验证 content script 就绪（ping）
+              console.log(`[background] 验证 content script 就绪...`);
+              const contentReady = await waitForContentScriptReady(tabId, 10, 500);
+
+              if (contentReady) {
+                console.log(`[background] 导航完成，content script 已就绪: ${targetUrl}`);
+              } else {
+                console.warn(`[background] 导航完成但 content script 未就绪: ${targetUrl}`);
+              }
+
+              // 即使 content script 未就绪也返回成功（页面已加载），但附带就绪状态
               sendResponse({
                 type: 'ACTION_RESULT',
-                payload: { success: true, data: { navigated: action.url } } satisfies ActionResult,
+                payload: {
+                  success: true,
+                  data: { navigated: targetUrl, contentScriptReady: contentReady },
+                } satisfies ActionResult,
               });
-            }).catch((err) => {
+            } catch (err) {
               sendResponse({
                 type: 'ACTION_RESULT',
-                payload: { success: false, error: `导航失败: ${err instanceof Error ? err.message : String(err)}` } satisfies ActionResult,
+                payload: {
+                  success: false,
+                  error: `导航失败: ${err instanceof Error ? err.message : String(err)}`,
+                } satisfies ActionResult,
               });
+            }
+          }).catch((err) => {
+            sendResponse({
+              type: 'ACTION_RESULT',
+              payload: {
+                success: false,
+                error: `查询活动标签页失败: ${err instanceof Error ? err.message : String(err)}`,
+              } satisfies ActionResult,
             });
           });
           return true; // 异步响应
