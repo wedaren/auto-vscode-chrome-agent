@@ -859,7 +859,7 @@
       "id": "evo_v11_004",
       "type": "coding",
       "title": "添加用户数据目录管理命令 + ConnectionTree 状态展示",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v11_003"
       ],
