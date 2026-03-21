@@ -715,7 +715,7 @@
       "id": "evo_v9_002",
       "type": "coding",
       "title": "Toast 通知系统 + 消息发送重试机制：非阻塞错误提示，失败消息可一键重试",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v9_001"
       ],
@@ -732,7 +732,7 @@
         "evo_v9_002"
       ],
       "acceptance": "ws-client.ts 新增心跳机制（每 15 秒发送 ping，10 秒内未收到 pong 则判定连接失效并触发重连）；连接状态从简单的 connected/disconnected 扩展为完整状态机（disconnected/connecting/connected/reconnecting/failed）；流式传输中断时自动保留已接收的部分内容并显示 '⚠️ 连接中断，回复不完整' 提示；连接指示器升级为可点击组件，显示详细状态弹窗（重连次数、最后活跃时间、延迟）；弹窗包含手动 '重新连接' 按钮；所有入站消息增加基础类型校验（必须包含 type 字段）",
-      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'ping\\|heartbeat' utils/ws-client.ts && grep -q 'reconnecting\\|failed' utils/ws-client.ts && grep -q '连接中断\\|不完整' hooks/useChat.ts && grep -q '重新连接\\|reconnect' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 健壮性增强未正确实现'",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'ping\\|heartbeat' src/ws-client.ts && grep -q 'reconnecting\\|failed' src/ws-client.ts && grep -q '连接中断\\|不完整' hooks/useChat.ts && grep -q '重新连接\\|reconnect' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 健壮性增强未正确实现'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
     },
     {
@@ -758,6 +758,66 @@
       "acceptance": "全链路验证：ErrorBoundary 包裹 App 根节点且含 fallback UI；Toast 组件支持四种类型且 useToast 提供全局 showToast；消息发送失败可重试（Message.status 字段 + 重试按钮）；ws-client 心跳机制正常（ping/pong 间隔）；连接状态包含 reconnecting/failed 等完整状态；流式中断有保留和提示；连接指示器可点击显示详情和手动重连；Debug Tab 存在且含连接仪表盘 + 消息日志 + 执行时间线三个区域；useDebugLog hook 正常工作；双端构建均通过无 TS 错误",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ErrorBoundary.tsx && test -f components/Toast.tsx && test -f hooks/useToast.ts && test -f components/DebugPanel.tsx && test -f hooks/useDebugLog.ts && grep -q 'ErrorBoundary' entrypoints/sidepanel/App.tsx && grep -q 'Toast' components/Toast.tsx && grep -q 'heartbeat\\|ping' utils/ws-client.ts && grep -q '调试\\|Debug' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 稳定性体系全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
+    },
+    {
+      "id": "evo_v10_001",
+      "type": "coding",
+      "title": "VSCode 侧 LLM 请求细节采集模块：创建 LlmRequestCollector 类，在 lm-service / agent-loop / message-handler 中采集 model/systemPrompt/messages/timing/response 完整链路数据",
+      "status": "pending",
+      "depends_on": [
+        "evo_v9_002"
+      ],
+      "acceptance": "packages/vscode-ext/src/ 下新增 llm-request-collector.ts，导出 LlmRequestCollector 类和 LlmRequestDetail 接口；message-handler.ts 中集成采集器，每次 chat/agent 请求结束后能生成结构化的 LLM 请求细节对象；VSCode 插件编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && test -f src/llm-request-collector.ts && grep -r 'LlmRequestCollector\\|LlmRequestDetail' src/llm-request-collector.ts src/message-handler.ts && npm run compile 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
+    },
+    {
+      "id": "evo_v10_002",
+      "type": "coding",
+      "title": "WebSocket 协议扩展 + Chrome 侧数据接收：chat_response_end / agent_complete payload 附加 llmDetail 字段，Chrome useChat hook 接收并关联到对应 assistant 消息",
+      "status": "pending",
+      "depends_on": [
+        "evo_v10_001"
+      ],
+      "acceptance": "message-handler.ts 在 chat_response_end 和 agent_complete 消息的 payload 中包含 llmDetail 字段；message-factory.ts 的 Message 类型扩展可选 llmDetail 属性；useChat.ts 在 chat_response_end / agent_complete 处理中将 llmDetail 存入对应 assistant 消息",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -r 'llmDetail' src/message-handler.ts && cd ../../packages/chrome-ext && grep -r 'llmDetail' utils/message-factory.ts hooks/useChat.ts && echo PASS || echo FAIL",
+      "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
+    },
+    {
+      "id": "evo_v10_003",
+      "type": "coding",
+      "title": "Chrome 侧 JSON 下载工具函数：创建 download-llm-detail.ts，将 LlmDetail 数据格式化为可读 JSON 并触发浏览器文件下载（含 timestamp 文件名）",
+      "status": "pending",
+      "depends_on": [
+        "evo_v10_002"
+      ],
+      "acceptance": "packages/chrome-ext/utils/download-llm-detail.ts 存在，导出 downloadLlmDetail 函数，能将 LlmDetail 对象转为格式化 JSON 字符串并通过 Blob + URL.createObjectURL 触发浏览器下载",
+      "acceptance_cmd": "cd packages/chrome-ext && test -f utils/download-llm-detail.ts && grep -r 'downloadLlmDetail\\|Blob\\|createObjectURL' utils/download-llm-detail.ts && echo PASS || echo FAIL",
+      "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
+    },
+    {
+      "id": "evo_v10_004",
+      "type": "coding",
+      "title": "Chrome UI 下载按钮：MessageBubble assistant 消息底部添加下载图标按钮，有 llmDetail 时激活，点击调用 downloadLlmDetail 触发 JSON 下载",
+      "status": "pending",
+      "depends_on": [
+        "evo_v10_003"
+      ],
+      "acceptance": "MessageBubble.tsx 接收 llmDetail prop，assistant 消息工具栏显示下载按钮图标，点击触发 JSON 文件下载；无 llmDetail 时按钮不显示或禁用；App.tsx 传递 llmDetail 到 MessageBubble",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -r 'downloadLlmDetail\\|llmDetail' components/MessageBubble.tsx entrypoints/sidepanel/App.tsx && echo PASS || echo FAIL",
+      "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
+    },
+    {
+      "id": "evo_v10_005",
+      "type": "validate",
+      "title": "LLM 请求细节下载功能全量验收：双端构建通过，assistant 消息可下载包含 model/systemPrompt/messages/response/timing 的完整 JSON",
+      "status": "pending",
+      "depends_on": [
+        "evo_v10_004"
+      ],
+      "acceptance": "VSCode 插件 compile 通过，Chrome 插件 build 通过；LlmRequestCollector 采集完整数据；WebSocket 协议正确传输 llmDetail；MessageBubble 有下载按钮；下载 JSON 包含 model/systemPrompt/messages/response/timing/agentSteps 字段",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && cd ../../packages/chrome-ext && npx wxt build 2>&1 | tail -5 && grep -r 'LlmRequestCollector' ../vscode-ext/src/llm-request-collector.ts && grep -r 'llmDetail' ../chrome-ext/utils/message-factory.ts ../chrome-ext/components/MessageBubble.tsx ../vscode-ext/src/message-handler.ts && echo PASS || echo FAIL",
+      "evolution_goal": "在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化"
     }
   ]
 }

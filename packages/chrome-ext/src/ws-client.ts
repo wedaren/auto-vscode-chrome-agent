@@ -1,5 +1,9 @@
 // ws-client.ts — WebSocket 客户端，负责与 VSCode 插件的双向通信
-// 提供自动重连、消息收发、连接状态回调
+// 提供自动重连、心跳检测、完整连接状态机、消息类型校验
+//
+// === 连接状态机 ===
+// disconnected → connecting → connected ⇄ reconnecting → failed
+// 心跳：每 15 秒发送 ping，10 秒内未收到 pong 则判定失效并触发重连
 //
 // === 支持的消息类型 ===
 // 聊天类：ping/pong, chat, chat_response_chunk, chat_response_end
@@ -20,6 +24,7 @@
 //                        payload: { skillName, stepIndex, totalSteps, status, description, result? }
 //   skill_complete     — VSCode → Chrome：执行完成/失败
 //                        payload: { skillName, success, summary }
+// 心跳类：heartbeat_ping / heartbeat_pong（内部使用，区别于业务 ping/pong）
 
 /** Chrome ↔ VSCode 桥接消息协议（与 VSCode 侧 BridgeMessage 保持一致） */
 export interface BridgeMessage {
@@ -28,7 +33,22 @@ export interface BridgeMessage {
   sessionId: string;
 }
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
+/** 完整连接状态机：disconnected → connecting → connected ⇄ reconnecting → failed */
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
+/** 连接详情信息（供 UI 状态面板展示） */
+export interface ConnectionDetails {
+  /** 当前连接状态 */
+  state: ConnectionState;
+  /** 已重连次数 */
+  reconnectCount: number;
+  /** 最后活跃时间（最后收到消息的时间戳，0 表示从未活跃） */
+  lastActiveTime: number;
+  /** 心跳延迟（ms），-1 表示无数据 */
+  latency: number;
+  /** WebSocket 服务端地址 */
+  url: string;
+}
 
 export interface WsClientOptions {
   /** WebSocket 服务端地址，默认 ws://localhost:7777 */
@@ -37,6 +57,10 @@ export interface WsClientOptions {
   reconnectInterval?: number;
   /** 最大重连次数，默认 Infinity */
   maxReconnectAttempts?: number;
+  /** 心跳发送间隔（毫秒），默认 15000 */
+  heartbeatInterval?: number;
+  /** 心跳超时（毫秒），默认 10000 */
+  heartbeatTimeout?: number;
 }
 
 type MessageHandler = (msg: BridgeMessage) => void;
@@ -44,9 +68,11 @@ type StateHandler = (state: ConnectionState) => void;
 
 /**
  * WsClient 封装浏览器原生 WebSocket，提供：
- * - 自动重连
- * - BridgeMessage 协议收发
- * - 连接状态回调
+ * - 自动重连 + 手动重连
+ * - 心跳检测（ping/pong）
+ * - 完整连接状态机（disconnected/connecting/connected/reconnecting/failed）
+ * - BridgeMessage 协议收发 + 入站消息类型校验
+ * - 连接详情查询（重连次数、延迟、最后活跃时间）
  */
 export class WsClient {
   private ws: WebSocket | null = null;
@@ -58,6 +84,15 @@ export class WsClient {
   private disposed = false;
   private sessionId: string;
 
+  // --- 心跳相关 ---
+  private heartbeatInterval: number;
+  private heartbeatTimeout: number;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private pongTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastPingSentAt = 0;
+  private _latency = -1;
+  private _lastActiveTime = 0;
+
   private messageHandlers: Set<MessageHandler> = new Set();
   private stateHandlers: Set<StateHandler> = new Set();
   private currentState: ConnectionState = 'disconnected';
@@ -66,6 +101,8 @@ export class WsClient {
     this.url = options.url ?? 'ws://localhost:7777';
     this.reconnectInterval = options.reconnectInterval ?? 3000;
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? Infinity;
+    this.heartbeatInterval = options.heartbeatInterval ?? 15000;
+    this.heartbeatTimeout = options.heartbeatTimeout ?? 10000;
     this.sessionId = crypto.randomUUID();
   }
 
@@ -91,6 +128,17 @@ export class WsClient {
     return this.sessionId;
   }
 
+  /** 获取连接详情（供 UI 状态面板展示） */
+  get details(): ConnectionDetails {
+    return {
+      state: this.currentState,
+      reconnectCount: this.reconnectCount,
+      lastActiveTime: this._lastActiveTime,
+      latency: this._latency,
+      url: this.url,
+    };
+  }
+
   /** 连接到 WebSocket 服务端 */
   connect(): void {
     if (this.disposed) return;
@@ -109,17 +157,46 @@ export class WsClient {
       console.log('[WsClient] 已连接到', this.url);
       this.reconnectCount = 0;
       this.setState('connected');
+      this._lastActiveTime = Date.now();
 
       // 发送 ping 确认连接
       this.send({ type: 'ping', payload: null, sessionId: this.sessionId });
+
+      // 启动心跳
+      this.startHeartbeat();
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
       try {
-        const msg = JSON.parse(event.data as string) as BridgeMessage;
-        console.log('[WsClient] 收到消息:', msg.type);
+        const msg = JSON.parse(event.data as string);
+
+        // 入站消息基础类型校验：必须包含 type 字段
+        if (!msg || typeof msg.type !== 'string') {
+          console.warn('[WsClient] 收到无效消息（缺少 type 字段），已丢弃:', msg);
+          return;
+        }
+
+        const bridgeMsg = msg as BridgeMessage;
+
+        // 更新最后活跃时间
+        this._lastActiveTime = Date.now();
+
+        // 处理心跳 pong 响应（内部消息，不分发给外部 handler）
+        if (bridgeMsg.type === 'heartbeat_pong' || bridgeMsg.type === 'pong') {
+          this.handlePong();
+          // pong 消息仍然分发，业务层可能需要
+          if (bridgeMsg.type === 'pong') {
+            console.log('[WsClient] 收到消息:', bridgeMsg.type);
+            for (const handler of this.messageHandlers) {
+              handler(bridgeMsg);
+            }
+          }
+          return;
+        }
+
+        console.log('[WsClient] 收到消息:', bridgeMsg.type);
         for (const handler of this.messageHandlers) {
-          handler(msg);
+          handler(bridgeMsg);
         }
       } catch (err) {
         console.error('[WsClient] 消息解析失败:', err);
@@ -128,7 +205,13 @@ export class WsClient {
 
     this.ws.onclose = () => {
       console.log('[WsClient] 连接已断开');
-      this.setState('disconnected');
+      this.stopHeartbeat();
+      // 如果之前是 connected 状态，切换到 reconnecting（而非直接 disconnected）
+      if (this.currentState === 'connected') {
+        this.setState('reconnecting');
+      } else if (this.currentState !== 'failed') {
+        this.setState('disconnected');
+      }
       this.scheduleReconnect();
     };
 
@@ -136,6 +219,20 @@ export class WsClient {
       console.error('[WsClient] 连接错误:', err);
       // onclose 会在 onerror 后触发，无需重复处理
     };
+  }
+
+  /** 手动重连（供 UI 按钮调用，重置重连计数并立即连接） */
+  reconnect(): void {
+    if (this.disposed) return;
+    // 清除已有的重连定时器
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectCount = 0;
+    this._latency = -1;
+    console.log('[WsClient] 手动重连...');
+    this.connect();
   }
 
   /** 发送 BridgeMessage */
@@ -156,6 +253,7 @@ export class WsClient {
   /** 断开连接并释放资源 */
   dispose(): void {
     this.disposed = true;
+    this.stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -164,6 +262,63 @@ export class WsClient {
     this.messageHandlers.clear();
     this.stateHandlers.clear();
   }
+
+  // --- 心跳机制 ---
+
+  /** 启动心跳定时器：每 heartbeatInterval 发送一次 heartbeat_ping */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      this.sendHeartbeatPing();
+    }, this.heartbeatInterval);
+  }
+
+  /** 停止心跳 */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.pongTimeoutTimer) {
+      clearTimeout(this.pongTimeoutTimer);
+      this.pongTimeoutTimer = null;
+    }
+  }
+
+  /** 发送心跳 ping 并启动超时检测 */
+  private sendHeartbeatPing(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    this.lastPingSentAt = Date.now();
+    this.send({ type: 'heartbeat_ping', payload: { timestamp: this.lastPingSentAt }, sessionId: this.sessionId });
+
+    // 启动 pong 超时检测：heartbeatTimeout 内未收到 pong 则判定失效
+    if (this.pongTimeoutTimer) {
+      clearTimeout(this.pongTimeoutTimer);
+    }
+    this.pongTimeoutTimer = setTimeout(() => {
+      this.pongTimeoutTimer = null;
+      console.warn('[WsClient] 心跳超时，未收到 pong，判定连接失效');
+      this._latency = -1;
+      // 关闭当前连接，触发 reconnect
+      this.cleanup();
+      this.setState('reconnecting');
+      this.scheduleReconnect();
+    }, this.heartbeatTimeout);
+  }
+
+  /** 处理 pong 响应：计算延迟、清除超时定时器 */
+  private handlePong(): void {
+    if (this.pongTimeoutTimer) {
+      clearTimeout(this.pongTimeoutTimer);
+      this.pongTimeoutTimer = null;
+    }
+    if (this.lastPingSentAt > 0) {
+      this._latency = Date.now() - this.lastPingSentAt;
+    }
+  }
+
+  // --- 内部方法 ---
 
   private cleanup(): void {
     if (this.ws) {
@@ -190,6 +345,7 @@ export class WsClient {
     if (this.disposed) return;
     if (this.reconnectCount >= this.maxReconnectAttempts) {
       console.log('[WsClient] 已达最大重连次数，停止重连');
+      this.setState('failed');
       return;
     }
     this.reconnectCount++;

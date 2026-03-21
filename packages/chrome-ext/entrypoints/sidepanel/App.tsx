@@ -3,6 +3,7 @@
 // 顶部 Tab 切换 Chat / Skills 两个视图
 // 空会话时显示 WelcomeScreen 引导页
 // 集成 ErrorBoundary 组件 + 全局错误拦截层（window.onerror / unhandledrejection）
+// 连接指示器升级为可点击组件，显示详细状态弹窗 + 手动重新连接按钮
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
@@ -18,6 +19,7 @@ import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
 import { useToast } from '../../hooks/useToast';
 import type { BridgeMessage } from '../../src/ws-client';
+import type { ConnectionState, ConnectionDetails } from '../../src/ws-client';
 
 /** 顶部 Tab 类型 */
 type ActiveTab = 'chat' | 'skills';
@@ -27,6 +29,128 @@ const WS_URL = 'ws://localhost:7777';
 
 /** 错误日志最大条目数 */
 const MAX_ERROR_LOG_SIZE = 50;
+
+// ─── 连接状态标签映射 ───
+const STATE_LABELS: Record<ConnectionState, string> = {
+  disconnected: '未连接',
+  connecting: '连接中...',
+  connected: '已连接',
+  reconnecting: '重连中...',
+  failed: '连接失败',
+};
+
+const STATE_COLORS: Record<ConnectionState, string> = {
+  disconnected: 'bg-gray-400',
+  connecting: 'bg-yellow-400 animate-pulse',
+  connected: 'bg-green-500',
+  reconnecting: 'bg-yellow-500 animate-pulse',
+  failed: 'bg-red-500',
+};
+
+// ─── ConnectionIndicator 组件：可点击的连接状态指示器 + 详情弹窗 + 手动重连按钮 ───
+interface ConnectionIndicatorProps {
+  connectionState: ConnectionState;
+  connectionDetails: ConnectionDetails;
+  onReconnect: () => void;
+}
+
+function ConnectionIndicator({ connectionState, connectionDetails, onReconnect }: ConnectionIndicatorProps) {
+  const [showPopup, setShowPopup] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭弹窗
+  useEffect(() => {
+    if (!showPopup) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        setShowPopup(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPopup]);
+
+  /** 格式化最后活跃时间 */
+  const formatLastActive = (ts: number): string => {
+    if (ts === 0) return '从未';
+    const diff = Date.now() - ts;
+    if (diff < 1000) return '刚刚';
+    if (diff < 60_000) return `${Math.floor(diff / 1000)} 秒前`;
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+    return new Date(ts).toLocaleTimeString();
+  };
+
+  return (
+    <div className="relative" ref={popupRef}>
+      {/* 可点击的状态指示器 */}
+      <button
+        onClick={() => setShowPopup((v) => !v)}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+        title={STATE_LABELS[connectionState]}
+      >
+        <span className={`w-2.5 h-2.5 rounded-full ${STATE_COLORS[connectionState]}`} />
+        <span className="text-xs text-gray-500 hidden sm:inline">{STATE_LABELS[connectionState]}</span>
+      </button>
+
+      {/* 详情弹窗 */}
+      {showPopup && (
+        <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-50">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">连接状态</h3>
+
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-gray-500">状态</span>
+              <span className={`font-medium ${connectionState === 'connected' ? 'text-green-600' : connectionState === 'failed' ? 'text-red-600' : 'text-yellow-600'}`}>
+                {STATE_LABELS[connectionState]}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-500">服务端地址</span>
+              <span className="text-gray-700 font-mono text-[10px]">{connectionDetails.url}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-500">重连次数</span>
+              <span className="text-gray-700">{connectionDetails.reconnectCount}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-500">心跳延迟</span>
+              <span className="text-gray-700">
+                {connectionDetails.latency >= 0 ? `${connectionDetails.latency} ms` : '--'}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-500">最后活跃</span>
+              <span className="text-gray-700">{formatLastActive(connectionDetails.lastActiveTime)}</span>
+            </div>
+          </div>
+
+          {/* 手动重新连接按钮 */}
+          {connectionState !== 'connected' && (
+            <button
+              onClick={() => {
+                onReconnect();
+                setShowPopup(false);
+              }}
+              className="mt-3 w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-md transition-colors"
+            >
+              重新连接
+            </button>
+          )}
+
+          {connectionState === 'connected' && (
+            <div className="mt-3 text-center text-[10px] text-gray-400">
+              连接正常，心跳检测中
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * AppRoot — 顶层包装组件，提供 ErrorBoundary + 全局错误拦截
@@ -97,7 +221,7 @@ interface AppContentProps {
 
 function AppContent({ errorLog: _errorLog }: AppContentProps) {
   // --- Hooks ---
-  const { isConnected, connectionState, sendMessage, onMessage } = useWebSocket(WS_URL);
+  const { isConnected, connectionState, connectionDetails, sendMessage, onMessage, reconnect } = useWebSocket(WS_URL);
   const { toasts, showToast, dismissToast } = useToast();
 
   /** Toast 回调桥接：将 useChat 内部错误通过 Toast 显示 */
@@ -173,11 +297,19 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
       sendMessage('list_models', null);
       showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
-    if (connectionState === 'disconnected') {
+    if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
       resetStreamingState();
       showToast({ type: 'warning', message: '与 VSCode 断开连接，正在重连...' });
     }
-  }, [connectionState, sendMessage, resetStreamingState, showToast]);
+    if (connectionState === 'failed') {
+      resetStreamingState();
+      showToast({
+        type: 'error',
+        message: '连接失败，请点击连接指示器手动重连',
+        action: { label: '重新连接', onClick: reconnect },
+      });
+    }
+  }, [connectionState, sendMessage, resetStreamingState, showToast, reconnect]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -300,9 +432,11 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
           </button>
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-400'}`}
-            title={isConnected ? '已连接' : '未连接'}
+          {/* 连接指示器（可点击，显示详情弹窗 + 手动 reconnect 按钮） */}
+          <ConnectionIndicator
+            connectionState={connectionState}
+            connectionDetails={connectionDetails}
+            onReconnect={reconnect}
           />
         </div>
       </header>

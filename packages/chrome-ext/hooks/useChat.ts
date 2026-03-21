@@ -449,9 +449,20 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
     }
   }, [isStreaming, sendMessage]);
 
-  /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死） */
+  /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死）
+   *  如果正在流式接收中断连，保留已接收的部分内容并追加中断提示
+   */
   const resetStreamingState = useCallback(() => {
     if (streamingMsgIdRef.current) {
+      const interruptedMsgId = streamingMsgIdRef.current;
+      // 保留已接收的部分内容，追加连接中断提示
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === interruptedMsgId
+            ? { ...m, content: m.content + '\n\n⚠️ 连接中断，回复不完整' }
+            : m,
+        ),
+      );
       streamingMsgIdRef.current = null;
       setIsStreaming(false);
     }

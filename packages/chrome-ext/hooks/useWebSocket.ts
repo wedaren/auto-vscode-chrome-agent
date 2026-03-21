@@ -2,20 +2,25 @@
 // 集成 tool_execute / tool_result 工具调用协议（不阻塞聊天 UI）
 // 同时支持 skill_list / skill_list_result / skill_execute / skill_progress / skill_complete 消息
 // （Skill 相关消息通过 onMessage 分发到 SkillPanel 组件处理）
+// 暴露手动重连方法和连接详情（重连次数、延迟、最后活跃时间）供 UI 展示
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { WsClient, type BridgeMessage, type ConnectionState } from '../src/ws-client';
+import { WsClient, type BridgeMessage, type ConnectionState, type ConnectionDetails } from '../src/ws-client';
 import { createToolBridgeHandler } from '../utils/tool-bridge';
 
 /** useWebSocket Hook 返回值 */
 export interface UseWebSocketReturn {
   /** 是否已连接 */
   isConnected: boolean;
-  /** 当前连接状态（connecting / connected / disconnected） */
+  /** 当前连接状态（disconnected / connecting / connected / reconnecting / failed） */
   connectionState: ConnectionState;
+  /** 连接详情信息（重连次数、延迟、最后活跃时间） */
+  connectionDetails: ConnectionDetails;
   /** 发送消息到 VSCode 侧，返回是否发送成功 */
   sendMessage: (type: string, payload: unknown) => boolean;
   /** 注册消息监听器，返回取消注册函数 */
   onMessage: (handler: (msg: BridgeMessage) => void) => () => void;
+  /** 手动重连（重置重连计数并立即发起连接） */
+  reconnect: () => void;
 }
 
 /**
@@ -23,14 +28,22 @@ export interface UseWebSocketReturn {
  *
  * 职责：
  * - WsClient 初始化与生命周期管理
- * - 连接状态跟踪（connecting / connected / disconnected）
+ * - 连接状态跟踪（disconnected / connecting / connected / reconnecting / failed）
  * - 消息分发：注册多个监听器，收到消息时逐一通知
- * - 断连自动重连（由 WsClient 内部处理）
+ * - 断连自动重连（由 WsClient 内部处理）+ 手动重连
  * - tool_execute 消息自动处理：收到 VSCode 发来的 tool_execute 时，
  *   通过 tool-bridge 调用 background EXECUTE_ACTION 并发回 tool_result（不阻塞聊天 UI）
+ * - 连接详情暴露：重连次数、心跳延迟、最后活跃时间
  */
 export function useWebSocket(url: string): UseWebSocketReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+  const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>({
+    state: 'disconnected',
+    reconnectCount: 0,
+    lastActiveTime: 0,
+    latency: -1,
+    url,
+  });
   const wsClientRef = useRef<WsClient | null>(null);
   const messageListenersRef = useRef<Set<(msg: BridgeMessage) => void>>(new Set());
 
@@ -54,6 +67,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     };
   }, []);
 
+  /** 手动重连 */
+  const reconnect = useCallback(() => {
+    wsClientRef.current?.reconnect();
+  }, []);
+
   // 初始化 WsClient，管理连接生命周期
   useEffect(() => {
     const client = new WsClient({ url });
@@ -64,13 +82,17 @@ export function useWebSocket(url: string): UseWebSocketReturn {
       return client.sendMessage(type, payload);
     });
 
-    // 监听连接状态变化
+    // 监听连接状态变化 + 同步更新连接详情
     const unsubState = client.onStateChange((state: ConnectionState) => {
       setConnectionState(state);
+      setConnectionDetails({ ...client.details });
     });
 
     // 将 WsClient 消息分发给所有已注册的监听器 + tool bridge（try-catch 防护每个 handler）
     const unsubMsg = client.onMessage((msg: BridgeMessage) => {
+      // 每次收到消息时更新连接详情（刷新 lastActiveTime / latency）
+      setConnectionDetails({ ...client.details });
+
       // tool_execute 消息由 tool bridge 自动处理（异步，不阻塞）
       try {
         toolBridgeHandler(msg);
@@ -98,5 +120,5 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     };
   }, [url]);
 
-  return { isConnected, connectionState, sendMessage, onMessage };
+  return { isConnected, connectionState, connectionDetails, sendMessage, onMessage, reconnect };
 }
