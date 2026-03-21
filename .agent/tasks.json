@@ -1140,7 +1140,7 @@
       "id": "evo_v16_002",
       "type": "coding",
       "title": "Client 连接去重保护：connect() 增加 OPEN/CONNECTING 状态跳过 + 重连次数降至 10",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_005"
       ],

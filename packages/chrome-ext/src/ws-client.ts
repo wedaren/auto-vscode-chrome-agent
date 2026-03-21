@@ -102,6 +102,10 @@ export class WsClient {
   private _latency = -1;
   private _lastActiveTime = 0;
 
+  // --- 可见性感知重连 ---
+  private _pausedByVisibility = false;
+  private readonly boundVisibilityHandler: () => void;
+
   private messageHandlers: Set<MessageHandler> = new Set();
   private stateHandlers: Set<StateHandler> = new Set();
   private currentState: ConnectionState = 'disconnected';
@@ -113,6 +117,12 @@ export class WsClient {
     this.heartbeatInterval = options.heartbeatInterval ?? 15000;
     this.heartbeatTimeout = options.heartbeatTimeout ?? 10000;
     this.sessionId = crypto.randomUUID();
+
+    // 可见性感知重连：Side Panel 隐藏时暂停重连，可见时立即恢复
+    this.boundVisibilityHandler = this.handleVisibilityChange.bind(this);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.boundVisibilityHandler);
+    }
   }
 
   /** 注册消息回调 */
@@ -289,6 +299,10 @@ export class WsClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    // 移除可见性监听器
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+    }
     this.cleanup();
     this.messageHandlers.clear();
     this.stateHandlers.clear();
@@ -359,6 +373,36 @@ export class WsClient {
     }
   }
 
+  // --- 可见性感知重连 ---
+
+  /**
+   * 处理 document.visibilitychange 事件：
+   * - hidden：暂停重连（清除 reconnectTimer，标记 _pausedByVisibility）
+   * - visible：若未连接则重置计数并立即重连
+   */
+  private handleVisibilityChange(): void {
+    if (this.disposed) return;
+
+    if (document.visibilityState === 'hidden') {
+      // Side Panel 隐藏：暂停重连，节省资源
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      this._pausedByVisibility = true;
+      console.log('[WsClient] Side Panel 隐藏，暂停重连');
+    } else if (document.visibilityState === 'visible') {
+      // Side Panel 恢复可见：若非连接状态则立即重连
+      this._pausedByVisibility = false;
+      console.log('[WsClient] Side Panel 可见');
+      if (this.currentState !== 'connected' && this.currentState !== 'connecting') {
+        console.log('[WsClient] 可见性恢复，重置计数并立即重连');
+        this.reconnectCount = 0;
+        this.connect();
+      }
+    }
+  }
+
   // --- 内部方法 ---
 
   private cleanup(): void {
@@ -388,6 +432,11 @@ export class WsClient {
    */
   private scheduleReconnect(): void {
     if (this.disposed) return;
+    // 可见性感知：Side Panel 隐藏时不调度重连，等待 visible 事件恢复
+    if (this._pausedByVisibility) {
+      console.log('[WsClient] Side Panel 隐藏中，跳过重连调度');
+      return;
+    }
     if (this.reconnectCount >= this.maxReconnectAttempts) {
       console.log(`[WsClient] 已达最大重连次数 (${this.maxReconnectAttempts})，停止重连`);
       this.setState('failed');
