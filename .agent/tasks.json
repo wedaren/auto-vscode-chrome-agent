@@ -1213,7 +1213,7 @@
       "id": "evo_v17_003",
       "type": "coding",
       "title": "VSCode 侧 System Prompt 上下文预算：buildSystemPrompt 截断 + 日志监控",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v17_001"
       ],

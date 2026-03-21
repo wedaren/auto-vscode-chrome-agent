@@ -39,6 +39,7 @@ exports.AgentLoop = void 0;
 // 支持：MCP 工具（chrome-devtools-mcp）、原生浏览器工具（browser_* 前缀）、run_skill 工具（Skill 执行引擎）
 // 参考：ReportGenerator 的 MCP/LM 调用模式，但更通用——适用于任意对话场景
 const vscode = __importStar(require("vscode"));
+const context_budget_1 = require("./context-budget");
 /**
  * AgentLoop 实现 ReAct (Reasoning + Acting) 模式的 Agent 循环。
  *
@@ -163,13 +164,20 @@ class AgentLoop {
                     steps.push(actStep);
                     onStep?.(actStep);
                     // 执行 MCP 工具调用
-                    const observation = await this.executeTool(parsed.toolName, parsed.toolArgs ?? {});
+                    const rawObservation = await this.executeTool(parsed.toolName, parsed.toolArgs ?? {});
+                    // 截断观察结果，防止单次工具返回过大文本撑爆上下文
+                    const observation = (0, context_budget_1.smartTruncate)(rawObservation, context_budget_1.MAX_OBSERVATION_CHARS);
+                    if (observation.length < rawObservation.length) {
+                        this.outputChannel.appendLine(`[AgentLoop] 观察结果已截断: ${rawObservation.length} → ${observation.length} chars (上限 ${context_budget_1.MAX_OBSERVATION_CHARS})`);
+                    }
                     // Observe 步骤
                     const observeStep = this.createStep(roundCount, 'observe', observation);
                     steps.push(observeStep);
                     onStep?.(observeStep);
                     // 将观察结果反馈给 LLM
                     messages.push(vscode.LanguageModelChatMessage.User(`OBSERVATION:\n${observation}`));
+                    // 消息窗口管理：防止累积对话超出 token 预算
+                    this.trimMessages(messages);
                     continue;
                 }
                 // ── UNKNOWN：LLM 未遵循格式，记录 think 并提示重试 ──
@@ -468,6 +476,59 @@ FINAL_ANSWER: <your complete answer to the user>
      */
     createStep(step, type, content, toolName, toolArgs) {
         return { step, type, content, toolName, toolArgs };
+    }
+    /**
+     * 计算单条消息的文本字符总数。
+     * vscode.LanguageModelChatMessage.content 是 LanguageModelContentPart[] 数组，
+     * 文本部分（LanguageModelTextPart）有 .value 属性。
+     */
+    getMessageTextLength(message) {
+        let len = 0;
+        for (const part of message.content) {
+            if ('value' in part && typeof part.value === 'string') {
+                len += (part.value).length;
+            }
+        }
+        return len;
+    }
+    /**
+     * 计算消息数组的总文本字符数。
+     */
+    calcMessagesChars(messages) {
+        return messages.reduce((sum, m) => sum + this.getMessageTextLength(m), 0);
+    }
+    /**
+     * 消息窗口管理：当 messages 总字符数超过 MAX_MESSAGES_CHARS 时，
+     * 移除最早的非系统消息轮次（保留 system prompt + 用户初始消息 + 最近 N 轮对话）。
+     *
+     * 策略：
+     * - messages[0] 是 system prompt（Agent 系统提示），始终保留
+     * - messages[1] 是用户原始消息，始终保留
+     * - 从 messages[2] 开始移除最早的消息，直到总字符数降到预算内
+     * - 每次移除一条消息，直到降到预算内
+     */
+    trimMessages(messages) {
+        const totalChars = this.calcMessagesChars(messages);
+        if (totalChars <= context_budget_1.MAX_MESSAGES_CHARS) {
+            return;
+        }
+        this.outputChannel.appendLine(`[AgentLoop] 消息窗口超出预算: ${totalChars} chars (≈${Math.ceil(totalChars / 3)} tokens) > ${context_budget_1.MAX_MESSAGES_CHARS} chars，开始裁剪`);
+        // 保留前 2 条（system prompt + 用户初始消息）
+        const PROTECTED_COUNT = 2;
+        let removedCount = 0;
+        // 从 PROTECTED_COUNT 位置开始移除最早的消息，直到总量降到预算内
+        while (messages.length > PROTECTED_COUNT + 1) {
+            if (this.calcMessagesChars(messages) <= context_budget_1.MAX_MESSAGES_CHARS) {
+                break;
+            }
+            // 移除 PROTECTED_COUNT 位置的消息（最早的非保护消息）
+            messages.splice(PROTECTED_COUNT, 1);
+            removedCount++;
+        }
+        if (removedCount > 0) {
+            const afterChars = this.calcMessagesChars(messages);
+            this.outputChannel.appendLine(`[AgentLoop] 消息窗口裁剪完成: 移除 ${removedCount} 条旧消息，${totalChars} → ${afterChars} chars，剩余 ${messages.length} 条消息`);
+        }
     }
     /**
      * 总结已执行的步骤（达到 maxSteps 上限时用于生成 fallback 答案）

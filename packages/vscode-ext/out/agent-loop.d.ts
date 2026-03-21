@@ -118,6 +118,27 @@ export declare class AgentLoop {
      */
     private createStep;
     /**
+     * 计算单条消息的文本字符总数。
+     * vscode.LanguageModelChatMessage.content 是 LanguageModelContentPart[] 数组，
+     * 文本部分（LanguageModelTextPart）有 .value 属性。
+     */
+    private getMessageTextLength;
+    /**
+     * 计算消息数组的总文本字符数。
+     */
+    private calcMessagesChars;
+    /**
+     * 消息窗口管理：当 messages 总字符数超过 MAX_MESSAGES_CHARS 时，
+     * 移除最早的非系统消息轮次（保留 system prompt + 用户初始消息 + 最近 N 轮对话）。
+     *
+     * 策略：
+     * - messages[0] 是 system prompt（Agent 系统提示），始终保留
+     * - messages[1] 是用户原始消息，始终保留
+     * - 从 messages[2] 开始移除最早的消息，直到总字符数降到预算内
+     * - 每次移除一条消息，直到降到预算内
+     */
+    private trimMessages;
+    /**
      * 总结已执行的步骤（达到 maxSteps 上限时用于生成 fallback 答案）
      */
     private summarizeSteps;

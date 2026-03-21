@@ -8,6 +8,12 @@ import { McpClient, McpToolResult } from './mcp-client';
 import { BrowserToolProvider } from './browser-tools';
 import { SkillRegistry } from './skill-registry';
 import { SkillRunner } from './skill-runner';
+import {
+  smartTruncate,
+  estimateTokens,
+  MAX_OBSERVATION_CHARS,
+  MAX_MESSAGES_CHARS,
+} from './context-budget';
 
 /** Agent 单步执行记录 */
 export interface AgentStep {
@@ -227,10 +233,18 @@ export class AgentLoop {
           onStep?.(actStep);
 
           // 执行 MCP 工具调用
-          const observation = await this.executeTool(
+          const rawObservation = await this.executeTool(
             parsed.toolName!,
             parsed.toolArgs ?? {},
           );
+
+          // 截断观察结果，防止单次工具返回过大文本撑爆上下文
+          const observation = smartTruncate(rawObservation, MAX_OBSERVATION_CHARS);
+          if (observation.length < rawObservation.length) {
+            this.outputChannel.appendLine(
+              `[AgentLoop] 观察结果已截断: ${rawObservation.length} → ${observation.length} chars (上限 ${MAX_OBSERVATION_CHARS})`,
+            );
+          }
 
           // Observe 步骤
           const observeStep = this.createStep(roundCount, 'observe', observation);
@@ -241,6 +255,9 @@ export class AgentLoop {
           messages.push(
             vscode.LanguageModelChatMessage.User(`OBSERVATION:\n${observation}`),
           );
+
+          // 消息窗口管理：防止累积对话超出 token 预算
+          this.trimMessages(messages);
 
           continue;
         }
@@ -620,6 +637,72 @@ FINAL_ANSWER: <your complete answer to the user>
     toolArgs?: Record<string, unknown>,
   ): AgentStep {
     return { step, type, content, toolName, toolArgs };
+  }
+
+  /**
+   * 计算单条消息的文本字符总数。
+   * vscode.LanguageModelChatMessage.content 是 LanguageModelContentPart[] 数组，
+   * 文本部分（LanguageModelTextPart）有 .value 属性。
+   */
+  private getMessageTextLength(message: vscode.LanguageModelChatMessage): number {
+    let len = 0;
+    for (const part of message.content) {
+      if ('value' in part && typeof (part as { value: unknown }).value === 'string') {
+        len += ((part as { value: string }).value).length;
+      }
+    }
+    return len;
+  }
+
+  /**
+   * 计算消息数组的总文本字符数。
+   */
+  private calcMessagesChars(messages: vscode.LanguageModelChatMessage[]): number {
+    return messages.reduce((sum, m) => sum + this.getMessageTextLength(m), 0);
+  }
+
+  /**
+   * 消息窗口管理：当 messages 总字符数超过 MAX_MESSAGES_CHARS 时，
+   * 移除最早的非系统消息轮次（保留 system prompt + 用户初始消息 + 最近 N 轮对话）。
+   *
+   * 策略：
+   * - messages[0] 是 system prompt（Agent 系统提示），始终保留
+   * - messages[1] 是用户原始消息，始终保留
+   * - 从 messages[2] 开始移除最早的消息，直到总字符数降到预算内
+   * - 每次移除一条消息，直到降到预算内
+   */
+  private trimMessages(messages: vscode.LanguageModelChatMessage[]): void {
+    const totalChars = this.calcMessagesChars(messages);
+
+    if (totalChars <= MAX_MESSAGES_CHARS) {
+      return;
+    }
+
+    this.outputChannel.appendLine(
+      `[AgentLoop] 消息窗口超出预算: ${totalChars} chars (≈${Math.ceil(totalChars / 3)} tokens) > ${MAX_MESSAGES_CHARS} chars，开始裁剪`,
+    );
+
+    // 保留前 2 条（system prompt + 用户初始消息）
+    const PROTECTED_COUNT = 2;
+    let removedCount = 0;
+
+    // 从 PROTECTED_COUNT 位置开始移除最早的消息，直到总量降到预算内
+    while (messages.length > PROTECTED_COUNT + 1) {
+      if (this.calcMessagesChars(messages) <= MAX_MESSAGES_CHARS) {
+        break;
+      }
+
+      // 移除 PROTECTED_COUNT 位置的消息（最早的非保护消息）
+      messages.splice(PROTECTED_COUNT, 1);
+      removedCount++;
+    }
+
+    if (removedCount > 0) {
+      const afterChars = this.calcMessagesChars(messages);
+      this.outputChannel.appendLine(
+        `[AgentLoop] 消息窗口裁剪完成: 移除 ${removedCount} 条旧消息，${totalChars} → ${afterChars} chars，剩余 ${messages.length} 条消息`,
+      );
+    }
   }
 
   /**
