@@ -13,6 +13,7 @@ import { BrowserToolProvider } from './browser-tools';
 import { SkillRegistry } from './skill-registry';
 import { SkillRunner } from './skill-runner';
 import { SkillTreeDataProvider, runSkillCommand, toggleSkillCommand, addCustomSkillCommand } from './skill-tree';
+import { UserDataManager } from './user-data-manager';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
@@ -25,10 +26,32 @@ let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
 let agentTree: AgentTreeDataProvider | undefined;
 let skillTree: SkillTreeDataProvider | undefined;
+let userDataManager: UserDataManager | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
   outputChannel.appendLine('[BrowserAgent] 插件激活中...');
+
+  // 初始化全局用户数据目录管理器（最先初始化，其他模块可能依赖数据目录）
+  userDataManager = new UserDataManager(outputChannel);
+  userDataManager.init().catch((err: unknown) => {
+    outputChannel.appendLine(
+      `[BrowserAgent] UserDataManager 初始化失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+  outputChannel.appendLine('[BrowserAgent] UserDataManager 已创建');
+
+  // 监听 browserAgent.userDataDir 配置变更，变更时重新初始化数据目录
+  const configChangeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('browserAgent.userDataDir')) {
+      outputChannel.appendLine('[BrowserAgent] 检测到 userDataDir 配置变更，重新初始化数据目录...');
+      userDataManager?.init().catch((err: unknown) => {
+        outputChannel.appendLine(
+          `[BrowserAgent] 配置变更后重新初始化失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+  });
 
   // 初始化核心服务
   lmService = new LmService(outputChannel);
@@ -143,6 +166,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // 注册 dispose
   context.subscriptions.push(
     outputChannel,
+    configChangeDisposable,
     ...commandDisposables,
     connectionTreeView,
     messageTreeView,
@@ -160,6 +184,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => skillTree?.dispose() },
     { dispose: () => skillRegistry?.dispose() },
     { dispose: () => browserToolProvider?.dispose() },
+    { dispose: () => userDataManager?.dispose() },
     { dispose: () => wsServer?.dispose() },
     { dispose: () => { void mcpClient?.dispose(); } },
   );
@@ -184,6 +209,8 @@ export function deactivate(): void {
   agentTree = undefined;
   skillTree?.dispose();
   skillTree = undefined;
+  userDataManager?.dispose();
+  userDataManager = undefined;
   void mcpClient?.dispose();
   mcpClient = undefined;
   wsServer?.dispose();

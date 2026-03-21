@@ -50,6 +50,7 @@ const browser_tools_1 = require("./browser-tools");
 const skill_registry_1 = require("./skill-registry");
 const skill_runner_1 = require("./skill-runner");
 const skill_tree_1 = require("./skill-tree");
+const user_data_manager_1 = require("./user-data-manager");
 let lmService;
 let wsServer;
 let mcpClient;
@@ -61,9 +62,25 @@ let connectionTree;
 let messageTree;
 let agentTree;
 let skillTree;
+let userDataManager;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
+    // 初始化全局用户数据目录管理器（最先初始化，其他模块可能依赖数据目录）
+    userDataManager = new user_data_manager_1.UserDataManager(outputChannel);
+    userDataManager.init().catch((err) => {
+        outputChannel.appendLine(`[BrowserAgent] UserDataManager 初始化失败: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    outputChannel.appendLine('[BrowserAgent] UserDataManager 已创建');
+    // 监听 browserAgent.userDataDir 配置变更，变更时重新初始化数据目录
+    const configChangeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('browserAgent.userDataDir')) {
+            outputChannel.appendLine('[BrowserAgent] 检测到 userDataDir 配置变更，重新初始化数据目录...');
+            userDataManager?.init().catch((err) => {
+                outputChannel.appendLine(`[BrowserAgent] 配置变更后重新初始化失败: ${err instanceof Error ? err.message : String(err)}`);
+            });
+        }
+    });
     // 初始化核心服务
     lmService = new lm_service_1.LmService(outputChannel);
     mcpClient = new mcp_client_1.McpClient(outputChannel);
@@ -136,7 +153,7 @@ function activate(context) {
     });
     outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
     // 注册 dispose
-    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, skillTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, runSkillCmd, toggleSkillCmd, addCustomSkillCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => skillTree?.dispose() }, { dispose: () => skillRegistry?.dispose() }, { dispose: () => browserToolProvider?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, configChangeDisposable, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, skillTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, runSkillCmd, toggleSkillCmd, addCustomSkillCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => skillTree?.dispose() }, { dispose: () => skillRegistry?.dispose() }, { dispose: () => browserToolProvider?.dispose() }, { dispose: () => userDataManager?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
@@ -156,6 +173,8 @@ function deactivate() {
     agentTree = undefined;
     skillTree?.dispose();
     skillTree = undefined;
+    userDataManager?.dispose();
+    userDataManager = undefined;
     void mcpClient?.dispose();
     mcpClient = undefined;
     wsServer?.dispose();

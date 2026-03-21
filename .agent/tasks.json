@@ -823,7 +823,7 @@
       "id": "evo_v11_001",
       "type": "coding",
       "title": "创建 UserDataManager 服务类 + 添加 browserAgent.userDataDir 配置 schema",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v10_005"
       ],
