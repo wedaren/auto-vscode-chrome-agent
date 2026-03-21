@@ -265,7 +265,8 @@ export function useDebugLog(): UseDebugLogReturn {
     error: logs.filter((l) => l.type === 'error').length,
   }), [logs]);
 
-  return {
+  // useMemo 稳定化返回对象引用，避免每次渲染创建新对象触发消费者不必要的重渲染
+  return useMemo<UseDebugLogReturn>(() => ({
     logs,
     timeline,
     toggles,
@@ -282,5 +283,22 @@ export function useDebugLog(): UseDebugLogReturn {
     exportLogs,
     getFilteredLogs,
     stats,
-  };
+  }), [
+    logs,
+    timeline,
+    toggles,
+    logInbound,
+    logOutbound,
+    logConnection,
+    logExecution,
+    logError,
+    startTimeline,
+    endTimeline,
+    clearLogs,
+    clearTimeline,
+    setToggles,
+    exportLogs,
+    getFilteredLogs,
+    stats,
+  ]);
 }
