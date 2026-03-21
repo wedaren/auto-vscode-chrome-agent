@@ -1066,7 +1066,7 @@
       "id": "evo_v15_001",
       "type": "coding",
       "title": "WsClient 重连指数退避：固定 3s 改为 1s→2s→4s→8s→max30s + jitter + maxReconnectAttempts=20 + 合并重连日志",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v14_005"
       ],
