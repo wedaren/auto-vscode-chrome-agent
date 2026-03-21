@@ -81,6 +81,12 @@ class WsServer {
     pendingRequests = new Map();
     /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
     _disposed = false;
+    /** 心跳检测定时器（30s 间隔 ping 所有客户端，pong 超时自动断开死连接） */
+    heartbeatInterval = null;
+    /** 心跳间隔毫秒数 */
+    static HEARTBEAT_INTERVAL_MS = 30_000;
+    /** 客户端存活标记 Map：WebSocket → isAlive（收到 pong 时标记为 true） */
+    clientAliveMap = new Map();
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     _onDidChangeState = new vscode.EventEmitter();
     onDidChangeState = this._onDidChangeState.event;
@@ -120,13 +126,20 @@ class WsServer {
                 this._listening = true;
                 this.outputChannel.appendLine(`[WsServer] WebSocket 服务端已在端口 ${this._port} 上监听`);
                 vscode.window.showInformationMessage(`Browser Agent WebSocket listening on port ${this._port}`);
+                this.startHeartbeat();
                 this._onDidChangeState.fire();
                 resolve();
             });
             this.wss.on('connection', (ws) => {
                 this.clients.add(ws);
+                // 心跳：标记新连接为存活
+                this.clientAliveMap.set(ws, true);
                 this.outputChannel.appendLine(`[WsServer] 新客户端连接 (当前连接数: ${this.clients.size})`);
                 this._onDidChangeState.fire();
+                // 心跳：收到 pong 时标记为存活
+                ws.on('pong', () => {
+                    this.clientAliveMap.set(ws, true);
+                });
                 ws.on('message', (data) => {
                     try {
                         const msg = JSON.parse(data.toString());
@@ -140,6 +153,7 @@ class WsServer {
                 });
                 ws.on('close', () => {
                     this.clients.delete(ws);
+                    this.clientAliveMap.delete(ws);
                     this.outputChannel.appendLine(`[WsServer] 客户端断开 (当前连接数: ${this.clients.size})`);
                     this._onDidChangeState.fire();
                 });
@@ -292,10 +306,45 @@ class WsServer {
         });
     }
     /**
+     * 启动心跳检测定时器。
+     * 每 30 秒遍历所有客户端：
+     * - 如果上次 ping 后未收到 pong（isAlive=false），说明是死连接 → terminate
+     * - 否则标记 isAlive=false 并发送 ping，等待下次检测周期收到 pong
+     */
+    startHeartbeat() {
+        this.stopHeartbeat();
+        this.heartbeatInterval = setInterval(() => {
+            for (const ws of this.clients) {
+                const isAlive = this.clientAliveMap.get(ws) ?? false;
+                if (!isAlive) {
+                    // 上次 ping 后未收到 pong，判定为死连接
+                    this.outputChannel.appendLine('[WsServer] 心跳超时，终止死连接');
+                    this.clientAliveMap.delete(ws);
+                    ws.terminate();
+                    continue;
+                }
+                // 标记为未响应，发送 ping 等待 pong
+                this.clientAliveMap.set(ws, false);
+                ws.ping();
+            }
+        }, WsServer.HEARTBEAT_INTERVAL_MS);
+        this.outputChannel.appendLine(`[WsServer] 心跳检测已启动 (间隔 ${WsServer.HEARTBEAT_INTERVAL_MS}ms)`);
+    }
+    /**
+     * 停止心跳检测定时器
+     */
+    stopHeartbeat() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+    }
+    /**
      * 关闭服务端和所有连接
      */
     dispose() {
         this._disposed = true;
+        this.stopHeartbeat();
         // 清理所有待响应请求，reject 防止 Promise 悬挂
         for (const [requestId, pending] of this.pendingRequests) {
             clearTimeout(pending.timer);
@@ -307,6 +356,7 @@ class WsServer {
                 client.close();
             }
             this.clients.clear();
+            this.clientAliveMap.clear();
             this.wss.close();
             this.wss = null;
             this._listening = false;

@@ -27,6 +27,8 @@ export interface AgentStep {
 export interface AgentLoopOptions {
   /** 最大步数限制，防止无限循环（默认 MAX_STEPS） */
   maxSteps?: number;
+  /** 总超时毫秒数，超时自动中断并返回 fallback 答案（默认 TOTAL_TIMEOUT_MS = 5 分钟） */
+  totalTimeout?: number;
   /** 系统提示词前缀（含浏览器上下文等） */
   systemPrompt?: string;
   /** 每步执行回调，用于实时推送到 Chrome UI */
@@ -80,6 +82,9 @@ export class AgentLoop {
   /** 默认最大步数（LLM 调用轮数） */
   static readonly MAX_STEPS = 15;
 
+  /** 默认总超时（5 分钟 = 300000ms），防止 Agent 无限挂起 */
+  static readonly TOTAL_TIMEOUT_MS = 5 * 60 * 1000;
+
   constructor(
     lmService: LmService,
     mcpClient: McpClient,
@@ -109,135 +114,169 @@ export class AgentLoop {
     token?: vscode.CancellationToken,
   ): Promise<AgentLoopResult> {
     const maxSteps = options.maxSteps ?? AgentLoop.MAX_STEPS;
+    const totalTimeout = options.totalTimeout ?? AgentLoop.TOTAL_TIMEOUT_MS;
     const onStep = options.onStep;
     const steps: AgentStep[] = [];
     let roundCount = 0;
+    let timedOut = false;
 
     this.outputChannel.appendLine(
-      `[AgentLoop] 开始执行，maxSteps=${maxSteps}, 用户消息: ${userMessage.substring(0, 100)}`,
+      `[AgentLoop] 开始执行，maxSteps=${maxSteps}, totalTimeout=${totalTimeout}ms, 用户消息: ${userMessage.substring(0, 100)}`,
     );
 
-    // 获取可用 MCP 工具描述
-    const toolsDescription = await this.getToolDescriptions();
-
-    // 构建 Agent 系统提示（含 ReAct 格式指令 + 工具列表）
-    const agentSystemPrompt = this.buildAgentSystemPrompt(
-      toolsDescription,
-      options.systemPrompt,
-    );
-
-    // 累积对话消息（LLM 可看到完整上下文）
-    const messages: vscode.LanguageModelChatMessage[] = [
-      vscode.LanguageModelChatMessage.User(agentSystemPrompt),
-      vscode.LanguageModelChatMessage.User(userMessage),
-    ];
-
-    // 获取语言模型实例
-    const model = await this.lmService.selectModel();
-    if (!model) {
-      throw new Error('无可用语言模型，请确认已安装 GitHub Copilot Chat 扩展并有有效订阅');
-    }
-
-    // ── ReAct 主循环 ──
-    while (roundCount < maxSteps) {
-      // 检查取消
-      if (token?.isCancellationRequested) {
-        this.outputChannel.appendLine('[AgentLoop] 收到取消信号，中断循环');
-        break;
-      }
-
-      roundCount++;
-      this.outputChannel.appendLine(`[AgentLoop] ── Round ${roundCount}/${maxSteps} ──`);
-
-      // 调用 LLM
-      const llmOutput = await this.callLlm(model, messages, token);
+    // ── 总超时保护：超时后通过 CancellationTokenSource 中断循环 ──
+    const timeoutCts = new vscode.CancellationTokenSource();
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      timeoutCts.cancel();
       this.outputChannel.appendLine(
-        `[AgentLoop] LLM 输出 (${llmOutput.length} chars):\n${llmOutput.substring(0, 500)}`,
+        `[AgentLoop] 总超时 (${totalTimeout}ms) 已触发，中断循环`,
+      );
+    }, totalTimeout);
+
+    // 合并外部 token 和超时 token：任一取消即中断
+    // 如果外部 token 取消，也需要清理 timeoutCts
+    const externalCancelListener = token?.onCancellationRequested(() => {
+      timeoutCts.cancel();
+    });
+    const effectiveToken = timeoutCts.token;
+
+    try {
+      // 获取可用 MCP 工具描述
+      const toolsDescription = await this.getToolDescriptions();
+
+      // 构建 Agent 系统提示（含 ReAct 格式指令 + 工具列表）
+      const agentSystemPrompt = this.buildAgentSystemPrompt(
+        toolsDescription,
+        options.systemPrompt,
       );
 
-      // 将 assistant 回复加入对话历史
-      messages.push(vscode.LanguageModelChatMessage.Assistant(llmOutput));
+      // 累积对话消息（LLM 可看到完整上下文）
+      const messages: vscode.LanguageModelChatMessage[] = [
+        vscode.LanguageModelChatMessage.User(agentSystemPrompt),
+        vscode.LanguageModelChatMessage.User(userMessage),
+      ];
 
-      // 解析 LLM 输出
-      const parsed = this.parseLlmOutput(llmOutput);
+      // 获取语言模型实例
+      const model = await this.lmService.selectModel();
+      if (!model) {
+        throw new Error('无可用语言模型，请确认已安装 GitHub Copilot Chat 扩展并有有效订阅');
+      }
 
-      // ── FINAL_ANSWER：结束循环 ──
-      if (parsed.type === 'FINAL_ANSWER') {
-        // 记录最后一次 think
-        if (parsed.thought) {
-          const thinkStep = this.createStep(roundCount, 'think', parsed.thought);
-          steps.push(thinkStep);
-          onStep?.(thinkStep);
+      // ── ReAct 主循环 ──
+      while (roundCount < maxSteps) {
+        // 检查取消（包含超时触发的取消）
+        if (effectiveToken.isCancellationRequested) {
+          if (timedOut) {
+            this.outputChannel.appendLine('[AgentLoop] 总超时中断循环');
+          } else {
+            this.outputChannel.appendLine('[AgentLoop] 收到取消信号，中断循环');
+          }
+          break;
         }
 
+        roundCount++;
+        this.outputChannel.appendLine(`[AgentLoop] ── Round ${roundCount}/${maxSteps} ──`);
+
+        // 调用 LLM
+        const llmOutput = await this.callLlm(model, messages, effectiveToken);
         this.outputChannel.appendLine(
-          `[AgentLoop] 完成，共 ${roundCount} 轮，最终答案长度: ${parsed.answer.length}`,
+          `[AgentLoop] LLM 输出 (${llmOutput.length} chars):\n${llmOutput.substring(0, 500)}`,
         );
 
-        return { finalAnswer: parsed.answer, steps, totalSteps: roundCount };
-      }
+        // 将 assistant 回复加入对话历史
+        messages.push(vscode.LanguageModelChatMessage.Assistant(llmOutput));
 
-      // ── ACTION：执行工具调用 ──
-      if (parsed.type === 'ACTION') {
-        // Think 步骤
-        if (parsed.thought) {
-          const thinkStep = this.createStep(roundCount, 'think', parsed.thought);
-          steps.push(thinkStep);
-          onStep?.(thinkStep);
+        // 解析 LLM 输出
+        const parsed = this.parseLlmOutput(llmOutput);
+
+        // ── FINAL_ANSWER：结束循环 ──
+        if (parsed.type === 'FINAL_ANSWER') {
+          // 记录最后一次 think
+          if (parsed.thought) {
+            const thinkStep = this.createStep(roundCount, 'think', parsed.thought);
+            steps.push(thinkStep);
+            onStep?.(thinkStep);
+          }
+
+          this.outputChannel.appendLine(
+            `[AgentLoop] 完成，共 ${roundCount} 轮，最终答案长度: ${parsed.answer.length}`,
+          );
+
+          return { finalAnswer: parsed.answer, steps, totalSteps: roundCount };
         }
 
-        // Act 步骤
-        const actStep = this.createStep(
-          roundCount,
-          'act',
-          `调用工具 ${parsed.toolName}`,
-          parsed.toolName,
-          parsed.toolArgs,
-        );
-        steps.push(actStep);
-        onStep?.(actStep);
+        // ── ACTION：执行工具调用 ──
+        if (parsed.type === 'ACTION') {
+          // Think 步骤
+          if (parsed.thought) {
+            const thinkStep = this.createStep(roundCount, 'think', parsed.thought);
+            steps.push(thinkStep);
+            onStep?.(thinkStep);
+          }
 
-        // 执行 MCP 工具调用
-        const observation = await this.executeTool(
-          parsed.toolName!,
-          parsed.toolArgs ?? {},
-        );
+          // Act 步骤
+          const actStep = this.createStep(
+            roundCount,
+            'act',
+            `调用工具 ${parsed.toolName}`,
+            parsed.toolName,
+            parsed.toolArgs,
+          );
+          steps.push(actStep);
+          onStep?.(actStep);
 
-        // Observe 步骤
-        const observeStep = this.createStep(roundCount, 'observe', observation);
-        steps.push(observeStep);
-        onStep?.(observeStep);
+          // 执行 MCP 工具调用
+          const observation = await this.executeTool(
+            parsed.toolName!,
+            parsed.toolArgs ?? {},
+          );
 
-        // 将观察结果反馈给 LLM
+          // Observe 步骤
+          const observeStep = this.createStep(roundCount, 'observe', observation);
+          steps.push(observeStep);
+          onStep?.(observeStep);
+
+          // 将观察结果反馈给 LLM
+          messages.push(
+            vscode.LanguageModelChatMessage.User(`OBSERVATION:\n${observation}`),
+          );
+
+          continue;
+        }
+
+        // ── UNKNOWN：LLM 未遵循格式，记录 think 并提示重试 ──
+        const thinkStep = this.createStep(roundCount, 'think', llmOutput);
+        steps.push(thinkStep);
+        onStep?.(thinkStep);
+
         messages.push(
-          vscode.LanguageModelChatMessage.User(`OBSERVATION:\n${observation}`),
+          vscode.LanguageModelChatMessage.User(
+            'Please respond using the required format: either ACTION with ACTION_INPUT, or FINAL_ANSWER.',
+          ),
         );
-
-        continue;
       }
 
-      // ── UNKNOWN：LLM 未遵循格式，记录 think 并提示重试 ──
-      const thinkStep = this.createStep(roundCount, 'think', llmOutput);
-      steps.push(thinkStep);
-      onStep?.(thinkStep);
-
-      messages.push(
-        vscode.LanguageModelChatMessage.User(
-          'Please respond using the required format: either ACTION with ACTION_INPUT, or FINAL_ANSWER.',
-        ),
+      // ── 达到 maxSteps 或超时，强制结束 ──
+      const reason = timedOut
+        ? `总超时 ${totalTimeout}ms`
+        : `最大步数 ${maxSteps}`;
+      this.outputChannel.appendLine(
+        `[AgentLoop] 因 ${reason} 强制结束`,
       );
+
+      const fallbackAnswer = timedOut
+        ? `(Agent 执行超时 ${Math.round(totalTimeout / 1000)} 秒后自动中断)\n\n` +
+          this.summarizeSteps(steps)
+        : `(Agent 达到最大步数 ${maxSteps} 限制后自动结束)\n\n` +
+          this.summarizeSteps(steps);
+
+      return { finalAnswer: fallbackAnswer, steps, totalSteps: roundCount };
+    } finally {
+      clearTimeout(timeoutTimer);
+      externalCancelListener?.dispose();
+      timeoutCts.dispose();
     }
-
-    // ── 达到 maxSteps 上限，强制结束 ──
-    this.outputChannel.appendLine(
-      `[AgentLoop] 达到最大步数 ${maxSteps}，强制结束`,
-    );
-
-    const fallbackAnswer =
-      `(Agent 达到最大步数 ${maxSteps} 限制后自动结束)\n\n` +
-      this.summarizeSteps(steps);
-
-    return { finalAnswer: fallbackAnswer, steps, totalSteps: roundCount };
   }
 
   // ────────────────────────────────────────────────────────────────

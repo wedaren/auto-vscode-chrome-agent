@@ -21,6 +21,8 @@ export interface AgentStep {
 export interface AgentLoopOptions {
     /** 最大步数限制，防止无限循环（默认 MAX_STEPS） */
     maxSteps?: number;
+    /** 总超时毫秒数，超时自动中断并返回 fallback 答案（默认 TOTAL_TIMEOUT_MS = 5 分钟） */
+    totalTimeout?: number;
     /** 系统提示词前缀（含浏览器上下文等） */
     systemPrompt?: string;
     /** 每步执行回调，用于实时推送到 Chrome UI */
@@ -61,6 +63,8 @@ export declare class AgentLoop {
     private readonly outputChannel;
     /** 默认最大步数（LLM 调用轮数） */
     static readonly MAX_STEPS = 15;
+    /** 默认总超时（5 分钟 = 300000ms），防止 Agent 无限挂起 */
+    static readonly TOTAL_TIMEOUT_MS: number;
     constructor(lmService: LmService, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider?: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
     /**
      * 执行 ReAct Agent 循环

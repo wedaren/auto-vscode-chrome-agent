@@ -30,6 +30,12 @@ export declare class WsServer {
     private readonly pendingRequests;
     /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
     private _disposed;
+    /** 心跳检测定时器（30s 间隔 ping 所有客户端，pong 超时自动断开死连接） */
+    private heartbeatInterval;
+    /** 心跳间隔毫秒数 */
+    private static readonly HEARTBEAT_INTERVAL_MS;
+    /** 客户端存活标记 Map：WebSocket → isAlive（收到 pong 时标记为 true） */
+    private readonly clientAliveMap;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     private readonly _onDidChangeState;
     readonly onDidChangeState: vscode.Event<void>;
@@ -83,6 +89,17 @@ export declare class WsServer {
      * @throws Error — 超时或发送失败时
      */
     sendAndWait(ws: WebSocket, msg: BridgeMessage, timeoutMs?: number): Promise<ToolResultPayload>;
+    /**
+     * 启动心跳检测定时器。
+     * 每 30 秒遍历所有客户端：
+     * - 如果上次 ping 后未收到 pong（isAlive=false），说明是死连接 → terminate
+     * - 否则标记 isAlive=false 并发送 ping，等待下次检测周期收到 pong
+     */
+    private startHeartbeat;
+    /**
+     * 停止心跳检测定时器
+     */
+    private stopHeartbeat;
     /**
      * 关闭服务端和所有连接
      */
