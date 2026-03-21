@@ -1,6 +1,8 @@
 // useWebSocket.ts — 自定义 Hook：封装 WsClient 初始化、连接状态管理、消息分发和断连恢复
+// 集成 tool_execute / tool_result 工具调用协议（不阻塞聊天 UI）
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../src/ws-client';
+import { createToolBridgeHandler } from '../utils/tool-bridge';
 
 /** useWebSocket Hook 返回值 */
 export interface UseWebSocketReturn {
@@ -22,6 +24,8 @@ export interface UseWebSocketReturn {
  * - 连接状态跟踪（connecting / connected / disconnected）
  * - 消息分发：注册多个监听器，收到消息时逐一通知
  * - 断连自动重连（由 WsClient 内部处理）
+ * - tool_execute 消息自动处理：收到 VSCode 发来的 tool_execute 时，
+ *   通过 tool-bridge 调用 background EXECUTE_ACTION 并发回 tool_result（不阻塞聊天 UI）
  */
 export function useWebSocket(url: string): UseWebSocketReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
@@ -48,13 +52,22 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const client = new WsClient({ url });
     wsClientRef.current = client;
 
+    // 创建 tool_execute 消息处理器（自动处理工具调用，不阻塞聊天 UI）
+    const toolBridgeHandler = createToolBridgeHandler((type, payload) => {
+      return client.sendMessage(type, payload);
+    });
+
     // 监听连接状态变化
     const unsubState = client.onStateChange((state: ConnectionState) => {
       setConnectionState(state);
     });
 
-    // 将 WsClient 消息分发给所有已注册的监听器
+    // 将 WsClient 消息分发给所有已注册的监听器 + tool bridge
     const unsubMsg = client.onMessage((msg: BridgeMessage) => {
+      // tool_execute 消息由 tool bridge 自动处理（异步，不阻塞）
+      toolBridgeHandler(msg);
+
+      // 其他消息分发给所有已注册的监听器（聊天 UI 等）
       for (const handler of messageListenersRef.current) {
         handler(msg);
       }

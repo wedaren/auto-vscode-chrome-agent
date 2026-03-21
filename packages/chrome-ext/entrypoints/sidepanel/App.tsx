@@ -44,8 +44,16 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 注册 WebSocket 消息处理
+  // 注意：tool_execute / tool_result 消息由 useWebSocket 内部的 tool-bridge 自动处理，
+  //       不在此处处理，不阻塞聊天 UI 渲染
   useEffect(() => {
     const unsub = onMessage((msg: BridgeMessage) => {
+      // tool_execute 由 useWebSocket 内的 tool-bridge 处理，tool_result 由 VSCode 侧处理
+      // 这里只处理聊天相关消息
+      if (msg.type === 'tool_execute' || msg.type === 'tool_result') {
+        return;
+      }
+
       handleChatMessage(msg);
       switch (msg.type) {
         case 'pong':

@@ -1,5 +1,15 @@
 // ws-client.ts — WebSocket 客户端，负责与 VSCode 插件的双向通信
 // 提供自动重连、消息收发、连接状态回调
+//
+// === 支持的消息类型 ===
+// 聊天类：ping/pong, chat, chat_response_chunk, chat_response_end
+// 模型类：list_models, models_list, select_model, model_selected
+// Agent 类：agent_step, agent_complete
+// 工具调用类（双向工具协议）：
+//   tool_execute  — VSCode → Chrome：请求执行浏览器操作
+//                   payload: { requestId, toolName, toolArgs }
+//   tool_result   — Chrome → VSCode：返回工具执行结果
+//                   payload: { requestId, success, data, error }
 
 /** Chrome ↔ VSCode 桥接消息协议（与 VSCode 侧 BridgeMessage 保持一致） */
 export interface BridgeMessage {

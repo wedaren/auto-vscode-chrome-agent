@@ -522,8 +522,10 @@
       "id": "evo_v6_001",
       "type": "coding",
       "title": "Chrome 侧浏览器操作执行引擎：content script 增强支持 click/type/scroll/navigate/querySelector/getTextContent/screenshot 等 DOM 操作",
-      "status": "pending",
-      "depends_on": ["evo_v5_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v5_005"
+      ],
       "acceptance": "新建 packages/chrome-ext/utils/action-executor.ts 定义 BrowserAction 接口和所有支持的操作类型（click/type/scroll/navigate/querySelector/querySelectorAll/getTextContent/getAttribute/getValue/screenshot/waitForElement/highlight）；content.ts 增强：新增 EXECUTE_ACTION 消息监听器，接收 action 对象并执行对应 DOM 操作，返回结构化结果（success/data/error）；background.ts 增强：新增 EXECUTE_ACTION 消息路由，将来自 side panel 或 WebSocket 的操作请求转发到活动 tab 的 content script 并回传结果；click 操作支持 CSS selector 定位 + 可选的文本匹配过滤；type 操作支持 focus → 清空 → 逐字输入 → 触发 input/change 事件；scroll 操作支持 to-top/to-bottom/by-pixels/to-element 四种模式；screenshot 使用 chrome.tabs.captureVisibleTab API（background 中执行）返回 base64 dataURL；querySelector 返回匹配元素的 tagName/id/className/textContent/href/src 等属性；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f utils/action-executor.ts && grep -q 'BrowserAction\\|ActionType\\|executeAction' utils/action-executor.ts && grep -q 'EXECUTE_ACTION' entrypoints/content.ts && grep -q 'EXECUTE_ACTION' entrypoints/background.ts && grep -q 'click\\|type\\|scroll' utils/action-executor.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Chrome 浏览器操作执行引擎缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"
@@ -533,7 +535,9 @@
       "type": "coding",
       "title": "WebSocket 双向工具调用协议：新增 tool_execute/tool_result 消息类型，实现请求-响应匹配（requestId + Promise + 超时）",
       "status": "pending",
-      "depends_on": ["evo_v6_001"],
+      "depends_on": [
+        "evo_v6_001"
+      ],
       "acceptance": "Chrome 侧 ws-client.ts 或新建 utils/tool-bridge.ts：监听 WebSocket 收到的 tool_execute 消息（含 requestId/toolName/toolArgs），调用 background EXECUTE_ACTION 执行操作，将结果封装为 tool_result 消息（含 requestId/success/data/error）发回 VSCode；useWebSocket.ts 或 App.tsx 集成 tool_execute 消息处理（不阻塞聊天 UI）；VSCode 侧 ws-server.ts 新增 sendAndWait(ws, msg, timeoutMs) 方法：发送消息并创建 Promise，通过 requestId 匹配响应的 tool_result 消息，超时自动 reject（默认 30s）；ws-server.ts handleMessage 新增 tool_result 类型路由到 pending Promise resolver；消息协议文档化在代码注释中；双端构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'tool_execute' src/ws-client.ts entrypoints/sidepanel/App.tsx hooks/useWebSocket.ts utils/tool-bridge.ts 2>/dev/null && grep -q 'tool_result' src/ws-client.ts entrypoints/sidepanel/App.tsx hooks/useWebSocket.ts utils/tool-bridge.ts 2>/dev/null && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && grep -q 'tool_result' src/ws-server.ts && grep -q 'sendAndWait\\|requestId\\|pendingRequests' src/ws-server.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 工具调用协议缺失或构建失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"
@@ -543,7 +547,9 @@
       "type": "coding",
       "title": "VSCode 侧浏览器工具提供者 BrowserToolProvider：定义原生浏览器工具注册表 + 通过 WebSocket 执行工具调用",
       "status": "pending",
-      "depends_on": ["evo_v6_002"],
+      "depends_on": [
+        "evo_v6_002"
+      ],
       "acceptance": "新建 packages/vscode-ext/src/browser-tools.ts，实现 BrowserToolProvider 类；定义 BrowserToolDef 接口（name/description/inputSchema）和完整工具列表：browser_click（点击元素）、browser_type（输入文本）、browser_navigate（导航到 URL）、browser_scroll（滚动页面）、browser_screenshot（截取可见区域截图）、browser_query_selector（查询 DOM 元素信息）、browser_get_text（获取元素文本内容）、browser_get_attribute（获取元素属性）、browser_wait（等待元素出现）、browser_highlight（高亮标记元素）；暴露 listTools() 返回工具定义列表、callTool(name, args) 通过 WsServer.sendAndWait 发送 tool_execute 并等待 tool_result；构造函数接收 WsServer 实例；与 McpClient 接口对齐（可互换使用）；在 extension.ts 中创建并注入；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && test -f src/browser-tools.ts && grep -q 'class BrowserToolProvider' src/browser-tools.ts && grep -q 'browser_click' src/browser-tools.ts && grep -q 'browser_type' src/browser-tools.ts && grep -q 'browser_navigate' src/browser-tools.ts && grep -q 'browser_screenshot' src/browser-tools.ts && grep -q 'listTools' src/browser-tools.ts && grep -q 'callTool' src/browser-tools.ts && grep -q 'BrowserToolProvider' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: BrowserToolProvider 缺失或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"
@@ -553,7 +559,9 @@
       "type": "coding",
       "title": "AgentLoop 集成原生浏览器工具：多工具源支持（MCP + BrowserTools），无 MCP 也能进入 Agent 模式",
       "status": "pending",
-      "depends_on": ["evo_v6_003"],
+      "depends_on": [
+        "evo_v6_003"
+      ],
       "acceptance": "agent-loop.ts 修改：构造函数新增可选 browserToolProvider 参数；getToolDescriptions 合并 MCP 工具和 BrowserToolProvider 工具（browser_* 前缀工具优先用原生通道）；executeTool 根据工具名前缀路由：browser_* 开头的调用 BrowserToolProvider.callTool，其他调用 McpClient.callTool；message-handler.ts 修改：handleChat 判断条件从 mcpClient.connected 变为 mcpClient.connected || browserToolProvider.hasConnectedClient（只要 Chrome 有 WebSocket 连接就有原生浏览器工具可用）；AgentLoop 构造时同时传入 mcpClient 和 browserToolProvider；connection-tree.ts 新增原生浏览器工具状态节点（显示可用工具数和连接状态）；双端编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'browserToolProvider\\|BrowserToolProvider' src/agent-loop.ts && grep -q 'browserToolProvider\\|BrowserToolProvider' src/message-handler.ts && grep -q 'browser_' src/agent-loop.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: AgentLoop 浏览器工具集成缺失或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"
@@ -563,7 +571,9 @@
       "type": "validate",
       "title": "浏览器操作工具全量验收：Chrome 操作执行器 + WebSocket 工具协议 + BrowserToolProvider + AgentLoop 集成，双端构建通过",
       "status": "pending",
-      "depends_on": ["evo_v6_004"],
+      "depends_on": [
+        "evo_v6_004"
+      ],
       "acceptance": "完整工具链验证：Chrome 侧 action-executor.ts 定义所有浏览器操作类型且 content.ts/background.ts 集成 EXECUTE_ACTION 路由；WebSocket 协议 tool_execute/tool_result 双向通信在 ws-client.ts 和 ws-server.ts 中实现（含 requestId 匹配和超时）；VSCode 侧 browser-tools.ts 注册 10 个原生浏览器工具并通过 WebSocket 调用；agent-loop.ts 支持多工具源路由（browser_* → 原生，其他 → MCP）；message-handler.ts 在 Chrome 连接时自动启用 Agent 模式（不再依赖 MCP）；connection-tree.ts 展示原生工具状态；双端构建均通过，无回归",
       "acceptance_cmd": "cd packages/chrome-ext && test -f utils/action-executor.ts && grep -q 'EXECUTE_ACTION' entrypoints/content.ts && grep -q 'EXECUTE_ACTION' entrypoints/background.ts && grep -q 'tool_execute' src/ws-client.ts hooks/useWebSocket.ts utils/tool-bridge.ts 2>/dev/null && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && test -f src/browser-tools.ts && grep -q 'class BrowserToolProvider' src/browser-tools.ts && grep -q 'browserToolProvider\\|BrowserToolProvider' src/agent-loop.ts && grep -q 'browserToolProvider\\|BrowserToolProvider' src/message-handler.ts && grep -q 'sendAndWait\\|requestId' src/ws-server.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 浏览器操作工具全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作"

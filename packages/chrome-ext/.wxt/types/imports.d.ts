@@ -17,6 +17,7 @@ declare global {
   const createIntegratedUi: typeof import('wxt/client')['createIntegratedUi']
   const createMessage: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')['createMessage']
   const createShadowRootUi: typeof import('wxt/client')['createShadowRootUi']
+  const createToolBridgeHandler: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge')['createToolBridgeHandler']
   const defineAppConfig: typeof import('wxt/sandbox')['defineAppConfig']
   const defineBackground: typeof import('wxt/sandbox')['defineBackground']
   const defineConfig: typeof import('wxt')['defineConfig']
@@ -25,6 +26,7 @@ declare global {
   const defineWxtPlugin: typeof import('wxt/sandbox')['defineWxtPlugin']
   const executeAction: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor')['executeAction']
   const fakeBrowser: typeof import('wxt/testing')['fakeBrowser']
+  const handleToolExecute: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge')['handleToolExecute']
   const injectScript: typeof import('wxt/client')['injectScript']
   const storage: typeof import('wxt/storage')['storage']
   const useAppConfig: typeof import('wxt/client')['useAppConfig']
@@ -75,4 +77,7 @@ declare global {
   // @ts-ignore
   export type { MessageRole, Message } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')
+  // @ts-ignore
+  export type { ToolExecutePayload, ToolResultPayload } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge')
 }
