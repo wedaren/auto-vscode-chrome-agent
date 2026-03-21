@@ -1,18 +1,17 @@
 {
   "phase": "idle",
-  "current_task": "evo_v19_002",
+  "current_task": "evo_v19_003",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v19_002",
+    "task_id": "evo_v19_003",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
     "acceptance_cmd_output": "PASS"
   },
   "last_tick": "2026-03-22T00:00:00.000000Z",
-  "pm_done": true,
-  "last_research": "RESEARCH_RESULT: knowledge/fix_evo_v9_005_acceptance_cmd_path_mismatch.md | acceptance_cmd 路径错误 utils/ws-client.ts 应为 src/ws-client.ts，需执行 sed 修正 tasks.json（已失败3次，修复从未被执行）"
+  "pm_done": true
 }
