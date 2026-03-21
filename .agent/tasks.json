@@ -1275,7 +1275,7 @@
       "id": "evo_v18_003",
       "type": "coding",
       "title": "新增 10 个高价值内置预设 Skill：read_article / capture_all_links / capture_table_data / search_in_page / auto_scroll_read / open_and_summarize / fill_and_submit / page_info / multi_step_extract / batch_screenshot",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v18_002"
       ],

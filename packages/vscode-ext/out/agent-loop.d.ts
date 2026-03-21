@@ -89,7 +89,8 @@ export declare class AgentLoop {
      */
     private getToolDescriptions;
     /**
-     * 构建 Agent 系统提示词，包含 ReAct 格式指令和可用工具列表
+     * 构建 Agent 系统提示词，包含 ReAct 格式指令、可用工具列表、
+     * 工具组合 few-shot 范例、多步骤编排建议、错误恢复指导
      */
     private buildAgentSystemPrompt;
     /**

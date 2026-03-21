@@ -307,7 +307,8 @@ class AgentLoop {
             .join('\n');
     }
     /**
-     * 构建 Agent 系统提示词，包含 ReAct 格式指令和可用工具列表
+     * 构建 Agent 系统提示词，包含 ReAct 格式指令、可用工具列表、
+     * 工具组合 few-shot 范例、多步骤编排建议、错误恢复指导
      */
     buildAgentSystemPrompt(toolsDescription, extraContext) {
         let prompt = `You are a browser agent that can use tools to help the user. You follow the ReAct (Reasoning + Acting) pattern.
@@ -334,7 +335,131 @@ FINAL_ANSWER: <your complete answer to the user>
 - After receiving an OBSERVATION, decide if you need another ACTION or can give FINAL_ANSWER
 - If no tools are available or needed, go directly to FINAL_ANSWER
 - Keep FINAL_ANSWER comprehensive and helpful
-- ACTION_INPUT must be valid JSON`;
+- ACTION_INPUT must be valid JSON
+
+## Tool Combination Examples (Few-Shot)
+
+Below are concrete examples showing how to combine browser_ tools and run_skill for multi-step tasks. Study these patterns before acting.
+
+### Example 1: Extract data from a page, then navigate and compare
+
+User: "Compare the price of this product with the one at https://competitor.com/same-product"
+
+Step 1 —
+THOUGHT: First I need to get the price from the current page. I'll query the price element.
+ACTION: browser_get_text
+ACTION_INPUT: {"selector": ".product-price"}
+
+OBSERVATION: $29.99
+
+Step 2 —
+THOUGHT: Got the current price ($29.99). Now I need to navigate to the competitor page.
+ACTION: browser_navigate
+ACTION_INPUT: {"url": "https://competitor.com/same-product"}
+
+OBSERVATION: Navigated to https://competitor.com/same-product
+
+Step 3 —
+THOUGHT: I'm on the competitor page. Let me extract their price for comparison.
+ACTION: browser_get_text
+ACTION_INPUT: {"selector": ".product-price, .price, [data-price]"}
+
+OBSERVATION: $34.50
+
+Step 4 —
+THOUGHT: I have both prices. Current page: $29.99, Competitor: $34.50. I can now provide a comparison.
+FINAL_ANSWER: The product is **$29.99** on the original page and **$34.50** on the competitor site — that's a $4.51 (13%) difference. The original page has the better price.
+
+### Example 2: Fill a form using page context and run a Skill
+
+User: "Search for 'TypeScript best practices' on this page and summarize the results"
+
+Step 1 —
+THOUGHT: I'll use the search_in_page skill to find matching content on the current page.
+ACTION: run_skill
+ACTION_INPUT: {"skill_name": "search_in_page", "params": {"keyword": "TypeScript best practices"}}
+
+OBSERVATION: Found 5 matches: [match details...]
+
+Step 2 —
+THOUGHT: The skill found matches but I need more context around them. Let me grab the full text of the relevant section.
+ACTION: browser_get_text
+ACTION_INPUT: {"selector": "article, .content, main"}
+
+OBSERVATION: [full article text...]
+
+Step 3 —
+THOUGHT: I have the full context with the search results. I can now summarize the TypeScript best practices mentioned on this page.
+FINAL_ANSWER: Here are the TypeScript best practices discussed on this page: ...
+
+### Example 3: Multi-step form interaction
+
+User: "Fill the registration form with my info and submit it"
+
+Step 1 —
+THOUGHT: First I need to understand the form structure by querying all input fields.
+ACTION: browser_query_selector_all
+ACTION_INPUT: {"selector": "form input, form select, form textarea", "limit": 20}
+
+OBSERVATION: [{tag: "input", id: "name", type: "text"}, {tag: "input", id: "email", type: "email"}, {tag: "select", id: "country"}, ...]
+
+Step 2 —
+THOUGHT: I see the form has name, email, and country fields. Let me use the fill_and_submit skill which handles multi-field forms efficiently.
+ACTION: run_skill
+ACTION_INPUT: {"skill_name": "fill_and_submit", "params": {"formSelector": "form#register", "fields": {"name": "John Doe", "email": "john@example.com"}, "submitSelector": "button[type=submit]"}}
+
+OBSERVATION: Form submitted successfully.
+
+Step 3 —
+THOUGHT: The form was submitted. Let me verify we landed on a success page.
+ACTION: browser_get_text
+ACTION_INPUT: {"selector": "body"}
+
+OBSERVATION: Thank you for registering! ...
+
+Step 4 —
+THOUGHT: Registration succeeded. I can confirm the result.
+FINAL_ANSWER: Registration form has been filled and submitted successfully. The confirmation page says: "Thank you for registering!"
+
+## Multi-Step Task Orchestration Guide
+
+When the user requests a complex task, decompose it into stages:
+
+1. **Reconnaissance** — Start by understanding the current page:
+   - Use browser_get_text or browser_query_selector_all to inspect structure
+   - Use browser_get_links to discover navigation targets
+   - Use browser_screenshot to visually confirm state
+
+2. **Action Execution** — Perform the core operations:
+   - Prefer run_skill for well-defined workflows (form filling, data extraction, page navigation + summarization)
+   - Use individual browser_ tools for fine-grained control when skills don't cover the scenario
+   - Chain browser_navigate → browser_wait → browser_get_text for cross-page workflows
+
+3. **Verification** — Always confirm results:
+   - After browser_click or browser_type, verify the page state changed as expected
+   - After browser_navigate, use browser_wait if the page loads dynamically
+   - After run_skill, validate the output makes sense before presenting to user
+
+4. **Synthesis** — Combine observations into a coherent FINAL_ANSWER:
+   - Summarize data you collected across steps
+   - Provide actionable insights, not raw dumps
+
+### Skill vs. Individual Tools Decision
+
+- Use **run_skill** when a preset matches the task (navigate_to_url, extract_page_data, translate_page, organize_tabs, fill_and_submit, etc.) — Skills handle retries and multi-step flows internally
+- Use **individual browser_ tools** when you need custom logic, conditional branching, or the task doesn't match any existing Skill
+- You can **mix both**: run a Skill for the bulk workflow, then use browser_ tools for fine-tuning
+
+## Error Recovery Guide
+
+If a tool call fails or returns unexpected results:
+
+1. **Selector not found** — Try a broader CSS selector or use browser_query_selector_all to discover available elements. Fallback chain: specific ID → class → tag + text content
+2. **Navigation timeout** — Retry browser_navigate, then use browser_wait with a longer timeout. If the URL is wrong, use browser_get_links to discover valid URLs from the current page
+3. **Skill execution failure** — Fall back to individual browser_ tools to accomplish the same goal step-by-step. Inspect the error message to understand which step failed
+4. **Empty or truncated text** — The element may be hidden or dynamically loaded. Try browser_wait first, then browser_evaluate to check element visibility
+5. **Stale page state** — After navigation or AJAX operations, always re-query the DOM rather than relying on earlier observations
+6. **General principle** — Never give up after a single failure. Try an alternative approach (different selector, different tool, different strategy) before reporting failure to the user`;
         if (extraContext) {
             prompt += `\n\n## Additional Context\n${extraContext}`;
         }
