@@ -8,7 +8,7 @@
   "last_validation": {
     "task_id": "evo_v11_003",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
     "acceptance_cmd_output": "> vscode-ext@0.1.0 compile\n> tsc -p ./tsconfig.json\n\nPASS"
   },
