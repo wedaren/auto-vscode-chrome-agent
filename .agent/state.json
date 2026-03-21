@@ -1,18 +1,21 @@
 {
   "phase": "idle",
-  "current_task": "evo_v4_001",
+  "current_task": "evo_v4_002",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 92,
   "last_validation": {
-    "task_id": "evo_v4_001",
+    "task_id": "evo_v4_002",
     "result": "pass",
-    "score": 95,
+    "score": 92,
     "issues": [
-      "WARN: WXT 构建警告 Duplicated imports 'Message'（useChat.ts re-export 与 message-factory.ts 冲突，非阻塞，不影响运行）"
+      "WARN: WXT 构建警告 Duplicated imports 'Message' 和 'ConversationMeta'（re-export 冲突，非阻塞）",
+      "WARN: chunk size > 500kB（sidepanel-CgLM_sCI.js 1.19MB，建议后续 code-split）"
     ],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "PASS",
+    "validated_at": "2026-03-21T00:00:00.000000Z",
+    "validator_run": 2
   },
   "last_tick": "2026-03-21T00:00:00.000000Z",
   "pm_done": true
