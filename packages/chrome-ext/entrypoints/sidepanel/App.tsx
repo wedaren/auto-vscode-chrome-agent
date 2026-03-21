@@ -580,6 +580,7 @@ function AppContent({ errorLog }: AppContentProps) {
                         ? () => retryMessage(msg.id)
                         : undefined
                     }
+                    llmDetail={msg.llmDetail}
                   />
                 ))}
                 {isStreaming && (() => {

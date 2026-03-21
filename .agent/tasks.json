@@ -787,7 +787,7 @@
       "id": "evo_v10_003",
       "type": "coding",
       "title": "Chrome 侧 JSON 下载工具函数：创建 download-llm-detail.ts，将 LlmDetail 数据格式化为可读 JSON 并触发浏览器文件下载（含 timestamp 文件名）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v10_002"
       ],

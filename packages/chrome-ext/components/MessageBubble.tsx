@@ -7,6 +7,7 @@ import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import AgentStepView, { type AgentStep } from './AgentStepView';
 import type { MessageStatus } from '../utils/message-factory';
+import { downloadLlmDetail } from '../utils/download-llm-detail';
 
 export interface MessageBubbleProps {
   role: 'user' | 'assistant';
@@ -25,6 +26,8 @@ export interface MessageBubbleProps {
   onRegenerate?: () => void;
   /** 重试发送回调（仅 failed 状态的 user 消息可用） */
   onRetry?: () => void;
+  /** LLM 请求完整细节数据（assistant 消息可选，有值时激活下载按钮） */
+  llmDetail?: Record<string, unknown>;
 }
 
 /** 创建配置了 highlight.js 的 marked 实例 */
@@ -107,6 +110,7 @@ export default function MessageBubble({
   isRunning,
   onRegenerate,
   onRetry,
+  llmDetail,
 }: MessageBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -323,12 +327,29 @@ export default function MessageBubble({
         />
       )}
 
-      {/* 时间戳 */}
-      {relativeTime && (
-        <div className="text-[10px] text-gray-400 mt-0.5 select-none">
-          {relativeTime}
-        </div>
-      )}
+      {/* 底部工具栏：时间戳 + 下载按钮 */}
+      <div className="flex items-center gap-2 mt-0.5">
+        {/* 时间戳 */}
+        {relativeTime && (
+          <span className="text-[10px] text-gray-400 select-none">
+            {relativeTime}
+          </span>
+        )}
+
+        {/* 下载 LLM 请求细节按钮（仅有 llmDetail 时显示） */}
+        {llmDetail && (
+          <button
+            onClick={() => downloadLlmDetail(llmDetail)}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            title="下载 LLM 请求细节 (JSON)"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>LLM Detail</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
