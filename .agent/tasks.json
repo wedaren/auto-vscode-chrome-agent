@@ -679,7 +679,7 @@
       "id": "evo_v8_004",
       "type": "coding",
       "title": "Chrome Side Panel Skill 面板 + WebSocket 协议扩展：展示可用 Skill、一键触发、执行进度",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v8_003"
       ],
