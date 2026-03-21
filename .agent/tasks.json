@@ -763,7 +763,7 @@
       "id": "evo_v10_001",
       "type": "coding",
       "title": "VSCode 侧 LLM 请求细节采集模块：创建 LlmRequestCollector 类，在 lm-service / agent-loop / message-handler 中采集 model/systemPrompt/messages/timing/response 完整链路数据",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v9_002"
       ],

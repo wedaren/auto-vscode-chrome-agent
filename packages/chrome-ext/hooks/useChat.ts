@@ -240,16 +240,25 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           break;
         }
         case 'chat_response_end': {
-          // 流式结束：标记完成，清除流式状态
-          const endPayload = msg.payload as { fullText?: string; cancelled?: boolean };
+          // 流式结束：标记完成，清除流式状态，关联 llmDetail
+          const endPayload = msg.payload as { fullText?: string; cancelled?: boolean; llmDetail?: Record<string, unknown> };
           const targetId = streamingMsgIdRef.current;
 
-          if (targetId && typeof endPayload?.fullText === 'string') {
-            // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
+          if (targetId) {
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === targetId ? { ...m, content: endPayload.fullText! } : m,
-              ),
+              prev.map((m) => {
+                if (m.id !== targetId) return m;
+                const update: Partial<Message> = {};
+                // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
+                if (typeof endPayload?.fullText === 'string') {
+                  update.content = endPayload.fullText;
+                }
+                // 关联 LLM 请求细节数据（供下载按钮使用）
+                if (endPayload?.llmDetail) {
+                  update.llmDetail = endPayload.llmDetail;
+                }
+                return { ...m, ...update };
+              }),
             );
           }
 
@@ -258,6 +267,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           console.log(
             '[useChat] 流式响应结束',
             endPayload?.cancelled ? '(已取消)' : '',
+            endPayload?.llmDetail ? '(含 llmDetail)' : '',
           );
           break;
         }
@@ -301,23 +311,40 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
         }
 
         case 'agent_complete': {
-          // Agent 循环结束：设置 finalAnswer 为 content，标记 isStreaming=false
-          const completePayload = msg.payload as { content?: string; cancelled?: boolean };
+          // Agent 循环结束：设置 finalAnswer 为 content，关联 llmDetail，标记 isStreaming=false
+          const completePayload = msg.payload as {
+            content?: string;
+            finalAnswer?: string;
+            cancelled?: boolean;
+            llmDetail?: Record<string, unknown>;
+          };
           const targetId = streamingMsgIdRef.current;
+          const finalContent = completePayload?.finalAnswer ?? completePayload?.content;
 
           if (targetId) {
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === targetId
-                  ? { ...m, content: completePayload?.content ?? m.content }
-                  : m,
-              ),
+              prev.map((m) => {
+                if (m.id !== targetId) return m;
+                const update: Partial<Message> = {};
+                // 使用 finalAnswer 或 content 作为最终内容
+                if (finalContent) {
+                  update.content = finalContent;
+                }
+                // 关联 LLM 请求细节数据（供下载按钮使用）
+                if (completePayload?.llmDetail) {
+                  update.llmDetail = completePayload.llmDetail;
+                }
+                return { ...m, ...update };
+              }),
             );
-          } else if (completePayload?.content) {
+          } else if (finalContent) {
             // 没有对应的 streaming message（异常恢复）：直接创建新消息
             setMessages((prev) => [
               ...prev,
-              createMessage('assistant', completePayload.content!, { isAgentMode: true }),
+              createMessage('assistant', finalContent, {
+                isAgentMode: true,
+                llmDetail: completePayload?.llmDetail,
+              }),
             ]);
           }
 
@@ -326,6 +353,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           console.log(
             '[useChat] Agent 循环结束',
             completePayload?.cancelled ? '(已取消)' : '',
+            completePayload?.llmDetail ? '(含 llmDetail)' : '',
           );
           break;
         }

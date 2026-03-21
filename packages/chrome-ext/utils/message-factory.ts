@@ -20,6 +20,8 @@ export interface Message {
   steps?: AgentStep[];
   /** 是否为 Agent 模式消息（使用 ReAct 循环的对话） */
   isAgentMode?: boolean;
+  /** LLM 请求完整细节数据（由 VSCode 侧 LlmRequestCollector 采集，通过 WebSocket 推送） */
+  llmDetail?: Record<string, unknown>;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface Message {
 export function createMessage(
   role: MessageRole,
   content: string,
-  options?: { isAgentMode?: boolean; steps?: AgentStep[]; status?: MessageStatus },
+  options?: { isAgentMode?: boolean; steps?: AgentStep[]; status?: MessageStatus; llmDetail?: Record<string, unknown> },
 ): Message {
   return {
     id: crypto.randomUUID(),
@@ -45,5 +47,6 @@ export function createMessage(
     ...(options?.status !== undefined && { status: options.status }),
     ...(options?.isAgentMode !== undefined && { isAgentMode: options.isAgentMode }),
     ...(options?.steps && { steps: options.steps }),
+    ...(options?.llmDetail && { llmDetail: options.llmDetail }),
   };
 }

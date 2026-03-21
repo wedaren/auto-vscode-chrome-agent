@@ -55,5 +55,5 @@
 - [x] 希望有简要的功能使用文档及使用案例，指导用户使用（已拆解为 evo_v7_001, evo_v7_002, evo_v7_003, evo_v7_004, evo_v7_005 — 项目 README + Chrome 插件使用指南 + VSCode 插件使用指南 + 5 个典型使用案例）
 - [x] 不考虑时间，使用最优解，希望能遵循 skill， mcp 规范，有个 vsocde 视图配置配置，可以预设一批操作浏览器的 skill，进入指定页面，整理 tab，友好型将页面翻译，等；如果需要可以考虑重构（已拆解为 evo_v8_001, evo_v8_002, evo_v8_003, evo_v8_004, evo_v8_005 — Skill 系统：MCP 风格数据模型 + VSCode TreeView 管理视图 + SkillRunner 执行引擎 + Chrome Skill 面板 + 5 个内置预设 Skill）
 - [x] 不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug（已拆解为 evo_v9_001, evo_v9_002, evo_v9_003, evo_v9_004, evo_v9_005 — 稳定性体系：React Error Boundary + Toast 通知系统 + 消息重试 + WebSocket 心跳健壮性 + Chrome Debug 调试面板）
-- [~] 不考虑时间，使用最优解，在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化（已拆解为 evo_v10_001, evo_v10_002, evo_v10_003, evo_v10_004, evo_v10_005 — LLM 请求细节下载：VSCode 侧 LlmRequestCollector 数据采集 + WebSocket llmDetail 协议扩展 + Chrome 下载工具函数 + MessageBubble 下载按钮）
+- [x] 不考虑时间，使用最优解，在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化（已拆解为 evo_v10_001, evo_v10_002, evo_v10_003, evo_v10_004, evo_v10_005 — LLM 请求细节下载：VSCode 侧 LlmRequestCollector 数据采集 + WebSocket llmDetail 协议扩展 + Chrome 下载工具函数 + MessageBubble 下载按钮）
 - [~] vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息（已拆解为 evo_v11_001, evo_v11_002, evo_v11_003, evo_v11_004, evo_v11_005 — 全局用户数据目录：UserDataManager 服务 + 配置 schema + SkillRegistry 文件持久化迁移 + 管理命令 + 调试视图状态展示）
