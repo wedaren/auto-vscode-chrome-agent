@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v16_002",
+  "current_task": "evo_v16_003",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v16_002",
+    "task_id": "evo_v16_003",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;\nPASS"
+    "acceptance_cmd_output": "PASS"
   },
   "last_tick": "2026-03-21T15:25:36.619974Z",
   "pm_done": true,
