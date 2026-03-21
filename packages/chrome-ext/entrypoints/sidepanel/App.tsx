@@ -379,14 +379,14 @@ function AppContent({ errorLog }: AppContentProps) {
   const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
     sendMessage('select_model', { modelId });
-    debugLog.logOutbound('select_model', { modelId });
-  }, [sendMessage, debugLog]);
+    debugLogRef.current.logOutbound('select_model', { modelId });
+  }, [sendMessage]);
 
   const handleSendMessage = useCallback((content: string) => {
     chatSend(content, pageContext);
-    // Debug：记录出站 chat 消息
-    debugLog.logOutbound('chat', { text: content, hasContext: !!pageContext.url });
-  }, [chatSend, pageContext, debugLog]);
+    // Debug：记录出站 chat 消息（通过 ref 读取，避免 debugLog 对象引用进入依赖数组）
+    debugLogRef.current.logOutbound('chat', { text: content, hasContext: !!pageContext.url });
+  }, [chatSend, pageContext]);
 
   const handleQuickAction = useCallback((action: string) => {
     handleSendMessage(action);
