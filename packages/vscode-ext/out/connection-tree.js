@@ -54,6 +54,8 @@ class ConnectionTreeDataProvider {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     disposables = [];
+    /** disposed 标志：dispose 后所有异步回调必须跳过 refresh */
+    _disposed = false;
     wsServer;
     mcpClient;
     lmService;
@@ -97,6 +99,9 @@ class ConnectionTreeDataProvider {
         this.refresh();
     }
     refresh() {
+        if (this._disposed) {
+            return;
+        }
         this._onDidChangeTreeData.fire();
     }
     getTreeItem(element) {
@@ -283,11 +288,17 @@ class ConnectionTreeDataProvider {
             this.cachedDiskUsage = '未配置';
             return;
         }
-        // 异步计算，完成后刷新树
+        // 异步计算，完成后刷新树（disposed 后跳过防止崩溃）
         this.calculateDirSize(rootDir).then((bytes) => {
+            if (this._disposed) {
+                return;
+            }
             this.cachedDiskUsage = ConnectionTreeDataProvider.formatBytes(bytes);
             this.refresh();
         }).catch(() => {
+            if (this._disposed) {
+                return;
+            }
             this.cachedDiskUsage = '无法计算';
         });
     }
@@ -328,11 +339,16 @@ class ConnectionTreeDataProvider {
         return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
     }
     dispose() {
+        this._disposed = true;
         for (const d of this.disposables) {
             d.dispose();
         }
         this.disposables.length = 0;
         this._onDidChangeTreeData.dispose();
+    }
+    /** 是否已被释放（供外部检查） */
+    get isDisposed() {
+        return this._disposed;
     }
 }
 exports.ConnectionTreeDataProvider = ConnectionTreeDataProvider;

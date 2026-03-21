@@ -27,6 +27,9 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
 
   private readonly disposables: vscode.Disposable[] = [];
 
+  /** disposed 标志：dispose 后所有异步回调必须跳过 refresh */
+  private _disposed = false;
+
   private wsServer?: WsServer;
   private mcpClient?: McpClient;
   private lmService?: LmService;
@@ -90,6 +93,7 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
   }
 
   refresh(): void {
+    if (this._disposed) { return; }
     this._onDidChangeTreeData.fire();
   }
 
@@ -382,11 +386,13 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
       return;
     }
 
-    // 异步计算，完成后刷新树
+    // 异步计算，完成后刷新树（disposed 后跳过防止崩溃）
     this.calculateDirSize(rootDir).then((bytes) => {
+      if (this._disposed) { return; }
       this.cachedDiskUsage = ConnectionTreeDataProvider.formatBytes(bytes);
       this.refresh();
     }).catch(() => {
+      if (this._disposed) { return; }
       this.cachedDiskUsage = '无法计算';
     });
   }
@@ -426,10 +432,16 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
   }
 
   dispose(): void {
+    this._disposed = true;
     for (const d of this.disposables) {
       d.dispose();
     }
     this.disposables.length = 0;
     this._onDidChangeTreeData.dispose();
+  }
+
+  /** 是否已被释放（供外部检查） */
+  get isDisposed(): boolean {
+    return this._disposed;
   }
 }

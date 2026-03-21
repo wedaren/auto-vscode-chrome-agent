@@ -30,6 +30,8 @@ export declare class MessageHandler {
     private readonly activeChatTokens;
     /** 已注册 close 监听的 WebSocket 集合，避免重复注册 */
     private readonly wsCloseRegistered;
+    /** disposed 标志：dispose 后拒绝新增 activeChatTokens 条目 */
+    private _disposed;
     constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
     /**
      * 注册 WebSocket close 事件监听器（每个 ws 只注册一次），
@@ -85,6 +87,13 @@ export declare class MessageHandler {
      * 获取 LLM 请求采集器实例（供外部读取请求细节）
      */
     getLlmCollector(): LlmRequestCollector;
+    /**
+     * 释放 MessageHandler：
+     * - 取消并 dispose 所有 activeChatTokens
+     * - dispose llmCollector
+     * - 设置 _disposed 标志，后续 handle() 调用直接跳过
+     */
+    dispose(): void;
     /**
      * 根据浏览器上下文动态构建 system prompt
      */

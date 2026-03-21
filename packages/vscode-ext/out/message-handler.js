@@ -65,6 +65,8 @@ class MessageHandler {
     activeChatTokens = new Map();
     /** 已注册 close 监听的 WebSocket 集合，避免重复注册 */
     wsCloseRegistered = new WeakSet();
+    /** disposed 标志：dispose 后拒绝新增 activeChatTokens 条目 */
+    _disposed = false;
     constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner) {
         this.lmService = lmService;
         this.wsServer = wsServer;
@@ -110,6 +112,11 @@ class MessageHandler {
      * 应注册到 wsServer.onMessage()。
      */
     handle(ws, msg) {
+        // disposal guard：dispose 后拒绝处理新消息
+        if (this._disposed) {
+            this.outputChannel.appendLine(`[BrowserAgent] MessageHandler 已 disposed，忽略消息 type=${msg.type}`);
+            return;
+        }
         switch (msg.type) {
             case 'list_models':
                 this.handleListModels(ws, msg);
@@ -488,6 +495,24 @@ class MessageHandler {
      */
     getLlmCollector() {
         return this.llmCollector;
+    }
+    /**
+     * 释放 MessageHandler：
+     * - 取消并 dispose 所有 activeChatTokens
+     * - dispose llmCollector
+     * - 设置 _disposed 标志，后续 handle() 调用直接跳过
+     */
+    dispose() {
+        this._disposed = true;
+        // 清理所有活跃的 CancellationTokenSource
+        for (const [, cts] of this.activeChatTokens) {
+            cts.cancel();
+            cts.dispose();
+        }
+        this.activeChatTokens.clear();
+        // 释放采集器
+        this.llmCollector.dispose();
+        this.outputChannel.appendLine('[BrowserAgent] MessageHandler disposed');
     }
     /**
      * 根据浏览器上下文动态构建 system prompt

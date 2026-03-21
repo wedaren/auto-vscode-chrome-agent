@@ -79,6 +79,8 @@ class WsServer {
      * 用于 sendAndWait() 发送 tool_execute 后，通过 requestId 匹配 tool_result 响应
      */
     pendingRequests = new Map();
+    /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
+    _disposed = false;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     _onDidChangeState = new vscode.EventEmitter();
     onDidChangeState = this._onDidChangeState.event;
@@ -271,6 +273,10 @@ class WsServer {
                 payload: { ...payload, requestId },
             };
         }
+        // disposal guard：dispose 后拒绝新增 pendingRequests
+        if (this._disposed) {
+            return Promise.reject(new Error('WsServer 已 disposed，无法发送请求'));
+        }
         return new Promise((resolve, reject) => {
             // 设置超时定时器
             const timer = setTimeout(() => {
@@ -289,6 +295,7 @@ class WsServer {
      * 关闭服务端和所有连接
      */
     dispose() {
+        this._disposed = true;
         // 清理所有待响应请求，reject 防止 Promise 悬挂
         for (const [requestId, pending] of this.pendingRequests) {
             clearTimeout(pending.timer);

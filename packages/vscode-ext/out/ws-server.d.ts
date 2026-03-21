@@ -28,6 +28,8 @@ export declare class WsServer {
      * 用于 sendAndWait() 发送 tool_execute 后，通过 requestId 匹配 tool_result 响应
      */
     private readonly pendingRequests;
+    /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
+    private _disposed;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     private readonly _onDidChangeState;
     readonly onDidChangeState: vscode.Event<void>;

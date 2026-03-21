@@ -895,7 +895,7 @@
       "id": "evo_v12_002",
       "type": "coding",
       "title": "CancellationToken 生命周期修复：message-handler activeChatTokens WebSocket 断开自动清理 + agent-loop/lm-service 孤立 CTS 修复",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v12_001"
       ],

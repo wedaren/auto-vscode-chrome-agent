@@ -14,6 +14,8 @@ export declare class ConnectionTreeDataProvider implements vscode.TreeDataProvid
     private readonly _onDidChangeTreeData;
     readonly onDidChangeTreeData: vscode.Event<void | ConnectionTreeItem | undefined>;
     private readonly disposables;
+    /** disposed 标志：dispose 后所有异步回调必须跳过 refresh */
+    private _disposed;
     private wsServer?;
     private mcpClient?;
     private lmService?;
@@ -55,5 +57,7 @@ export declare class ConnectionTreeDataProvider implements vscode.TreeDataProvid
      */
     private static formatBytes;
     dispose(): void;
+    /** 是否已被释放（供外部检查） */
+    get isDisposed(): boolean;
 }
 //# sourceMappingURL=connection-tree.d.ts.map

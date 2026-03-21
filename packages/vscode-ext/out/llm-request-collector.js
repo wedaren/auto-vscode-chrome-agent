@@ -15,11 +15,14 @@ exports.LlmRequestCollector = void 0;
  * 4. getDetail(id) — 获取完整细节对象
  *
  * 线程安全：通过 Map 隔离不同请求，每个请求独立采集。
- * 内存控制：保留最近 MAX_HISTORY 条记录，自动淘汰最旧的。
+ * 内存控制：环形缓冲淘汰策略，保留最近 MAX_ENTRIES 条记录，自动淘汰最旧的。
+ * Disposal guard：dispose 后拒绝新增请求。
  */
 class LlmRequestCollector {
-    /** 最大保留历史数 */
-    static MAX_HISTORY = 50;
+    /** 环形缓冲最大条目数（超出自动淘汰最旧记录） */
+    static MAX_ENTRIES = 50;
+    /** 是否已被释放 */
+    _disposed = false;
     /** 所有采集中 / 已完成的请求 */
     details = new Map();
     /** 按插入顺序维护的 ID 列表（用于淘汰） */
@@ -34,6 +37,10 @@ class LlmRequestCollector {
      * @returns 唯一请求 ID
      */
     startRequest(mode, model, systemPrompt) {
+        if (this._disposed) {
+            // disposal guard：已释放后不接受新请求，返回空 ID
+            return '';
+        }
         this.counter++;
         const id = `llm_${Date.now()}_${this.counter}`;
         const detail = {
@@ -132,10 +139,23 @@ class LlmRequestCollector {
         this.idOrder.length = 0;
     }
     /**
-     * 淘汰超出 MAX_HISTORY 的旧记录
+     * 释放采集器，拒绝后续新增请求
+     */
+    dispose() {
+        this._disposed = true;
+        this.clear();
+    }
+    /**
+     * 是否已被释放
+     */
+    get disposed() {
+        return this._disposed;
+    }
+    /**
+     * 环形缓冲淘汰：超出 MAX_ENTRIES 时删除最旧记录
      */
     evict() {
-        while (this.idOrder.length > LlmRequestCollector.MAX_HISTORY) {
+        while (this.idOrder.length > LlmRequestCollector.MAX_ENTRIES) {
             const oldId = this.idOrder.shift();
             if (oldId) {
                 this.details.delete(oldId);
