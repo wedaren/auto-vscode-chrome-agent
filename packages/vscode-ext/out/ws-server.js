@@ -37,6 +37,7 @@ exports.WsServer = void 0;
 // ws-server.ts — WebSocket 服务端，负责与 Chrome 插件的双向通信
 const ws_1 = require("ws");
 const vscode = __importStar(require("vscode"));
+const message_tree_1 = require("./message-tree");
 /**
  * WsServer 封装 WebSocket 服务端逻辑。
  * 在 VSCode 插件 activate() 中创建，deactivate() 时自动关闭。
@@ -88,6 +89,7 @@ class WsServer {
                     try {
                         const msg = JSON.parse(data.toString());
                         this.outputChannel.appendLine(`[WsServer] 收到消息: type=${msg.type}, sessionId=${msg.sessionId}`);
+                        (0, message_tree_1.captureMessage)('receive', msg);
                         this.handleMessage(ws, msg);
                     }
                     catch (err) {
@@ -165,6 +167,7 @@ class WsServer {
     send(ws, msg) {
         if (ws.readyState === ws_1.WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
+            (0, message_tree_1.captureMessage)('send', msg);
         }
     }
     /**
@@ -177,6 +180,8 @@ class WsServer {
                 client.send(data);
             }
         }
+        // 广播只记录一条（避免每个客户端重复记录）
+        (0, message_tree_1.captureMessage)('send', msg);
     }
     /**
      * 关闭服务端和所有连接

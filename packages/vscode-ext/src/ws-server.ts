@@ -1,6 +1,7 @@
 // ws-server.ts — WebSocket 服务端，负责与 Chrome 插件的双向通信
 import { WebSocketServer, WebSocket } from 'ws';
 import * as vscode from 'vscode';
+import { captureMessage } from './message-tree';
 
 /** Chrome ↔ VSCode 桥接消息协议 */
 export interface BridgeMessage {
@@ -77,6 +78,7 @@ export class WsServer {
             this.outputChannel.appendLine(
               `[WsServer] 收到消息: type=${msg.type}, sessionId=${msg.sessionId}`,
             );
+            captureMessage('receive', msg);
             this.handleMessage(ws, msg);
           } catch (err) {
             this.outputChannel.appendLine(
@@ -169,6 +171,7 @@ export class WsServer {
   send(ws: WebSocket, msg: BridgeMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
+      captureMessage('send', msg);
     }
   }
 
@@ -182,6 +185,8 @@ export class WsServer {
         client.send(data);
       }
     }
+    // 广播只记录一条（避免每个客户端重复记录）
+    captureMessage('send', msg);
   }
 
   /**

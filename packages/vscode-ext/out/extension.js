@@ -88,9 +88,27 @@ function activate(context) {
     const agentTreeView = vscode.window.createTreeView('browser-agent-agent-loop', {
         treeDataProvider: agentTree,
     });
+    // 注册消息检查器虚拟文档 ContentProvider
+    const messageDocProvider = new message_tree_1.MessageDocumentProvider();
+    const docProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(message_tree_1.MESSAGE_SCHEME, messageDocProvider);
+    // 注册消息检查器命令
+    const clearMessageLogCmd = vscode.commands.registerCommand('browser-agent.clearMessageLog', () => {
+        messageTree?.clearMessageLog();
+        vscode.window.showInformationMessage('Browser Agent: 消息日志已清空');
+    });
+    const openMessageDetailCmd = vscode.commands.registerCommand('browser-agent.openMessageDetail', async (messageId) => {
+        const captured = (0, message_tree_1.getCapturedMessageById)(messageId);
+        if (!captured) {
+            vscode.window.showWarningMessage('消息未找到（可能已被环形缓冲淘汰）');
+            return;
+        }
+        const uri = vscode.Uri.parse(`${message_tree_1.MESSAGE_SCHEME}:${messageId}.json?ts=${Date.now()}`);
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc, { preview: true });
+    });
     outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
     // 注册 dispose
-    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }

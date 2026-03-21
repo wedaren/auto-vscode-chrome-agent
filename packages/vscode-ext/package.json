@@ -28,8 +28,22 @@
       {
         "command": "browser-agent.generateReport",
         "title": "Browser Agent: 生成深度报告"
+      },
+      {
+        "command": "browser-agent.clearMessageLog",
+        "title": "Browser Agent: 清空消息日志",
+        "icon": "$(clear-all)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "browser-agent.clearMessageLog",
+          "when": "view == browser-agent-messages",
+          "group": "navigation"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {

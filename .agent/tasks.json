@@ -474,7 +474,7 @@
       "id": "evo_v5_002",
       "type": "coding",
       "title": "连接状态 TreeView：WebSocket 服务器状态 + MCP 连接状态 + 当前模型信息实时展示",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v5_001"
       ],

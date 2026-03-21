@@ -7,7 +7,7 @@ import { ReportGenerator } from './report-generator';
 import { MessageHandler } from './message-handler';
 import { CommandRegistry } from './command-registry';
 import { ConnectionTreeDataProvider } from './connection-tree';
-import { MessageTreeDataProvider } from './message-tree';
+import { MessageTreeDataProvider, MessageDocumentProvider, MESSAGE_SCHEME, getCapturedMessageById } from './message-tree';
 import { AgentTreeDataProvider } from './agent-tree';
 
 let lmService: LmService | undefined;
@@ -63,6 +63,38 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: agentTree,
   });
 
+  // 注册消息检查器虚拟文档 ContentProvider
+  const messageDocProvider = new MessageDocumentProvider();
+  const docProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+    MESSAGE_SCHEME,
+    messageDocProvider,
+  );
+
+  // 注册消息检查器命令
+  const clearMessageLogCmd = vscode.commands.registerCommand(
+    'browser-agent.clearMessageLog',
+    () => {
+      messageTree?.clearMessageLog();
+      vscode.window.showInformationMessage('Browser Agent: 消息日志已清空');
+    },
+  );
+
+  const openMessageDetailCmd = vscode.commands.registerCommand(
+    'browser-agent.openMessageDetail',
+    async (messageId: number) => {
+      const captured = getCapturedMessageById(messageId);
+      if (!captured) {
+        vscode.window.showWarningMessage('消息未找到（可能已被环形缓冲淘汰）');
+        return;
+      }
+      const uri = vscode.Uri.parse(
+        `${MESSAGE_SCHEME}:${messageId}.json?ts=${Date.now()}`,
+      );
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, { preview: true });
+    },
+  );
+
   outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
 
   // 注册 dispose
@@ -72,6 +104,9 @@ export function activate(context: vscode.ExtensionContext): void {
     connectionTreeView,
     messageTreeView,
     agentTreeView,
+    docProviderDisposable,
+    clearMessageLogCmd,
+    openMessageDetailCmd,
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
