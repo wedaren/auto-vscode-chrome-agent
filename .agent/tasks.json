@@ -594,7 +594,7 @@
       "id": "evo_v7_002",
       "type": "coding",
       "title": "Chrome 插件功能使用文档：Side Panel 对话、模型选择、多会话管理、斜杠命令、快捷键",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v7_001"
       ],
