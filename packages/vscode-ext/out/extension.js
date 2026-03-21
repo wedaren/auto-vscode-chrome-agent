@@ -60,8 +60,8 @@ function activate(context) {
     wsServer.start().catch((err) => {
         outputChannel.appendLine(`[BrowserAgent] WebSocket 启动失败: ${err instanceof Error ? err.message : String(err)}`);
     });
-    // 注册 WebSocket 消息处理器
-    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, outputChannel);
+    // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
+    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel);
     wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
     // 初始化报告生成器
     reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);

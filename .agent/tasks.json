@@ -342,8 +342,10 @@
       "id": "evo_v3_001",
       "type": "coding",
       "title": "VSCode: 创建 AgentLoop 类，实现 ReAct 风格的 think→act→observe 循环",
-      "status": "pending",
-      "depends_on": ["evo_v2_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v2_005"
+      ],
       "acceptance": "新建 src/agent-loop.ts，包含 AgentLoop 类；构造函数接收 LmService、McpClient、OutputChannel；run(userMessage, context, onStep, token) 方法实现 ReAct 循环：1) 构建含工具描述的 system prompt 2) LM 输出包含 ACTION: toolName(args) 格式的思考 3) 解析 ACTION 调用 McpClient.callTool() 4) 将结果作为 OBSERVATION 反馈给 LM 5) 循环直到 LM 输出 FINAL_ANSWER 或达到 maxSteps(默认5)；onStep 回调通知每步状态(type: think/act/observe, content)；支持 CancellationToken 中断；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && test -f src/agent-loop.ts && grep -q 'class AgentLoop' src/agent-loop.ts && grep -q 'McpClient' src/agent-loop.ts && grep -q 'LmService' src/agent-loop.ts && grep -q 'FINAL_ANSWER\\|ACTION' src/agent-loop.ts && grep -q 'onStep\\|AgentStep' src/agent-loop.ts && grep -q 'maxSteps\\|MAX_STEPS' src/agent-loop.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: AgentLoop 类缺失或编译失败'",
       "evolution_goal": "Agent 愿景：Agentic Tool Use — 让 LM 在对话中自主使用 MCP 浏览器工具"
@@ -353,7 +355,9 @@
       "type": "coding",
       "title": "VSCode: MessageHandler 集成 AgentLoop，新增 agent_step/agent_complete 消息类型",
       "status": "pending",
-      "depends_on": ["evo_v3_001"],
+      "depends_on": [
+        "evo_v3_001"
+      ],
       "acceptance": "message-handler.ts 接收 McpClient 依赖注入；handleChat 判断：若 McpClient 已连接，使用 AgentLoop.run() 替代直接 LM 调用；每个 AgentStep 通过 WebSocket 发送 agent_step 消息（payload: { step, type, content, toolName?, toolArgs? }）；循环完成发送 agent_complete 消息（payload: { finalAnswer, steps, totalSteps }）；若 McpClient 未连接则保持原有直接 LM 流式对话行为；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'AgentLoop\\|agentLoop' src/message-handler.ts && grep -q 'McpClient\\|mcpClient' src/message-handler.ts && grep -q 'agent_step' src/message-handler.ts && grep -q 'agent_complete' src/message-handler.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: MessageHandler AgentLoop 集成缺失或编译失败'",
       "evolution_goal": "Agent 愿景：Agentic Tool Use — 让 LM 在对话中自主使用 MCP 浏览器工具"
@@ -363,7 +367,9 @@
       "type": "coding",
       "title": "Chrome: 创建 AgentStepView 组件，展示 Agent 思考和工具调用过程",
       "status": "pending",
-      "depends_on": ["evo_v3_002"],
+      "depends_on": [
+        "evo_v3_002"
+      ],
       "acceptance": "新建 components/AgentStepView.tsx；接收 steps 数组（{step, type, content, toolName?, toolArgs?}）；think 步骤显示为灰色斜体带🧠图标；act 步骤显示为蓝色带⚡图标和工具名称徽章；observe 步骤显示为绿色带📋图标，内容可折叠（默认折叠超过 200 字的观察结果）；整体可折叠/展开（默认展开最近3步）；有 isRunning prop 控制最后一步的加载动画；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/AgentStepView.tsx && grep -q 'AgentStepView' components/AgentStepView.tsx && grep -q 'think\\|act\\|observe' components/AgentStepView.tsx && grep -q 'isRunning\\|step' components/AgentStepView.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: AgentStepView 组件缺失或构建失败'",
       "evolution_goal": "Agent 愿景：Agentic Tool Use — 让 LM 在对话中自主使用 MCP 浏览器工具"
@@ -373,7 +379,9 @@
       "type": "coding",
       "title": "Chrome: useChat 处理 agent_step/agent_complete 消息，MessageBubble 集成 AgentStepView",
       "status": "pending",
-      "depends_on": ["evo_v3_003"],
+      "depends_on": [
+        "evo_v3_003"
+      ],
       "acceptance": "hooks/useChat.ts 中 Message 类型新增可选 steps 数组和 isAgentMode 字段；处理 agent_step 消息：追加步骤到当前 assistant message 的 steps 数组，isStreaming 保持 true；处理 agent_complete 消息：设置 finalAnswer 为 content，isStreaming=false；components/MessageBubble.tsx 当 message.steps 存在时渲染 AgentStepView 在正文上方；App.tsx 无需大改（数据通过 useChat 流入）；构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'agent_step' hooks/useChat.ts && grep -q 'agent_complete' hooks/useChat.ts && grep -q 'steps\\|AgentStep' hooks/useChat.ts && grep -q 'AgentStepView' components/MessageBubble.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: agent 消息处理或 UI 集成缺失或构建失败'",
       "evolution_goal": "Agent 愿景：Agentic Tool Use — 让 LM 在对话中自主使用 MCP 浏览器工具"
@@ -383,7 +391,9 @@
       "type": "validate",
       "title": "Agentic Tool Use 全量验收：Agent Loop + 消息协议 + UI 展示，双端构建通过",
       "status": "pending",
-      "depends_on": ["evo_v3_004"],
+      "depends_on": [
+        "evo_v3_004"
+      ],
       "acceptance": "双端构建通过；VSCode 侧有 AgentLoop 类（ReAct 循环 + MCP 工具调用 + 步数限制 + 取消支持）、MessageHandler 集成 AgentLoop 并发送 agent_step/agent_complete 消息；Chrome 侧 useChat 处理 agent_step/agent_complete、AgentStepView 组件展示步骤、MessageBubble 集成 AgentStepView",
       "acceptance_cmd": "cd packages/vscode-ext && test -f src/agent-loop.ts && grep -q 'class AgentLoop' src/agent-loop.ts && grep -q 'agent_step' src/message-handler.ts && grep -q 'agent_complete' src/message-handler.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && test -f components/AgentStepView.tsx && grep -q 'agent_step' hooks/useChat.ts && grep -q 'agent_complete' hooks/useChat.ts && grep -q 'AgentStepView' components/MessageBubble.tsx && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Agentic Tool Use 验收失败'",
       "evolution_goal": "Agent 愿景：Agentic Tool Use — 让 LM 在对话中自主使用 MCP 浏览器工具"

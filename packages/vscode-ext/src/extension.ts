@@ -30,8 +30,8 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   });
 
-  // 注册 WebSocket 消息处理器
-  const messageHandler = new MessageHandler(lmService, wsServer, outputChannel);
+  // 注册 WebSocket 消息处理器（注入 McpClient 以支持 AgentLoop 模式）
+  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel);
   wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
 
   // 初始化报告生成器
