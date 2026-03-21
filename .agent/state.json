@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v10_003",
+  "current_task": "evo_v10_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v10_003",
+    "task_id": "evo_v10_004",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS — acceptance_cmd grep matched downloadLlmDetail/Blob/createObjectURL; wxt build OK (2.393s); 无外部依赖; 顶部注释完整; program.md 约束全部满足"
+    "acceptance_cmd_output": "components/MessageBubble.tsx:import { downloadLlmDetail } from '../utils/download-llm-detail';\ncomponents/MessageBubble.tsx:  llmDetail?: Record<string, unknown>;\ncomponents/MessageBubble.tsx:  llmDetail,\ncomponents/MessageBubble.tsx:        {/* 下载 LLM 请求细节按钮（仅有 llmDetail 时显示） */}\ncomponents/MessageBubble.tsx:        {llmDetail && (\ncomponents/MessageBubble.tsx:            onClick={() => downloadLlmDetail(llmDetail)}\nentrypoints/sidepanel/App.tsx:                    llmDetail={msg.llmDetail}\nPASS"
   },
   "last_tick": "2026-03-21T12:30:11.714844Z",
   "pm_done": true,
