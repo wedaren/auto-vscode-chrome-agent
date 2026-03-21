@@ -18,3 +18,15 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收维度明细：
+- acceptance_cmd 通过（60/60）：grep 匹配到 readyState OPEN/CONNECTING 去重 + DEFAULT_MAX_RECONNECT_ATTEMPTS=10 + npm run build 无 error
+- TypeScript 无编译错误（20/20）：构建通过，无 TS 错误
+- 符合 program.md 约束（20/20）：Chrome 侧不内置模型、无外部 API key 依赖、WebSocket 本地直连
+- 附加检查：jitter 注释已无"多客户端"字样 ✅；文件顶部有完整注释 ✅
