@@ -1028,7 +1028,7 @@
       "id": "evo_v14_003",
       "type": "coding",
       "title": "修复 App.tsx handleModelSelect/handleSendMessage useCallback 依赖：移除 debugLog，改用 debugLogRef.current.logOutbound",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v14_001"
       ],
