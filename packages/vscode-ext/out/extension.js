@@ -48,6 +48,7 @@ const message_tree_1 = require("./message-tree");
 const agent_tree_1 = require("./agent-tree");
 const browser_tools_1 = require("./browser-tools");
 const skill_registry_1 = require("./skill-registry");
+const skill_tree_1 = require("./skill-tree");
 let lmService;
 let wsServer;
 let mcpClient;
@@ -57,6 +58,7 @@ let reportGenerator;
 let connectionTree;
 let messageTree;
 let agentTree;
+let skillTree;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -98,6 +100,17 @@ function activate(context) {
     const agentTreeView = vscode.window.createTreeView('browser-agent-agent-loop', {
         treeDataProvider: agentTree,
     });
+    // 注册 Skill 管理 TreeView
+    skillTree = new skill_tree_1.SkillTreeDataProvider();
+    skillTree.bind(skillRegistry);
+    const skillTreeView = vscode.window.createTreeView('browser-agent-skills', {
+        treeDataProvider: skillTree,
+    });
+    // 注册 Skill 管理命令
+    const runSkillCmd = vscode.commands.registerCommand('browser-agent.runSkill', (item) => (0, skill_tree_1.runSkillCommand)(item, skillRegistry, outputChannel));
+    const toggleSkillCmd = vscode.commands.registerCommand('browser-agent.toggleSkill', (item) => (0, skill_tree_1.toggleSkillCommand)(item, skillRegistry));
+    const addCustomSkillCmd = vscode.commands.registerCommand('browser-agent.addCustomSkill', () => (0, skill_tree_1.addCustomSkillCommand)(skillRegistry, outputChannel));
+    outputChannel.appendLine('[BrowserAgent] Skill 管理 TreeView 已注册');
     // 注册消息检查器虚拟文档 ContentProvider
     const messageDocProvider = new message_tree_1.MessageDocumentProvider();
     const docProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(message_tree_1.MESSAGE_SCHEME, messageDocProvider);
@@ -118,7 +131,7 @@ function activate(context) {
     });
     outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
     // 注册 dispose
-    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => skillRegistry?.dispose() }, { dispose: () => browserToolProvider?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, skillTreeView, docProviderDisposable, clearMessageLogCmd, openMessageDetailCmd, runSkillCmd, toggleSkillCmd, addCustomSkillCmd, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => skillTree?.dispose() }, { dispose: () => skillRegistry?.dispose() }, { dispose: () => browserToolProvider?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
@@ -135,6 +148,8 @@ function deactivate() {
     messageTree = undefined;
     agentTree?.dispose();
     agentTree = undefined;
+    skillTree?.dispose();
+    skillTree = undefined;
     void mcpClient?.dispose();
     mcpClient = undefined;
     wsServer?.dispose();

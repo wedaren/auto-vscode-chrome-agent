@@ -11,6 +11,7 @@ import { MessageTreeDataProvider, MessageDocumentProvider, MESSAGE_SCHEME, getCa
 import { AgentTreeDataProvider } from './agent-tree';
 import { BrowserToolProvider } from './browser-tools';
 import { SkillRegistry } from './skill-registry';
+import { SkillTreeDataProvider, runSkillCommand, toggleSkillCommand, addCustomSkillCommand } from './skill-tree';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
@@ -21,6 +22,7 @@ let reportGenerator: ReportGenerator | undefined;
 let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
 let agentTree: AgentTreeDataProvider | undefined;
+let skillTree: SkillTreeDataProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
@@ -75,6 +77,29 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: agentTree,
   });
 
+  // 注册 Skill 管理 TreeView
+  skillTree = new SkillTreeDataProvider();
+  skillTree.bind(skillRegistry);
+  const skillTreeView = vscode.window.createTreeView('browser-agent-skills', {
+    treeDataProvider: skillTree,
+  });
+
+  // 注册 Skill 管理命令
+  const runSkillCmd = vscode.commands.registerCommand(
+    'browser-agent.runSkill',
+    (item) => runSkillCommand(item, skillRegistry, outputChannel),
+  );
+  const toggleSkillCmd = vscode.commands.registerCommand(
+    'browser-agent.toggleSkill',
+    (item) => toggleSkillCommand(item, skillRegistry),
+  );
+  const addCustomSkillCmd = vscode.commands.registerCommand(
+    'browser-agent.addCustomSkill',
+    () => addCustomSkillCommand(skillRegistry, outputChannel),
+  );
+
+  outputChannel.appendLine('[BrowserAgent] Skill 管理 TreeView 已注册');
+
   // 注册消息检查器虚拟文档 ContentProvider
   const messageDocProvider = new MessageDocumentProvider();
   const docProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
@@ -116,12 +141,17 @@ export function activate(context: vscode.ExtensionContext): void {
     connectionTreeView,
     messageTreeView,
     agentTreeView,
+    skillTreeView,
     docProviderDisposable,
     clearMessageLogCmd,
     openMessageDetailCmd,
+    runSkillCmd,
+    toggleSkillCmd,
+    addCustomSkillCmd,
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
+    { dispose: () => skillTree?.dispose() },
     { dispose: () => skillRegistry?.dispose() },
     { dispose: () => browserToolProvider?.dispose() },
     { dispose: () => wsServer?.dispose() },
@@ -145,6 +175,8 @@ export function deactivate(): void {
   messageTree = undefined;
   agentTree?.dispose();
   agentTree = undefined;
+  skillTree?.dispose();
+  skillTree = undefined;
   void mcpClient?.dispose();
   mcpClient = undefined;
   wsServer?.dispose();
