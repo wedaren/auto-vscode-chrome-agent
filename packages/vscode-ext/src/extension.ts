@@ -6,11 +6,17 @@ import { McpClient } from './mcp-client';
 import { ReportGenerator } from './report-generator';
 import { MessageHandler } from './message-handler';
 import { CommandRegistry } from './command-registry';
+import { ConnectionTreeDataProvider } from './connection-tree';
+import { MessageTreeDataProvider } from './message-tree';
+import { AgentTreeDataProvider } from './agent-tree';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
 let mcpClient: McpClient | undefined;
 let reportGenerator: ReportGenerator | undefined;
+let connectionTree: ConnectionTreeDataProvider | undefined;
+let messageTree: MessageTreeDataProvider | undefined;
+let agentTree: AgentTreeDataProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
@@ -41,10 +47,33 @@ export function activate(context: vscode.ExtensionContext): void {
   const commandRegistry = new CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel);
   const commandDisposables = commandRegistry.registerAll();
 
+  // 注册 Activity Bar TreeView（调试视图）
+  connectionTree = new ConnectionTreeDataProvider();
+  messageTree = new MessageTreeDataProvider();
+  agentTree = new AgentTreeDataProvider();
+
+  const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {
+    treeDataProvider: connectionTree,
+  });
+  const messageTreeView = vscode.window.createTreeView('browser-agent-messages', {
+    treeDataProvider: messageTree,
+  });
+  const agentTreeView = vscode.window.createTreeView('browser-agent-agent-loop', {
+    treeDataProvider: agentTree,
+  });
+
+  outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
+
   // 注册 dispose
   context.subscriptions.push(
     outputChannel,
     ...commandDisposables,
+    connectionTreeView,
+    messageTreeView,
+    agentTreeView,
+    { dispose: () => connectionTree?.dispose() },
+    { dispose: () => messageTree?.dispose() },
+    { dispose: () => agentTree?.dispose() },
     { dispose: () => wsServer?.dispose() },
     { dispose: () => { void mcpClient?.dispose(); } },
   );
@@ -56,6 +85,12 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   reportGenerator?.cancel();
   reportGenerator = undefined;
+  connectionTree?.dispose();
+  connectionTree = undefined;
+  messageTree?.dispose();
+  messageTree = undefined;
+  agentTree?.dispose();
+  agentTree = undefined;
   void mcpClient?.dispose();
   mcpClient = undefined;
   wsServer?.dispose();

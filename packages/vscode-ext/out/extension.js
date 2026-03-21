@@ -43,10 +43,16 @@ const mcp_client_1 = require("./mcp-client");
 const report_generator_1 = require("./report-generator");
 const message_handler_1 = require("./message-handler");
 const command_registry_1 = require("./command-registry");
+const connection_tree_1 = require("./connection-tree");
+const message_tree_1 = require("./message-tree");
+const agent_tree_1 = require("./agent-tree");
 let lmService;
 let wsServer;
 let mcpClient;
 let reportGenerator;
+let connectionTree;
+let messageTree;
+let agentTree;
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Browser Agent');
     outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -68,14 +74,34 @@ function activate(context) {
     // 注册所有命令
     const commandRegistry = new command_registry_1.CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel);
     const commandDisposables = commandRegistry.registerAll();
+    // 注册 Activity Bar TreeView（调试视图）
+    connectionTree = new connection_tree_1.ConnectionTreeDataProvider();
+    messageTree = new message_tree_1.MessageTreeDataProvider();
+    agentTree = new agent_tree_1.AgentTreeDataProvider();
+    const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {
+        treeDataProvider: connectionTree,
+    });
+    const messageTreeView = vscode.window.createTreeView('browser-agent-messages', {
+        treeDataProvider: messageTree,
+    });
+    const agentTreeView = vscode.window.createTreeView('browser-agent-agent-loop', {
+        treeDataProvider: agentTree,
+    });
+    outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
     // 注册 dispose
-    context.subscriptions.push(outputChannel, ...commandDisposables, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
+    context.subscriptions.push(outputChannel, ...commandDisposables, connectionTreeView, messageTreeView, agentTreeView, { dispose: () => connectionTree?.dispose() }, { dispose: () => messageTree?.dispose() }, { dispose: () => agentTree?.dispose() }, { dispose: () => wsServer?.dispose() }, { dispose: () => { void mcpClient?.dispose(); } });
     vscode.window.showInformationMessage('Browser Agent 已激活');
     outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 function deactivate() {
     reportGenerator?.cancel();
     reportGenerator = undefined;
+    connectionTree?.dispose();
+    connectionTree = undefined;
+    messageTree?.dispose();
+    messageTree = undefined;
+    agentTree?.dispose();
+    agentTree = undefined;
     void mcpClient?.dispose();
     mcpClient = undefined;
     wsServer?.dispose();

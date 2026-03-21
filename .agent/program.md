@@ -49,4 +49,4 @@
 - [x] 重构这个项目（已拆解为 evo_v2_001, evo_v2_002, evo_v2_003, evo_v2_004, evo_v2_005）
 - [~] 不考虑时间，仅考虑你认为这个 agent 的愿景，规划实现它（已拆解为 evo_v3_001, evo_v3_002, evo_v3_003, evo_v3_004, evo_v3_005 — Agentic Tool Use: ReAct 循环让 LM 在对话中自主使用 MCP 浏览器工具）
 - [x] 不考虑时间，使用最优解，优化聊天体验（已拆解为 evo_v4_001, evo_v4_002, evo_v4_003, evo_v4_004, evo_v4_005 — 聊天记录持久化 + 多会话管理 + 消息交互增强 + 输入体验增强）
-- [ ] 不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用
+- [~] 不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用（已拆解为 evo_v5_001, evo_v5_002, evo_v5_003, evo_v5_004, evo_v5_005 — VSCode 调试视图体系：Activity Bar 容器 + 连接状态 TreeView + 消息检查器 TreeView + Agent 循环可视化 TreeView）

@@ -30,6 +30,31 @@
         "title": "Browser Agent: 生成深度报告"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "browser-agent-panel",
+          "title": "Browser Agent",
+          "icon": "resources/browser-agent.svg"
+        }
+      ]
+    },
+    "views": {
+      "browser-agent-panel": [
+        {
+          "id": "browser-agent-connection",
+          "name": "连接状态"
+        },
+        {
+          "id": "browser-agent-messages",
+          "name": "消息日志"
+        },
+        {
+          "id": "browser-agent-agent-loop",
+          "name": "Agent 循环"
+        }
+      ]
+    },
     "configuration": {
       "title": "Browser Agent",
       "properties": {
