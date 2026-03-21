@@ -799,7 +799,7 @@
       "id": "evo_v10_004",
       "type": "coding",
       "title": "Chrome UI 下载按钮：MessageBubble assistant 消息底部添加下载图标按钮，有 llmDetail 时激活，点击调用 downloadLlmDetail 触发 JSON 下载",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v10_003"
       ],
