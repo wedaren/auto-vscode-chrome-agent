@@ -4,8 +4,16 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 93,
-  "last_validation": null,
+  "last_score": 95,
+  "last_validation": {
+    "task_id": "evo_v8_003",
+    "result": "pass",
+    "score": 95,
+    "issues": [
+      "tsconfig.json 未显式声明 strict: true（编译仍通过，类型安全无实际问题）"
+    ],
+    "acceptance_cmd_output": "PASS"
+  },
   "last_tick": "2026-03-21T20:30:00.000000Z",
   "pm_done": true
 }
