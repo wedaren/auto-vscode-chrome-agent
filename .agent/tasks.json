@@ -1102,7 +1102,7 @@
       "id": "evo_v15_004",
       "type": "coding",
       "title": "心跳容错优化：ws-client.ts 收到任何业务消息时重置 pong 超时计时器，避免 Agent 执行期间误判断连",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_001"
       ],
@@ -1114,7 +1114,7 @@
       "id": "evo_v15_005",
       "type": "validation",
       "title": "Debug 日志优化全量验收：双端构建通过 + 重连指数退避 + 导航等待加载 + 工具参数兼容 + 心跳容错",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_002",
         "evo_v15_003",
@@ -1123,6 +1123,67 @@
       "acceptance": "pnpm build 全量通过；ws-client.ts 有指数退避+jitter+maxReconnect 上限；background.ts navigate 等待 page load complete；tool-bridge.ts 有 text→value 兼容映射；ws-client.ts 业务消息重置心跳超时；所有 TS 编译无错误",
       "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && grep -c 'backoff\\|exponential\\|Math.min' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep -c 'onUpdated\\|status.*complete' entrypoints/background.ts | xargs -I{} test {} -ge 2 && grep -c 'text.*value' utils/tool-bridge.ts | xargs -I{} test {} -ge 1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
       "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
+    },
+    {
+      "id": "evo_v16_001",
+      "type": "coding",
+      "title": "Server 单客户端模式：Set<WebSocket> → activeClient 单引用 + 新连接踢旧连接",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_005"
+      ],
+      "acceptance": "ws-server.ts 中 clients: Set<WebSocket> 替换为 activeClient: WebSocket | null；新连接到达时若 activeClient 存在且 OPEN/CONNECTING 则 close(4001)；clientAliveMap 替换为 isClientAlive: boolean；firstClient getter 直接返回 activeClient；clientCount 返回 0 或 1；broadcast() 简化为发送到 activeClient；heartbeat 只检测 activeClient；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'activeClient' src/ws-server.ts | xargs -I{} test {} -ge 3 && grep -c 'Set<WebSocket>' src/ws-server.ts | xargs -I{} test {} -eq 0 && grep -c '4001\\|replaced' src/ws-server.ts | xargs -I{} test {} -ge 1 && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
+    },
+    {
+      "id": "evo_v16_002",
+      "type": "coding",
+      "title": "Client 连接去重保护：connect() 增加 OPEN/CONNECTING 状态跳过 + 重连次数降至 10",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_005"
+      ],
+      "acceptance": "ws-client.ts connect() 方法开头检查 ws.readyState === OPEN 或 CONNECTING 时直接 return（防重入）；DEFAULT_MAX_RECONNECT_ATTEMPTS 从 20 降为 10；jitter 注释不再提及多客户端；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'readyState.*OPEN\\|readyState.*CONNECTING\\|already.*connect' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep 'DEFAULT_MAX_RECONNECT_ATTEMPTS.*=.*10' src/ws-client.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
+    },
+    {
+      "id": "evo_v16_003",
+      "type": "coding",
+      "title": "Client 可见性感知重连：Side Panel 隐藏时暂停重连，可见时立即恢复",
+      "status": "pending",
+      "depends_on": [
+        "evo_v16_002"
+      ],
+      "acceptance": "ws-client.ts 监听 document.visibilitychange 事件；hidden 时清除 reconnectTimer 并设 _pausedByVisibility=true；visible 时若非 connected 则 reconnectCount=0 并立即 connect()；dispose 时移除监听器；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'visibilitychange\\|visibilityState\\|hidden\\|visible\\|_pausedByVisibility\\|pausedByVisibility' src/ws-client.ts | xargs -I{} test {} -ge 3 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
+    },
+    {
+      "id": "evo_v16_004",
+      "type": "coding",
+      "title": "Server welcome 握手：新连接发送 welcome 消息 + 记录 sessionId + Client 处理 welcome",
+      "status": "pending",
+      "depends_on": [
+        "evo_v16_001"
+      ],
+      "acceptance": "ws-server.ts 在 connection 事件中发送 { type: 'welcome', payload: { replacedPrevious } }；outputChannel 记录连接客户端的 sessionId；ws-client.ts 在 onmessage 中处理 welcome 消息并 console.log；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'welcome' src/ws-server.ts | xargs -I{} test {} -ge 1 && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../../packages/chrome-ext && grep -c 'welcome' src/ws-client.ts | xargs -I{} test {} -ge 1 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
+    },
+    {
+      "id": "evo_v16_005",
+      "type": "validation",
+      "title": "单客户端优化全量验收：双端构建通过 + activeClient 单引用 + 连接去重 + 可见性感知 + welcome 握手",
+      "status": "pending",
+      "depends_on": [
+        "evo_v16_003",
+        "evo_v16_004"
+      ],
+      "acceptance": "pnpm 全量构建通过；ws-server.ts 使用 activeClient（非 Set）+ 新连接踢旧 + welcome 握手；ws-client.ts 连接去重 + maxAttempts=10 + visibilitychange 暂停/恢复；无 TS 编译错误",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'activeClient' src/ws-server.ts | xargs -I{} test {} -ge 3 && grep -c 'welcome' src/ws-server.ts | xargs -I{} test {} -ge 1 && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && cd ../../packages/chrome-ext && grep -c 'visibilitychange' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep 'DEFAULT_MAX_RECONNECT_ATTEMPTS.*=.*10' src/ws-client.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "考虑只有唯一客户端，减少没必要的重连"
     }
   ]
 }

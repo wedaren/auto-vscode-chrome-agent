@@ -70,7 +70,8 @@ const message_tree_1 = require("./message-tree");
  */
 class WsServer {
     wss = null;
-    clients = new Set();
+    /** 当前唯一活跃客户端（单客户端模式：新连接到达时踢掉旧连接） */
+    activeClient = null;
     outputChannel;
     _port;
     _listening = false;
@@ -81,12 +82,12 @@ class WsServer {
     pendingRequests = new Map();
     /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
     _disposed = false;
-    /** 心跳检测定时器（30s 间隔 ping 所有客户端，pong 超时自动断开死连接） */
+    /** 心跳检测定时器（30s 间隔 ping activeClient，pong 超时自动断开死连接） */
     heartbeatInterval = null;
     /** 心跳间隔毫秒数 */
     static HEARTBEAT_INTERVAL_MS = 30_000;
-    /** 客户端存活标记 Map：WebSocket → isAlive（收到 pong 时标记为 true） */
-    clientAliveMap = new Map();
+    /** 单客户端存活标记（收到 pong 时标记为 true） */
+    isClientAlive = false;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     _onDidChangeState = new vscode.EventEmitter();
     onDidChangeState = this._onDidChangeState.event;
@@ -102,18 +103,15 @@ class WsServer {
     get listening() {
         return this._listening;
     }
-    /** 已连接客户端数 */
+    /** 已连接客户端数（单客户端模式：0 或 1） */
     get clientCount() {
-        return this.clients.size;
+        return this.activeClient && this.activeClient.readyState === ws_1.WebSocket.OPEN ? 1 : 0;
     }
-    /** 获取第一个已连接且处于 OPEN 状态的 WebSocket 客户端（通常只有一个 Chrome 插件连接） */
+    /** 获取当前活跃客户端（单客户端模式：直接返回 activeClient） */
     get firstClient() {
-        for (const client of this.clients) {
-            if (client.readyState === ws_1.WebSocket.OPEN) {
-                return client;
-            }
-        }
-        return null;
+        return this.activeClient && this.activeClient.readyState === ws_1.WebSocket.OPEN
+            ? this.activeClient
+            : null;
     }
     /**
      * 启动 WebSocket 服务端
@@ -131,14 +129,19 @@ class WsServer {
                 resolve();
             });
             this.wss.on('connection', (ws) => {
-                this.clients.add(ws);
+                // 单客户端模式：新连接到达时踢掉旧连接
+                if (this.activeClient && (this.activeClient.readyState === ws_1.WebSocket.OPEN || this.activeClient.readyState === ws_1.WebSocket.CONNECTING)) {
+                    this.outputChannel.appendLine('[WsServer] 新连接到达，踢掉旧客户端 (replaced by new connection)');
+                    this.activeClient.close(4001, 'replaced by new connection');
+                }
+                this.activeClient = ws;
                 // 心跳：标记新连接为存活
-                this.clientAliveMap.set(ws, true);
-                this.outputChannel.appendLine(`[WsServer] 新客户端连接 (当前连接数: ${this.clients.size})`);
+                this.isClientAlive = true;
+                this.outputChannel.appendLine('[WsServer] 新客户端连接 (单客户端模式)');
                 this._onDidChangeState.fire();
                 // 心跳：收到 pong 时标记为存活
                 ws.on('pong', () => {
-                    this.clientAliveMap.set(ws, true);
+                    this.isClientAlive = true;
                 });
                 ws.on('message', (data) => {
                     try {
@@ -152,9 +155,12 @@ class WsServer {
                     }
                 });
                 ws.on('close', () => {
-                    this.clients.delete(ws);
-                    this.clientAliveMap.delete(ws);
-                    this.outputChannel.appendLine(`[WsServer] 客户端断开 (当前连接数: ${this.clients.size})`);
+                    // 仅当断开的是当前活跃客户端时才清理
+                    if (this.activeClient === ws) {
+                        this.activeClient = null;
+                        this.isClientAlive = false;
+                    }
+                    this.outputChannel.appendLine('[WsServer] 客户端断开');
                     this._onDidChangeState.fire();
                 });
                 ws.on('error', (err) => {
@@ -247,17 +253,13 @@ class WsServer {
         }
     }
     /**
-     * 向所有已连接客户端广播消息
+     * 向活跃客户端发送消息（单客户端模式下等同于 send(activeClient, msg)）
      */
     broadcast(msg) {
-        const data = JSON.stringify(msg);
-        for (const client of this.clients) {
-            if (client.readyState === ws_1.WebSocket.OPEN) {
-                client.send(data);
-            }
+        if (this.activeClient && this.activeClient.readyState === ws_1.WebSocket.OPEN) {
+            this.activeClient.send(JSON.stringify(msg));
+            (0, message_tree_1.captureMessage)('send', msg);
         }
-        // 广播只记录一条（避免每个客户端重复记录）
-        (0, message_tree_1.captureMessage)('send', msg);
     }
     /**
      * 发送消息并等待 Chrome 侧的 tool_result 响应（请求-响应匹配）
@@ -306,27 +308,29 @@ class WsServer {
         });
     }
     /**
-     * 启动心跳检测定时器。
-     * 每 30 秒遍历所有客户端：
-     * - 如果上次 ping 后未收到 pong（isAlive=false），说明是死连接 → terminate
-     * - 否则标记 isAlive=false 并发送 ping，等待下次检测周期收到 pong
+     * 启动心跳检测定时器（单客户端模式）。
+     * 每 30 秒检测 activeClient：
+     * - 如果上次 ping 后未收到 pong（isClientAlive=false），说明是死连接 → terminate
+     * - 否则标记 isClientAlive=false 并发送 ping，等待下次检测周期收到 pong
      */
     startHeartbeat() {
         this.stopHeartbeat();
         this.heartbeatInterval = setInterval(() => {
-            for (const ws of this.clients) {
-                const isAlive = this.clientAliveMap.get(ws) ?? false;
-                if (!isAlive) {
-                    // 上次 ping 后未收到 pong，判定为死连接
-                    this.outputChannel.appendLine('[WsServer] 心跳超时，终止死连接');
-                    this.clientAliveMap.delete(ws);
-                    ws.terminate();
-                    continue;
-                }
-                // 标记为未响应，发送 ping 等待 pong
-                this.clientAliveMap.set(ws, false);
-                ws.ping();
+            if (!this.activeClient) {
+                return;
             }
+            if (!this.isClientAlive) {
+                // 上次 ping 后未收到 pong，判定为死连接
+                this.outputChannel.appendLine('[WsServer] 心跳超时，终止死连接');
+                this.activeClient.terminate();
+                this.activeClient = null;
+                this.isClientAlive = false;
+                this._onDidChangeState.fire();
+                return;
+            }
+            // 标记为未响应，发送 ping 等待 pong
+            this.isClientAlive = false;
+            this.activeClient.ping();
         }, WsServer.HEARTBEAT_INTERVAL_MS);
         this.outputChannel.appendLine(`[WsServer] 心跳检测已启动 (间隔 ${WsServer.HEARTBEAT_INTERVAL_MS}ms)`);
     }
@@ -352,11 +356,11 @@ class WsServer {
             this.pendingRequests.delete(requestId);
         }
         if (this.wss) {
-            for (const client of this.clients) {
-                client.close();
+            if (this.activeClient) {
+                this.activeClient.close();
+                this.activeClient = null;
             }
-            this.clients.clear();
-            this.clientAliveMap.clear();
+            this.isClientAlive = false;
             this.wss.close();
             this.wss = null;
             this._listening = false;

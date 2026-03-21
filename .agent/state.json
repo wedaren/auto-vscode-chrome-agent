@@ -12,7 +12,7 @@
     "issues": [],
     "acceptance_cmd_output": "PASS (grep count=14 ≥ 3, build error count=0)"
   },
-  "last_tick": "2026-03-21T13:23:44.289066Z",
+  "last_tick": "2026-03-21T15:25:36.619974Z",
   "pm_done": true,
   "last_research": "RESEARCH_RESULT: knowledge/fix_evo_v9_005_acceptance_cmd_path_mismatch.md | acceptance_cmd 路径错误 utils/ws-client.ts 应为 src/ws-client.ts，需执行 sed 修正 tasks.json（已失败3次，修复从未被执行）"
 }

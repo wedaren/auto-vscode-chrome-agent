@@ -19,7 +19,8 @@ export interface ToolResultPayload {
  */
 export declare class WsServer {
     private wss;
-    private clients;
+    /** 当前唯一活跃客户端（单客户端模式：新连接到达时踢掉旧连接） */
+    private activeClient;
     private outputChannel;
     private _port;
     private _listening;
@@ -30,12 +31,12 @@ export declare class WsServer {
     private readonly pendingRequests;
     /** disposed 标志：dispose 后 pendingRequests 拒绝新增 */
     private _disposed;
-    /** 心跳检测定时器（30s 间隔 ping 所有客户端，pong 超时自动断开死连接） */
+    /** 心跳检测定时器（30s 间隔 ping activeClient，pong 超时自动断开死连接） */
     private heartbeatInterval;
     /** 心跳间隔毫秒数 */
     private static readonly HEARTBEAT_INTERVAL_MS;
-    /** 客户端存活标记 Map：WebSocket → isAlive（收到 pong 时标记为 true） */
-    private readonly clientAliveMap;
+    /** 单客户端存活标记（收到 pong 时标记为 true） */
+    private isClientAlive;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     private readonly _onDidChangeState;
     readonly onDidChangeState: vscode.Event<void>;
@@ -44,9 +45,9 @@ export declare class WsServer {
     get port(): number;
     /** 是否正在监听 */
     get listening(): boolean;
-    /** 已连接客户端数 */
+    /** 已连接客户端数（单客户端模式：0 或 1） */
     get clientCount(): number;
-    /** 获取第一个已连接且处于 OPEN 状态的 WebSocket 客户端（通常只有一个 Chrome 插件连接） */
+    /** 获取当前活跃客户端（单客户端模式：直接返回 activeClient） */
     get firstClient(): WebSocket | null;
     /**
      * 启动 WebSocket 服务端
@@ -68,7 +69,7 @@ export declare class WsServer {
      */
     send(ws: WebSocket, msg: BridgeMessage): void;
     /**
-     * 向所有已连接客户端广播消息
+     * 向活跃客户端发送消息（单客户端模式下等同于 send(activeClient, msg)）
      */
     broadcast(msg: BridgeMessage): void;
     /**
@@ -90,10 +91,10 @@ export declare class WsServer {
      */
     sendAndWait(ws: WebSocket, msg: BridgeMessage, timeoutMs?: number): Promise<ToolResultPayload>;
     /**
-     * 启动心跳检测定时器。
-     * 每 30 秒遍历所有客户端：
-     * - 如果上次 ping 后未收到 pong（isAlive=false），说明是死连接 → terminate
-     * - 否则标记 isAlive=false 并发送 ping，等待下次检测周期收到 pong
+     * 启动心跳检测定时器（单客户端模式）。
+     * 每 30 秒检测 activeClient：
+     * - 如果上次 ping 后未收到 pong（isClientAlive=false），说明是死连接 → terminate
+     * - 否则标记 isClientAlive=false 并发送 ping，等待下次检测周期收到 pong
      */
     private startHeartbeat;
     /**
