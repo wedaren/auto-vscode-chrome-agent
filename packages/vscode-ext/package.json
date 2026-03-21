@@ -122,6 +122,11 @@
           "type": "number",
           "default": 7777,
           "description": "WebSocket 服务端口号"
+        },
+        "browserAgent.userDataDir": {
+          "type": "string",
+          "default": "~/.browser-agent",
+          "description": "用户数据持久化目录路径（支持 ~ 展开为用户 home 目录），存放 Skills、配置、会话记录等"
         }
       }
     }
