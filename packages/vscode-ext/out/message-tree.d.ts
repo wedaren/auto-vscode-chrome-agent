@@ -42,7 +42,16 @@ export declare class MessageTreeDataProvider implements vscode.TreeDataProvider<
     private readonly _onDidChangeTreeData;
     readonly onDidChangeTreeData: vscode.Event<void | MessageTreeItem | undefined>;
     private disposables;
+    /** 刷新节流计时器，防止高频消息导致 TreeView 疯狂刷新 */
+    private _refreshTimer;
+    /** 节流间隔（ms）：批量聚合 captureMessage 事件，200ms 内最多刷新一次 */
+    private static readonly REFRESH_DEBOUNCE_MS;
     constructor();
+    /**
+     * 节流刷新：200ms 内多次 captureMessage 事件只触发一次 TreeView 刷新。
+     * 使用 debounce 策略：每次调用重置计时器，最终在最后一次调用后 200ms 执行。
+     */
+    private batchRefresh;
     refresh(): void;
     /**
      * 清空消息日志并刷新

@@ -967,7 +967,7 @@
       "id": "evo_v13_003",
       "type": "coding",
       "title": "useWebSocket connectionDetails 更新优化：浅比较减少不必要的 React 状态更新和重渲染",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v13_001"
       ],

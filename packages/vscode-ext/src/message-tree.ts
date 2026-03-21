@@ -185,13 +185,33 @@ export class MessageTreeDataProvider implements vscode.TreeDataProvider<MessageT
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private disposables: vscode.Disposable[] = [];
 
+  /** 刷新节流计时器，防止高频消息导致 TreeView 疯狂刷新 */
+  private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 节流间隔（ms）：批量聚合 captureMessage 事件，200ms 内最多刷新一次 */
+  private static readonly REFRESH_DEBOUNCE_MS = 200;
+
   constructor() {
-    // 每次捕获新消息时自动刷新 TreeView
+    // 每次捕获新消息时通过 debounce 批量刷新 TreeView，
+    // 避免高频消息（如 list_models 循环）导致每条消息都触发重绘拖慢 VSCode
     this.disposables.push(
       onDidCaptureMessage(() => {
-        this._onDidChangeTreeData.fire();
+        this.batchRefresh();
       }),
     );
+  }
+
+  /**
+   * 节流刷新：200ms 内多次 captureMessage 事件只触发一次 TreeView 刷新。
+   * 使用 debounce 策略：每次调用重置计时器，最终在最后一次调用后 200ms 执行。
+   */
+  private batchRefresh(): void {
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+    }
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = undefined;
+      this._onDidChangeTreeData.fire();
+    }, MessageTreeDataProvider.REFRESH_DEBOUNCE_MS);
   }
 
   refresh(): void {
@@ -280,6 +300,11 @@ export class MessageTreeDataProvider implements vscode.TreeDataProvider<MessageT
   }
 
   dispose(): void {
+    // 清理节流计时器
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+      this._refreshTimer = undefined;
+    }
     for (const d of this.disposables) {
       d.dispose();
     }
