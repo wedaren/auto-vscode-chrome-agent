@@ -36,3 +36,10 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- chrome-ext build 存在 Duplicated imports 警告（Message from useChat.ts / message-factory.ts，ConversationMeta from useChat.ts / useChatStorage.ts），不影响构建但建议后续清理重复导出
+- 其余全部通过：acceptance_cmd PASS、双端编译零错误、所有新文件有顶部注释、模型调用仅通过 vscode.lm API、Chrome 插件不内置模型、无外部 API key 依赖

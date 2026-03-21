@@ -9,7 +9,9 @@
     "task_id": "evo_v8_004",
     "result": "pass",
     "score": 95,
-    "issues": [],
+    "issues": [
+      "chrome-ext build 有 Duplicated imports 警告（Message, ConversationMeta），非阻塞但建议清理"
+    ],
     "acceptance_cmd_output": "PASS"
   },
   "last_tick": "2026-03-21T21:00:00.000000Z",
