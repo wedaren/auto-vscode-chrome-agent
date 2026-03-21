@@ -2,6 +2,7 @@
 // 职责：展示可用 Skill 卡片列表、一键触发执行、参数输入弹窗、执行进度实时显示
 // 通过 WebSocket skill_list / skill_execute / skill_progress / skill_complete 协议与 VSCode 通信
 import React, { useState, useEffect, useCallback } from 'react';
+import TranslateControl, { isImmersiveTranslateSkill } from './TranslateControl';
 
 // ────────────────────────────────────────────────────────────────
 // 类型定义（与 VSCode 侧 skill-registry.ts 保持一致）
@@ -79,6 +80,9 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
   // 执行状态
   const [execution, setExecution] = useState<SkillExecution | null>(null);
 
+  // 沉浸式翻译完成信号（传给 TranslateControl 组件同步状态）
+  const [translateCompletion, setTranslateCompletion] = useState<{ success: boolean; timestamp: number } | null>(null);
+
   // ── 请求 Skill 列表 ──
   const requestSkillList = useCallback(() => {
     if (!isConnected) return;
@@ -143,6 +147,10 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
               summary: result.summary,
             };
           });
+          // 通知 TranslateControl 执行结果
+          if (isImmersiveTranslateSkill(result.skillName)) {
+            setTranslateCompletion({ success: result.success, timestamp: Date.now() });
+          }
           break;
         }
       }
@@ -203,10 +211,18 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
     setExecution(null);
   }, []);
 
+  // ── TranslateControl 执行入口 ──
+  const handleTranslateExecute = useCallback((params: Record<string, string>) => {
+    executeSkill('immersive_translate', params);
+  }, [executeSkill]);
+
   // ── 分类展示 ──
   const enabledSkills = skills.filter((s) => s.enabled);
   const presetSkills = enabledSkills.filter((s) => s.category === 'preset');
   const customSkills = enabledSkills.filter((s) => s.category === 'custom');
+  // 将沉浸式翻译 skill 单独提取
+  const translateSkill = enabledSkills.find((s) => isImmersiveTranslateSkill(s.name));
+  const presetSkillsFiltered = presetSkills.filter((s) => !isImmersiveTranslateSkill(s.name));
 
   // ────────────────────────────────────────────────────────────────
   // 渲染
@@ -256,14 +272,33 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
           </div>
         ) : (
           <>
+            {/* 沉浸式翻译快捷入口（置顶） */}
+            {translateSkill && (
+              <div>
+                <h3 className="text-xs font-medium text-blue-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  沉浸式翻译
+                </h3>
+                <TranslateControl
+                  skill={translateSkill}
+                  onExecute={handleTranslateExecute}
+                  disabled={execution?.isRunning === true}
+                  isConnected={isConnected}
+                  lastCompletion={translateCompletion}
+                />
+              </div>
+            )}
+
             {/* 预设 Skill */}
-            {presetSkills.length > 0 && (
+            {presetSkillsFiltered.length > 0 && (
               <div>
                 <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-1">
-                  预设 Skill ({presetSkills.length})
+                  预设 Skill ({presetSkillsFiltered.length})
                 </h3>
                 <div className="space-y-2">
-                  {presetSkills.map((skill) => (
+                  {presetSkillsFiltered.map((skill) => (
                     <SkillCard
                       key={skill.name}
                       skill={skill}

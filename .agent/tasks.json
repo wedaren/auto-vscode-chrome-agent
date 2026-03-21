@@ -1338,7 +1338,7 @@
       "id": "evo_v19_003",
       "type": "coding",
       "title": "immersive_translate 预设 Skill 定义：替换旧 translate_page，4 步沉浸式翻译流程",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v19_002"
       ],

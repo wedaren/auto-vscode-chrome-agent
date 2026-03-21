@@ -65,3 +65,4 @@
 - [x] 不考虑时间，使用最优解，处理浏览器上下文爆炸的问题（已拆解为 evo_v17_001, evo_v17_002, evo_v17_003, evo_v17_004, evo_v17_005 — 上下文预算体系：Context Budget 常量与截断工具 + Chrome 侧采集预截断 + System Prompt 预算控制 + AgentLoop 观察截断与消息窗口管理）
 - [~] 不考虑时间，使用最优解，想优化 内置 skill ，提供尽可能多有价值的 skill，用户能再让 agent 执行多步骤任务，复杂复杂，如果需要可以补充核心工具；（已拆解为 evo_v18_001, evo_v18_002, evo_v18_003, evo_v18_004, evo_v18_005 — Skill 体系增强：5 个新核心浏览器工具 + SkillRunner 步骤结果传递 + 10 个新预设 Skill + AgentLoop few-shot 编排增强）
 - [x] 不考虑时间，使用最优解，提供沉浸式翻译的 skill，要参考 chrome 插件 沉浸式翻译，提供最好的用户体验（已拆解为 evo_v19_001, evo_v19_002, evo_v19_003, evo_v19_004, evo_v19_005 — 沉浸式翻译体系：browser_extract_paragraphs 智能段落提取 + browser_inject_bilingual 双语注入 + llm_translate LLM 工具路由 + immersive_translate 4 步预设 Skill + Chrome Toggle/Clear UI 控制）
+- [ ] 内置 MCP https://github.com/ChromeDevTools/chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill 
