@@ -606,7 +606,7 @@
       "id": "evo_v7_003",
       "type": "coding",
       "title": "VSCode 插件功能使用文档：调试视图、连接 MCP、Agent 模式、浏览器工具说明",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v7_001"
       ],
