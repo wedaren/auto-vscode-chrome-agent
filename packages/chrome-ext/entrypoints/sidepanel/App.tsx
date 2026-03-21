@@ -279,24 +279,25 @@ function AppContent({ errorLog }: AppContentProps) {
   // Debug：所有入站消息均记录到 debugLog
   useEffect(() => {
     const unsub = onMessage((msg: BridgeMessage) => {
-      // Debug 日志：记录所有入站消息
-      debugLog.logInbound(msg.type, msg.payload);
+      // Debug 日志：记录所有入站消息（通过 ref 读取，避免 debugLog 对象引用进入依赖数组）
+      const debug = debugLogRef.current;
+      debug.logInbound(msg.type, msg.payload);
 
       // 执行时间线：跟踪 agent_step / agent_complete / tool_execute / tool_result / skill 事件
       if (msg.type === 'agent_step') {
         const payload = msg.payload as { step?: string; description?: string } | undefined;
-        debugLog.logExecution(`Agent 步骤: ${payload?.step ?? 'unknown'}`, payload?.description);
+        debug.logExecution(`Agent 步骤: ${payload?.step ?? 'unknown'}`, payload?.description);
       }
       if (msg.type === 'agent_complete') {
-        debugLog.logExecution('Agent 执行完成', msg.payload);
+        debug.logExecution('Agent 执行完成', msg.payload);
       }
       if (msg.type === 'tool_execute') {
         const payload = msg.payload as { toolName?: string; requestId?: string } | undefined;
-        debugLog.startTimeline(`工具调用: ${payload?.toolName ?? 'unknown'}`, payload?.requestId);
+        debug.startTimeline(`工具调用: ${payload?.toolName ?? 'unknown'}`, payload?.requestId);
       }
       if (msg.type === 'skill_progress') {
         const payload = msg.payload as { skillName?: string; description?: string } | undefined;
-        debugLog.logExecution(`Skill 进度: ${payload?.skillName ?? 'unknown'}`, payload?.description);
+        debug.logExecution(`Skill 进度: ${payload?.skillName ?? 'unknown'}`, payload?.description);
       }
 
       // tool_execute 由 useWebSocket 内的 tool-bridge 处理，tool_result 由 VSCode 侧处理
@@ -322,7 +323,7 @@ function AppContent({ errorLog }: AppContentProps) {
       }
     });
     return unsub;
-  }, [onMessage, handleChatMessage, debugLog]);
+  }, [onMessage, handleChatMessage]);
 
   // 连接状态变化：仅在状态从非 connected 转换为 connected 时请求模型列表
   // 使用 ref 追踪上一次 connectionState，避免 connectionDetails / debugLog 对象引用变化导致无限循环

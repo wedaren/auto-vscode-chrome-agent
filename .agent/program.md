@@ -59,4 +59,4 @@
 - [x] vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息（已拆解为 evo_v11_001, evo_v11_002, evo_v11_003, evo_v11_004, evo_v11_005 — 全局用户数据目录：UserDataManager 服务 + 配置 schema + SkillRegistry 文件持久化迁移 + 管理命令 + 调试视图状态展示）
 - [x] vscode 插件容易崩溃；分析优化（已拆解为 evo_v12_001, evo_v12_002, evo_v12_003, evo_v12_004, evo_v12_005 — 稳定性优化：全局错误兜底 + CancellationToken 生命周期修复 + 内存管理 + WebSocket 心跳 + AgentLoop 超时保护）
 - [x] 修复消息日志一直出现list_models 导致 vsocde 卡死（已拆解为 evo_v13_001, evo_v13_002, evo_v13_003, evo_v13_004, evo_v13_005 — React useEffect 无限循环修复 + VSCode 侧 list_models 节流 + connectionDetails 浅比较优化 + TreeView 刷新节流）
-- [ ] 修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue.
+- [~] 修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue.（已拆解为 evo_v14_001, evo_v14_002, evo_v14_003, evo_v14_004, evo_v14_005 — debugLog 对象引用不稳定导致 React 渲染队列错误：useEffect/useCallback 依赖修复 + useDebugLog 返回值 useMemo 稳定化）

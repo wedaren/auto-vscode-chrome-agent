@@ -979,7 +979,7 @@
       "id": "evo_v13_004",
       "type": "coding",
       "title": "message-tree.ts TreeView 刷新节流：批量聚合 captureMessage 事件，防止高频消息导致 TreeView 疯狂刷新拖慢 VSCode",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v13_002"
       ],
@@ -991,7 +991,7 @@
       "id": "evo_v13_005",
       "type": "validation",
       "title": "list_models 死循环修复全量验收：双端构建通过 + list_models 仅连接时发送一次 + 无 TreeView 抖动 + 无 outputChannel 洪水",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v13_003",
         "evo_v13_004"
@@ -999,6 +999,68 @@
       "acceptance": "pnpm build 全量通过；App.tsx 使用 ref 追踪 connectionState 转换且不依赖 connectionDetails；MessageHandler 有 list_models 节流；useWebSocket 有 connectionDetails 浅比较；MessageTreeDataProvider 有刷新节流；整体无 TS 编译错误",
       "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
       "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
+    },
+    {
+      "id": "evo_v14_001",
+      "type": "coding",
+      "title": "修复 App.tsx useEffect(onMessage) 依赖：移除 debugLog，改用 debugLogRef.current 读取日志方法",
+      "status": "pending",
+      "depends_on": [
+        "evo_v13_005"
+      ],
+      "acceptance": "App.tsx 第一个 useEffect（onMessage 消息注册）的依赖数组不包含 debugLog；effect 内部通过 debugLogRef.current 调用 logInbound/logExecution/startTimeline 等方法；Chrome 插件构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -A2 '\\[onMessage' entrypoints/sidepanel/App.tsx | grep -v 'debugLog[^R]' && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
+    },
+    {
+      "id": "evo_v14_002",
+      "type": "coding",
+      "title": "修复 App.tsx errorLog 同步 useEffect 依赖：移除 debugLog，改用 debugLogRef.current.logError",
+      "status": "pending",
+      "depends_on": [
+        "evo_v14_001"
+      ],
+      "acceptance": "App.tsx 中 errorLog 同步 useEffect 的依赖数组仅包含 [errorLog]，不包含 debugLog；effect 内部通过 debugLogRef.current.logError 调用；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -A2 '\\[errorLog' entrypoints/sidepanel/App.tsx | grep -v 'debugLog[^R]' && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
+    },
+    {
+      "id": "evo_v14_003",
+      "type": "coding",
+      "title": "修复 App.tsx handleModelSelect/handleSendMessage useCallback 依赖：移除 debugLog，改用 debugLogRef.current.logOutbound",
+      "status": "pending",
+      "depends_on": [
+        "evo_v14_001"
+      ],
+      "acceptance": "handleModelSelect 和 handleSendMessage 两个 useCallback 的依赖数组不包含 debugLog；回调内部通过 debugLogRef.current.logOutbound 调用；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'debugLogRef.current.logOutbound' entrypoints/sidepanel/App.tsx | xargs -I{} test {} -ge 2 && grep 'sendMessage, debugLog\\]\\|chatSend.*debugLog\\]' entrypoints/sidepanel/App.tsx | wc -l | xargs -I{} test {} -eq 0 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
+    },
+    {
+      "id": "evo_v14_004",
+      "type": "coding",
+      "title": "useDebugLog 返回值稳定化：用 useMemo 包裹返回对象，仅在 logs/timeline/toggles/stats 变化时重建",
+      "status": "pending",
+      "depends_on": [
+        "evo_v14_003"
+      ],
+      "acceptance": "useDebugLog.ts 的 return 语句使用 useMemo 包裹，依赖数组为 [logs, timeline, toggles, stats] 及所有 useCallback 函数引用；避免每次渲染返回新对象；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'useMemo' hooks/useDebugLog.ts | xargs -I{} test {} -ge 1 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
+    },
+    {
+      "id": "evo_v14_005",
+      "type": "validation",
+      "title": "React queue 错误修复全量验收：Chrome 插件构建通过 + App.tsx 无 debugLog 直接依赖 + 无 React queue 警告",
+      "status": "pending",
+      "depends_on": [
+        "evo_v14_002",
+        "evo_v14_003",
+        "evo_v14_004"
+      ],
+      "acceptance": "pnpm build 全量通过；App.tsx 所有 useEffect/useCallback 依赖数组均不直接包含 debugLog（仅用 debugLogRef）；useDebugLog.ts 返回值使用 useMemo 稳定化；无 TS 编译错误；运行时不再出现 '[render] Should have a queue' 警告",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && grep -c 'debugLog\\]' entrypoints/sidepanel/App.tsx | xargs -I{} test {} -eq 0 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
     }
   ]
 }
