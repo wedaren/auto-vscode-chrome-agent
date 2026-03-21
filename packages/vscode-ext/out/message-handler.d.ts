@@ -59,6 +59,15 @@ export declare class MessageHandler {
      */
     private handleCancelChat;
     /**
+     * 处理 skill_list：返回所有可用 Skill 列表（供 Chrome Skill 面板展示）
+     */
+    private handleSkillList;
+    /**
+     * 处理 skill_execute：执行指定 Skill，通过 skill_progress 实时推送进度，
+     * 完成后发送 skill_complete
+     */
+    private handleSkillExecute;
+    /**
      * 根据浏览器上下文动态构建 system prompt
      */
     private buildSystemPrompt;

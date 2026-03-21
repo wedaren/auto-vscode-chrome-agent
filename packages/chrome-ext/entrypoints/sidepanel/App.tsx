@@ -1,5 +1,6 @@
 // App.tsx — Side Panel 主组件，纯 UI 渲染层，所有逻辑由 Hook 管理
 // 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
+// 顶部 Tab 切换 Chat / Skills 两个视图
 // 空会话时显示 WelcomeScreen 引导页
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ChatInput from '../../components/ChatInput';
@@ -8,10 +9,14 @@ import MessageBubble from '../../components/MessageBubble';
 import TypingIndicator from '../../components/TypingIndicator';
 import ConversationList from '../../components/ConversationList';
 import WelcomeScreen from '../../components/WelcomeScreen';
+import SkillPanel from '../../components/SkillPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
 import type { BridgeMessage } from '../../src/ws-client';
+
+/** 顶部 Tab 类型 */
+type ActiveTab = 'chat' | 'skills';
 
 /** WebSocket 服务端地址（VSCode 插件侧） */
 const WS_URL = 'ws://localhost:7777';
@@ -42,6 +47,9 @@ export default function App() {
 
   // --- 侧栏抽屉状态 ---
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // --- Tab 切换状态 ---
+  const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
 
   // 注册 WebSocket 消息处理
   // 注意：tool_execute / tool_result 消息由 useWebSocket 内部的 tool-bridge 自动处理，
@@ -209,76 +217,124 @@ export default function App() {
         </div>
       </header>
 
-      {/* Model selector */}
-      <ModelSelector models={models} selectedModelId={selectedModelId} onSelect={handleModelSelect} disabled={!isConnected} loading={modelsLoading} />
+      {/* Tab 切换栏：Chat / Skills */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+            activeTab === 'chat'
+              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Chat
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('skills')}
+          className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+            activeTab === 'skills'
+              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            Skills
+          </div>
+        </button>
+      </div>
 
-      {/* Page context bar */}
-      {pageContext.url && (
-        <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 truncate">
-          {pageContext.title || pageContext.url}
-          {pageContext.selectedText && (
-            <span className="ml-2 text-blue-500">(已选中 {pageContext.selectedText.length} 字)</span>
+      {/* ===== Chat 视图 ===== */}
+      {activeTab === 'chat' && (
+        <>
+          {/* Model selector */}
+          <ModelSelector models={models} selectedModelId={selectedModelId} onSelect={handleModelSelect} disabled={!isConnected} loading={modelsLoading} />
+
+          {/* Page context bar */}
+          {pageContext.url && (
+            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 truncate">
+              {pageContext.title || pageContext.url}
+              {pageContext.selectedText && (
+                <span className="ml-2 text-blue-500">(已选中 {pageContext.selectedText.length} 字)</span>
+              )}
+            </div>
           )}
-        </div>
+
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {messages.length === 0 && !isStreaming ? (
+              <WelcomeScreen onSendPrompt={handleSendMessage} />
+            ) : (
+              <>
+                {messages.map((msg, index) => (
+                  <MessageBubble
+                    key={msg.id}
+                    role={msg.role}
+                    content={msg.content}
+                    timestamp={msg.timestamp}
+                    steps={msg.steps}
+                    isAgentMode={msg.isAgentMode}
+                    isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
+                    onRegenerate={
+                      msg.role === 'assistant' && !isStreaming
+                        ? () => handleRegenerate(index)
+                        : undefined
+                    }
+                  />
+                ))}
+                {isStreaming && (() => {
+                  const lastMsg = messages[messages.length - 1];
+                  return (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.content === '') ? <TypingIndicator /> : null;
+                })()}
+              </>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Quick action buttons / Stop button */}
+          <div className="flex gap-2 px-4 py-2 border-t border-gray-100">
+            {isStreaming ? (
+              <button onClick={handleCancel} className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" stroke="none" />
+                </svg>
+                停止生成
+              </button>
+            ) : (
+              <>
+                <button onClick={() => handleQuickAction('探索此页')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">探索此页</button>
+                <button onClick={() => handleQuickAction('生成报告')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">生成报告</button>
+              </>
+            )}
+          </div>
+
+          {/* Chat input — 斜杠命令 + 快捷键 + 输入历史 */}
+          <ChatInput
+            onSend={handleSendMessage}
+            disabled={isStreaming}
+            onNewConversation={createNewConversation}
+            onClearConversation={handleClearConversation}
+            onToggleModels={handleToggleModels}
+            userMessages={userMessages}
+          />
+        </>
       )}
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.length === 0 && !isStreaming ? (
-          <WelcomeScreen onSendPrompt={handleSendMessage} />
-        ) : (
-          <>
-            {messages.map((msg, index) => (
-              <MessageBubble
-                key={msg.id}
-                role={msg.role}
-                content={msg.content}
-                timestamp={msg.timestamp}
-                steps={msg.steps}
-                isAgentMode={msg.isAgentMode}
-                isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
-                onRegenerate={
-                  msg.role === 'assistant' && !isStreaming
-                    ? () => handleRegenerate(index)
-                    : undefined
-                }
-              />
-            ))}
-            {isStreaming && (() => {
-              const lastMsg = messages[messages.length - 1];
-              return (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.content === '') ? <TypingIndicator /> : null;
-            })()}
-          </>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Quick action buttons / Stop button */}
-      <div className="flex gap-2 px-4 py-2 border-t border-gray-100">
-        {isStreaming ? (
-          <button onClick={handleCancel} className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" stroke="none" />
-            </svg>
-            停止生成
-          </button>
-        ) : (
-          <>
-            <button onClick={() => handleQuickAction('探索此页')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">探索此页</button>
-            <button onClick={() => handleQuickAction('生成报告')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">生成报告</button>
-          </>
-        )}
-      </div>
-
-      {/* Chat input — 斜杠命令 + 快捷键 + 输入历史 */}
-      <ChatInput
-        onSend={handleSendMessage}
-        disabled={isStreaming}
-        onNewConversation={createNewConversation}
-        onClearConversation={handleClearConversation}
-        onToggleModels={handleToggleModels}
-        userMessages={userMessages}
-      />
+      {/* ===== Skills 视图 ===== */}
+      {activeTab === 'skills' && (
+        <SkillPanel
+          sendMessage={sendMessage}
+          onMessage={onMessage}
+          isConnected={isConnected}
+        />
+      )}
     </div>
   );
 }

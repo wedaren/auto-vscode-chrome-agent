@@ -10,6 +10,16 @@
 //                   payload: { requestId, toolName, toolArgs }
 //   tool_result   — Chrome → VSCode：返回工具执行结果
 //                   payload: { requestId, success, data, error }
+// Skill 类（Skill 面板协议）：
+//   skill_list         — Chrome → VSCode：请求可用 Skill 列表
+//   skill_list_result  — VSCode → Chrome：返回 Skill 数组
+//                        payload: { skills: Skill[] }
+//   skill_execute      — Chrome → VSCode：触发 Skill 执行
+//                        payload: { skillName, params }
+//   skill_progress     — VSCode → Chrome：每步进度推送
+//                        payload: { skillName, stepIndex, totalSteps, status, description, result? }
+//   skill_complete     — VSCode → Chrome：执行完成/失败
+//                        payload: { skillName, success, summary }
 
 /** Chrome ↔ VSCode 桥接消息协议（与 VSCode 侧 BridgeMessage 保持一致） */
 export interface BridgeMessage {

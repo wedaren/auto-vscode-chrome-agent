@@ -10,6 +10,7 @@ declare global {
   const MessageBubble: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/MessageBubble')['default']
   const MigrationError: typeof import('wxt/storage')['MigrationError']
   const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
+  const SkillPanel: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/SkillPanel')['default']
   const TypingIndicator: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')['default']
   const WelcomeScreen: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen')['default']
   const browser: typeof import('wxt/browser')['browser']

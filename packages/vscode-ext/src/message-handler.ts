@@ -70,6 +70,12 @@ export class MessageHandler {
       case 'cancel_chat':
         this.handleCancelChat(ws);
         break;
+      case 'skill_list':
+        this.handleSkillList(ws, msg);
+        break;
+      case 'skill_execute':
+        this.handleSkillExecute(ws, msg);
+        break;
       default:
         this.outputChannel.appendLine(
           `[BrowserAgent] 未处理的消息类型: ${msg.type}`,
@@ -349,6 +355,138 @@ export class MessageHandler {
     } else {
       this.outputChannel.appendLine('[BrowserAgent] 收到 cancel_chat，但无活跃的流式请求');
     }
+  }
+
+  /**
+   * 处理 skill_list：返回所有可用 Skill 列表（供 Chrome Skill 面板展示）
+   */
+  private handleSkillList(ws: WebSocket, msg: BridgeMessage): void {
+    if (!this.skillRegistry) {
+      this.wsServer.send(ws, {
+        type: 'skill_list_result',
+        payload: { skills: [] },
+        sessionId: msg.sessionId,
+      });
+      this.outputChannel.appendLine(
+        '[BrowserAgent] skill_list 请求但 SkillRegistry 未初始化',
+      );
+      return;
+    }
+
+    const skills = this.skillRegistry.getAll();
+    this.wsServer.send(ws, {
+      type: 'skill_list_result',
+      payload: { skills },
+      sessionId: msg.sessionId,
+    });
+    this.outputChannel.appendLine(
+      `[BrowserAgent] 已返回 ${skills.length} 个 Skill`,
+    );
+  }
+
+  /**
+   * 处理 skill_execute：执行指定 Skill，通过 skill_progress 实时推送进度，
+   * 完成后发送 skill_complete
+   */
+  private handleSkillExecute(ws: WebSocket, msg: BridgeMessage): void {
+    const payload = msg.payload as {
+      skillName?: string;
+      params?: Record<string, string>;
+    };
+    const skillName = payload?.skillName ?? '';
+    const params = payload?.params ?? {};
+
+    if (!this.skillRegistry || !this.skillRunner) {
+      this.wsServer.send(ws, {
+        type: 'skill_complete',
+        payload: {
+          skillName,
+          success: false,
+          summary: 'Skill 系统未初始化',
+        },
+        sessionId: msg.sessionId,
+      });
+      this.outputChannel.appendLine(
+        '[BrowserAgent] skill_execute 请求但 SkillRegistry/SkillRunner 未初始化',
+      );
+      return;
+    }
+
+    const skill = this.skillRegistry.getByName(skillName);
+    if (!skill) {
+      this.wsServer.send(ws, {
+        type: 'skill_complete',
+        payload: {
+          skillName,
+          success: false,
+          summary: `未找到 Skill: ${skillName}`,
+        },
+        sessionId: msg.sessionId,
+      });
+      this.outputChannel.appendLine(
+        `[BrowserAgent] skill_execute 未找到 Skill: ${skillName}`,
+      );
+      return;
+    }
+
+    this.outputChannel.appendLine(
+      `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}`,
+    );
+
+    // 异步执行，通过 skill_progress 实时推送进度
+    void (async () => {
+      try {
+        const result = await this.skillRunner!.execute(
+          skill,
+          params,
+          (progress) => {
+            // 每步进度推送 skill_progress 消息 → Chrome UI
+            this.wsServer.send(ws, {
+              type: 'skill_progress',
+              payload: {
+                skillName,
+                displayName: skill.displayName,
+                stepIndex: progress.stepIndex,
+                totalSteps: progress.totalSteps,
+                status: progress.status,
+                description: progress.description,
+                result: progress.result,
+              },
+              sessionId: msg.sessionId,
+            });
+          },
+        );
+
+        // 执行完成，发送 skill_complete
+        this.wsServer.send(ws, {
+          type: 'skill_complete',
+          payload: {
+            skillName,
+            success: result.success,
+            summary: result.summary,
+          },
+          sessionId: msg.sessionId,
+        });
+
+        this.outputChannel.appendLine(
+          `[BrowserAgent] Skill "${skillName}" 执行${result.success ? '成功' : '失败'}: ${result.stepResults.length} 步`,
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.wsServer.send(ws, {
+          type: 'skill_complete',
+          payload: {
+            skillName,
+            success: false,
+            summary: `执行异常: ${errMsg}`,
+          },
+          sessionId: msg.sessionId,
+        });
+        this.outputChannel.appendLine(
+          `[BrowserAgent] Skill "${skillName}" 执行异常: ${errMsg}`,
+        );
+      }
+    })();
   }
 
   /**

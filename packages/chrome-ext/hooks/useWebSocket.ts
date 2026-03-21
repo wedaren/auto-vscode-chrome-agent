@@ -1,5 +1,7 @@
 // useWebSocket.ts — 自定义 Hook：封装 WsClient 初始化、连接状态管理、消息分发和断连恢复
 // 集成 tool_execute / tool_result 工具调用协议（不阻塞聊天 UI）
+// 同时支持 skill_list / skill_list_result / skill_execute / skill_progress / skill_complete 消息
+// （Skill 相关消息通过 onMessage 分发到 SkillPanel 组件处理）
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WsClient, type BridgeMessage, type ConnectionState } from '../src/ws-client';
 import { createToolBridgeHandler } from '../utils/tool-bridge';

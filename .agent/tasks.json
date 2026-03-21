@@ -667,7 +667,7 @@
       "id": "evo_v8_003",
       "type": "coding",
       "title": "Skill 执行引擎 SkillRunner + AgentLoop 集成 run_skill 工具",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v8_002"
       ],
