@@ -258,6 +258,15 @@ function AppContent({ errorLog }: AppContentProps) {
   const [modelsLoading, setModelsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // --- Ref 追踪：避免 effect 依赖对象引用导致无限循环 ---
+  // prevConnectionStateRef: 追踪上一次 connectionState，仅在转换为 connected 时才发 list_models
+  // connectionDetailsRef / debugLogRef: 避免将对象引用放入 effect 依赖数组
+  const prevConnectionStateRef = useRef<ConnectionState>(connectionState);
+  const connectionDetailsRef = useRef<ConnectionDetails>(connectionDetails);
+  const debugLogRef = useRef(debugLog);
+  connectionDetailsRef.current = connectionDetails;
+  debugLogRef.current = debugLog;
+
   // --- 侧栏抽屉状态 ---
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -315,16 +324,25 @@ function AppContent({ errorLog }: AppContentProps) {
     return unsub;
   }, [onMessage, handleChatMessage, debugLog]);
 
-  // 连接状态变化：连接时请求模型列表，断连时恢复流式状态 + Toast 提示 + Debug 日志
+  // 连接状态变化：仅在状态从非 connected 转换为 connected 时请求模型列表
+  // 使用 ref 追踪上一次 connectionState，避免 connectionDetails / debugLog 对象引用变化导致无限循环
+  // 修复：移除 connectionDetails 和 debugLog 依赖，通过 ref 读取最新值
   useEffect(() => {
-    // Debug 日志：记录连接状态变迁
-    debugLog.logConnection(connectionState, { url: connectionDetails.url, reconnectCount: connectionDetails.reconnectCount });
+    const prevState = prevConnectionStateRef.current;
+    prevConnectionStateRef.current = connectionState;
 
-    if (connectionState === 'connected') {
+    const details = connectionDetailsRef.current;
+    const debug = debugLogRef.current;
+
+    // Debug 日志：记录连接状态变迁
+    debug.logConnection(connectionState, { url: details.url, reconnectCount: details.reconnectCount });
+
+    // 仅在状态从非 connected 转换为 connected 时发送 list_models（防止死循环）
+    if (prevState !== 'connected' && connectionState === 'connected') {
       setModelsLoading(true);
       sendMessage('list_models', null);
       // Debug：记录出站消息
-      debugLog.logOutbound('list_models', null);
+      debug.logOutbound('list_models', null);
       showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
     if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
@@ -333,14 +351,14 @@ function AppContent({ errorLog }: AppContentProps) {
     }
     if (connectionState === 'failed') {
       resetStreamingState();
-      debugLog.logError('连接失败', { url: connectionDetails.url, reconnectCount: connectionDetails.reconnectCount });
+      debug.logError('连接失败', { url: details.url, reconnectCount: details.reconnectCount });
       showToast({
         type: 'error',
         message: '连接失败，请点击连接指示器手动重连',
         action: { label: '重新连接', onClick: reconnect },
       });
     }
-  }, [connectionState, sendMessage, resetStreamingState, showToast, reconnect, debugLog, connectionDetails]);
+  }, [connectionState, sendMessage, resetStreamingState, showToast, reconnect]);
 
   // 自动滚动到底部
   useEffect(() => {

@@ -919,7 +919,7 @@
       "id": "evo_v12_004",
       "type": "coding",
       "title": "WebSocket 心跳 + AgentLoop 超时保护：ws-server 增加 ping/pong 心跳检测（30s 间隔）自动清理死连接 + AgentLoop.run() 增加总超时（5 分钟）防止无限挂起",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v12_003"
       ],
@@ -931,13 +931,74 @@
       "id": "evo_v12_005",
       "type": "validation",
       "title": "稳定性优化全量验收：双端构建通过 + 服务初始化失败场景不崩溃 + 无 TS 编译错误 + 核心防御性代码全部就位",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v12_004"
       ],
       "acceptance": "pnpm build 全量通过；extension.ts 有错误兜底；message-handler 有 ws close 清理；LlmRequestCollector 有淘汰策略；ws-server 有心跳；agent-loop 有超时保护；所有 CTS 无泄漏",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -3 && grep -l \"uncaughtException\" src/extension.ts > /dev/null && grep -l \"heartbeat\" src/ws-server.ts > /dev/null && grep -l \"MAX_ENTRIES\\|maxEntries\" src/llm-request-collector.ts > /dev/null && grep -l \"totalTimeout\\|TOTAL_TIMEOUT\" src/agent-loop.ts > /dev/null && echo PASS || echo FAIL",
       "evolution_goal": "vscode 插件容易崩溃；分析优化"
+    },
+    {
+      "id": "evo_v13_001",
+      "type": "coding",
+      "title": "修复 App.tsx useEffect 无限循环：connectionDetails 依赖导致 list_models 死循环",
+      "status": "done",
+      "depends_on": [
+        "evo_v12_005"
+      ],
+      "acceptance": "App.tsx 中连接状态变化 useEffect 不再以 connectionDetails 或 debugLog 为依赖；使用 ref 追踪上一次 connectionState，仅在状态从非 connected 变为 connected 时才发送 list_models；构建通过无 TS 错误",
+      "acceptance_cmd": "bash -c 'cd packages/chrome-ext && grep -c \"useRef.*connectionState\\|prevConnectionState\\|prevStateRef\" entrypoints/sidepanel/App.tsx && ! grep \"connectionDetails\" entrypoints/sidepanel/App.tsx | grep -q \"useEffect\" && npm run build 2>&1 | grep -i \"error\" | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL'",
+      "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
+    },
+    {
+      "id": "evo_v13_002",
+      "type": "coding",
+      "title": "VSCode 侧 handleListModels 节流防护：最小间隔 5 秒，防止高频 list_models 请求压垮 vscode.lm API",
+      "status": "pending",
+      "depends_on": [
+        "evo_v13_001"
+      ],
+      "acceptance": "MessageHandler.handleListModels 内部维护 lastListModelsTime 时间戳，5 秒内重复请求直接返回缓存结果或忽略；outputChannel 记录节流日志；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'lastListModels\\|LIST_MODELS_THROTTLE\\|throttle\\|_lastListModels' src/message-handler.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
+    },
+    {
+      "id": "evo_v13_003",
+      "type": "coding",
+      "title": "useWebSocket connectionDetails 更新优化：浅比较减少不必要的 React 状态更新和重渲染",
+      "status": "pending",
+      "depends_on": [
+        "evo_v13_001"
+      ],
+      "acceptance": "useWebSocket.ts 中 onMessage 回调不再每条消息都 setConnectionDetails；改为浅比较（reconnectCount/latency/state 实际变化时才 setState）或使用 useRef + 定时同步；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'shallowEqual\\|prevDetails\\|detailsRef\\|===.*reconnectCount\\|===.*latency' hooks/useWebSocket.ts && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
+    },
+    {
+      "id": "evo_v13_004",
+      "type": "coding",
+      "title": "message-tree.ts TreeView 刷新节流：批量聚合 captureMessage 事件，防止高频消息导致 TreeView 疯狂刷新拖慢 VSCode",
+      "status": "pending",
+      "depends_on": [
+        "evo_v13_002"
+      ],
+      "acceptance": "MessageTreeDataProvider 构造函数中对 onDidCaptureMessage 事件添加 debounce/throttle（100-300ms 间隔），不再每条消息都触发 _onDidChangeTreeData.fire()；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -c 'debounce\\|throttle\\|setTimeout\\|_refreshTimer\\|batchRefresh' src/message-tree.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
+    },
+    {
+      "id": "evo_v13_005",
+      "type": "validation",
+      "title": "list_models 死循环修复全量验收：双端构建通过 + list_models 仅连接时发送一次 + 无 TreeView 抖动 + 无 outputChannel 洪水",
+      "status": "pending",
+      "depends_on": [
+        "evo_v13_003",
+        "evo_v13_004"
+      ],
+      "acceptance": "pnpm build 全量通过；App.tsx 使用 ref 追踪 connectionState 转换且不依赖 connectionDetails；MessageHandler 有 list_models 节流；useWebSocket 有 connectionDetails 浅比较；MessageTreeDataProvider 有刷新节流；整体无 TS 编译错误",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "修复消息日志一直出现list_models 导致 vsocde 卡死"
     }
   ]
 }
