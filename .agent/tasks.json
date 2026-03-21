@@ -558,7 +558,7 @@
       "id": "evo_v6_004",
       "type": "coding",
       "title": "AgentLoop 集成原生浏览器工具：多工具源支持（MCP + BrowserTools），无 MCP 也能进入 Agent 模式",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v6_003"
       ],
