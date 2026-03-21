@@ -14,8 +14,18 @@ export declare class WsServer {
     private wss;
     private clients;
     private outputChannel;
-    private port;
+    private _port;
+    private _listening;
+    /** 状态变更事件，当 listening / clientCount 变化时触发 */
+    private readonly _onDidChangeState;
+    readonly onDidChangeState: vscode.Event<void>;
     constructor(outputChannel: vscode.OutputChannel, port?: number);
+    /** 当前监听端口 */
+    get port(): number;
+    /** 是否正在监听 */
+    get listening(): boolean;
+    /** 已连接客户端数 */
+    get clientCount(): number;
     /**
      * 启动 WebSocket 服务端
      * @returns Promise 在服务端开始监听后 resolve

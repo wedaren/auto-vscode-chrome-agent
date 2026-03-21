@@ -17,9 +17,18 @@ export declare class McpClient {
     private transport;
     private outputChannel;
     private _connected;
+    private _discoveredTools;
+    /** 状态变更事件，当连接状态或工具列表变化时触发 */
+    private readonly _onDidChangeState;
+    readonly onDidChangeState: vscode.Event<void>;
     constructor(outputChannel: vscode.OutputChannel);
     /** 当前是否已连接 */
     get connected(): boolean;
+    /** 已发现的 MCP 工具列表（缓存） */
+    get discoveredTools(): ReadonlyArray<{
+        name: string;
+        description?: string;
+    }>;
     /**
      * 启动 chrome-devtools-mcp 子进程并建立 MCP 连接
      */

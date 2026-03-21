@@ -16,7 +16,14 @@ export interface ModelInfo {
 export declare class LmService {
     private outputChannel;
     private selectedModelInstance;
+    /** 模型选择变更事件 */
+    private readonly _onDidChangeModel;
+    readonly onDidChangeModel: vscode.Event<void>;
     constructor(outputChannel: vscode.OutputChannel);
+    /** 获取当前已选择的模型信息（未选则返回 undefined） */
+    get currentModel(): ModelInfo | undefined;
+    /** 释放事件发射器 */
+    dispose(): void;
     /**
      * 列出所有可用的语言模型信息
      * 调用 vscode.lm.selectChatModels({}) 获取全量模型列表

@@ -22,6 +22,11 @@ export class McpClient {
   private transport: StdioClientTransport | null = null;
   private outputChannel: vscode.OutputChannel;
   private _connected = false;
+  private _discoveredTools: { name: string; description?: string }[] = [];
+
+  /** 状态变更事件，当连接状态或工具列表变化时触发 */
+  private readonly _onDidChangeState = new vscode.EventEmitter<void>();
+  readonly onDidChangeState = this._onDidChangeState.event;
 
   constructor(outputChannel: vscode.OutputChannel) {
     this.outputChannel = outputChannel;
@@ -30,6 +35,11 @@ export class McpClient {
   /** 当前是否已连接 */
   get connected(): boolean {
     return this._connected;
+  }
+
+  /** 已发现的 MCP 工具列表（缓存） */
+  get discoveredTools(): ReadonlyArray<{ name: string; description?: string }> {
+    return this._discoveredTools;
   }
 
   /**
@@ -59,11 +69,23 @@ export class McpClient {
       // 连接到 MCP Server
       await this.client.connect(this.transport);
       this._connected = true;
+      this._onDidChangeState.fire();
+
+      // 连接成功后自动发现工具并缓存
+      try {
+        const tools = await this.listTools();
+        this._discoveredTools = tools;
+        this._onDidChangeState.fire();
+      } catch {
+        // 工具发现失败不影响连接状态
+        this.outputChannel.appendLine('[McpClient] 自动工具发现失败，可稍后手动调用 listTools()');
+      }
 
       this.outputChannel.appendLine('[McpClient] chrome-devtools-mcp 已连接');
       vscode.window.showInformationMessage('Browser Agent: DevTools MCP 已就绪');
     } catch (err) {
       this._connected = false;
+      this._onDidChangeState.fire();
       const message = err instanceof Error ? err.message : String(err);
       this.outputChannel.appendLine(`[McpClient] 连接失败: ${message}`);
       throw err;
@@ -141,5 +163,8 @@ export class McpClient {
     }
 
     this._connected = false;
+    this._discoveredTools = [];
+    this._onDidChangeState.fire();
+    this._onDidChangeState.dispose();
   }
 }

@@ -49,6 +49,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 注册 Activity Bar TreeView（调试视图）
   connectionTree = new ConnectionTreeDataProvider();
+  connectionTree.bind(wsServer, mcpClient, lmService);
   messageTree = new MessageTreeDataProvider();
   agentTree = new AgentTreeDataProvider();
 
@@ -95,5 +96,6 @@ export function deactivate(): void {
   mcpClient = undefined;
   wsServer?.dispose();
   wsServer = undefined;
+  lmService?.dispose();
   lmService = undefined;
 }

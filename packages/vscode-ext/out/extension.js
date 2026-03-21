@@ -76,6 +76,7 @@ function activate(context) {
     const commandDisposables = commandRegistry.registerAll();
     // 注册 Activity Bar TreeView（调试视图）
     connectionTree = new connection_tree_1.ConnectionTreeDataProvider();
+    connectionTree.bind(wsServer, mcpClient, lmService);
     messageTree = new message_tree_1.MessageTreeDataProvider();
     agentTree = new agent_tree_1.AgentTreeDataProvider();
     const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {
@@ -106,6 +107,7 @@ function deactivate() {
     mcpClient = undefined;
     wsServer?.dispose();
     wsServer = undefined;
+    lmService?.dispose();
     lmService = undefined;
 }
 //# sourceMappingURL=extension.js.map

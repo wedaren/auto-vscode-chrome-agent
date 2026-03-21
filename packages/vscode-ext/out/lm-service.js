@@ -43,8 +43,29 @@ const vscode = __importStar(require("vscode"));
 class LmService {
     outputChannel;
     selectedModelInstance;
+    /** 模型选择变更事件 */
+    _onDidChangeModel = new vscode.EventEmitter();
+    onDidChangeModel = this._onDidChangeModel.event;
     constructor(outputChannel) {
         this.outputChannel = outputChannel;
+    }
+    /** 获取当前已选择的模型信息（未选则返回 undefined） */
+    get currentModel() {
+        if (!this.selectedModelInstance) {
+            return undefined;
+        }
+        const m = this.selectedModelInstance;
+        return {
+            id: m.id,
+            name: m.name,
+            vendor: m.vendor,
+            family: m.family,
+            maxInputTokens: m.maxInputTokens,
+        };
+    }
+    /** 释放事件发射器 */
+    dispose() {
+        this._onDidChangeModel.dispose();
     }
     /**
      * 列出所有可用的语言模型信息
@@ -74,6 +95,7 @@ class LmService {
         if (target) {
             this.selectedModelInstance = target;
             this.outputChannel.appendLine(`[LmService] 已手动选择模型: ${target.name} (id: ${target.id})`);
+            this._onDidChangeModel.fire();
             return true;
         }
         this.outputChannel.appendLine(`[LmService] 未找到 id 为 "${id}" 的模型`);

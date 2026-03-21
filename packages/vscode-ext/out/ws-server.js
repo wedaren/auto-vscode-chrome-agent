@@ -45,10 +45,26 @@ class WsServer {
     wss = null;
     clients = new Set();
     outputChannel;
-    port;
+    _port;
+    _listening = false;
+    /** 状态变更事件，当 listening / clientCount 变化时触发 */
+    _onDidChangeState = new vscode.EventEmitter();
+    onDidChangeState = this._onDidChangeState.event;
     constructor(outputChannel, port = 7777) {
         this.outputChannel = outputChannel;
-        this.port = port;
+        this._port = port;
+    }
+    /** 当前监听端口 */
+    get port() {
+        return this._port;
+    }
+    /** 是否正在监听 */
+    get listening() {
+        return this._listening;
+    }
+    /** 已连接客户端数 */
+    get clientCount() {
+        return this.clients.size;
     }
     /**
      * 启动 WebSocket 服务端
@@ -56,15 +72,18 @@ class WsServer {
      */
     start() {
         return new Promise((resolve, reject) => {
-            this.wss = new ws_1.WebSocketServer({ port: this.port });
+            this.wss = new ws_1.WebSocketServer({ port: this._port });
             this.wss.on('listening', () => {
-                this.outputChannel.appendLine(`[WsServer] WebSocket 服务端已在端口 ${this.port} 上监听`);
-                vscode.window.showInformationMessage(`Browser Agent WebSocket listening on port ${this.port}`);
+                this._listening = true;
+                this.outputChannel.appendLine(`[WsServer] WebSocket 服务端已在端口 ${this._port} 上监听`);
+                vscode.window.showInformationMessage(`Browser Agent WebSocket listening on port ${this._port}`);
+                this._onDidChangeState.fire();
                 resolve();
             });
             this.wss.on('connection', (ws) => {
                 this.clients.add(ws);
                 this.outputChannel.appendLine(`[WsServer] 新客户端连接 (当前连接数: ${this.clients.size})`);
+                this._onDidChangeState.fire();
                 ws.on('message', (data) => {
                     try {
                         const msg = JSON.parse(data.toString());
@@ -78,6 +97,7 @@ class WsServer {
                 ws.on('close', () => {
                     this.clients.delete(ws);
                     this.outputChannel.appendLine(`[WsServer] 客户端断开 (当前连接数: ${this.clients.size})`);
+                    this._onDidChangeState.fire();
                 });
                 ws.on('error', (err) => {
                     this.outputChannel.appendLine(`[WsServer] 客户端错误: ${err.message}`);
@@ -85,7 +105,7 @@ class WsServer {
             });
             this.wss.on('error', (err) => {
                 if (err.code === 'EADDRINUSE') {
-                    const msg = `端口 ${this.port} 已被占用，请修改 browserAgent.port 设置`;
+                    const msg = `端口 ${this._port} 已被占用，请修改 browserAgent.port 设置`;
                     this.outputChannel.appendLine(`[WsServer] ${msg}`);
                     vscode.window.showErrorMessage(`Browser Agent: ${msg}`);
                 }
@@ -169,8 +189,11 @@ class WsServer {
             this.clients.clear();
             this.wss.close();
             this.wss = null;
+            this._listening = false;
+            this._onDidChangeState.fire();
             this.outputChannel.appendLine('[WsServer] 服务端已关闭');
         }
+        this._onDidChangeState.dispose();
     }
 }
 exports.WsServer = WsServer;

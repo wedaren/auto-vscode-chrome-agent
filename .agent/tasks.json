@@ -462,8 +462,10 @@
       "id": "evo_v5_001",
       "type": "coding",
       "title": "VSCode Activity Bar 视图容器注册 + 3 个 TreeView 占位声明",
-      "status": "pending",
-      "depends_on": ["evo_v4_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v4_005"
+      ],
       "acceptance": "package.json 新增 viewsContainers.activitybar 配置（含自定义图标），contributes.views 注册 3 个视图：browser-agent-connection（连接状态）、browser-agent-messages（消息日志）、browser-agent-agent-loop（Agent 循环）；src/ 下有 3 个空 TreeDataProvider 文件（connection-tree.ts、message-tree.ts、agent-tree.ts）并在 extension.ts 中注册；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'viewsContainers' package.json && grep -q 'browser-agent-connection' package.json && grep -q 'browser-agent-messages' package.json && grep -q 'browser-agent-agent-loop' package.json && test -f src/connection-tree.ts && test -f src/message-tree.ts && test -f src/agent-tree.ts && grep -q 'registerTreeDataProvider\\|createTreeView' src/extension.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Activity Bar 视图注册不完整或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用"
@@ -473,7 +475,9 @@
       "type": "coding",
       "title": "连接状态 TreeView：WebSocket 服务器状态 + MCP 连接状态 + 当前模型信息实时展示",
       "status": "pending",
-      "depends_on": ["evo_v5_001"],
+      "depends_on": [
+        "evo_v5_001"
+      ],
       "acceptance": "connection-tree.ts 实现 TreeDataProvider，展示 3 个顶级节点：① WebSocket Server（端口、监听状态、已连接客户端数）② MCP 连接（状态、已发现工具列表作为子节点）③ 当前模型（名称、vendor、family、maxInputTokens）；ws-server.ts 和 mcp-client.ts 暴露状态变更事件，TreeView 自动刷新；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'TreeDataProvider' src/connection-tree.ts && grep -q 'onDidChangeTreeData' src/connection-tree.ts && grep -q 'getChildren\\|getTreeItem' src/connection-tree.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 连接状态 TreeView 实现不完整或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用"
@@ -483,7 +487,9 @@
       "type": "coding",
       "title": "消息检查器 TreeView：实时 WebSocket 消息流日志 + 点击查看完整 JSON",
       "status": "pending",
-      "depends_on": ["evo_v5_002"],
+      "depends_on": [
+        "evo_v5_002"
+      ],
       "acceptance": "message-tree.ts 实现 TreeDataProvider，显示收发的 WebSocket 消息列表（最近 200 条环形缓冲）；每条显示方向箭头（↑发送/↓接收）+ type + 时间戳 + 截断 payload；点击消息节点在编辑器中打开完整 JSON（使用 TextDocumentContentProvider 虚拟文档）；ws-server.ts 的 send/broadcast/onMessage 处注入消息采集钩子；提供清空日志命令 browser-agent.clearMessageLog；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'TreeDataProvider' src/message-tree.ts && grep -q 'TextDocumentContentProvider\\|openTextDocument\\|showTextDocument' src/message-tree.ts && grep -q 'clearMessageLog' src/message-tree.ts && grep -q 'clearMessageLog' package.json && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 消息检查器 TreeView 实现不完整或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用"
@@ -493,7 +499,9 @@
       "type": "coding",
       "title": "Agent 循环可视化 TreeView：ReAct 步骤实时展示 + 历史执行记录浏览",
       "status": "pending",
-      "depends_on": ["evo_v5_003"],
+      "depends_on": [
+        "evo_v5_003"
+      ],
       "acceptance": "agent-tree.ts 实现 TreeDataProvider，顶级节点为每次 Agent 运行（显示时间戳+状态:running/completed/cancelled/error）；子节点为各步骤（think🧠/act⚡/observe📋）含 step 序号、toolName、截断 content；运行中的循环实时追加步骤并自动刷新；agent-loop.ts 的 stepCallback 注入 TreeView 更新钩子；保留最近 20 次运行记录；编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'TreeDataProvider' src/agent-tree.ts && grep -q 'onDidChangeTreeData' src/agent-tree.ts && grep -q 'think\\|act\\|observe' src/agent-tree.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Agent 循环 TreeView 实现不完整或编译失败'",
       "evolution_goal": "不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用"
@@ -503,7 +511,9 @@
       "type": "validate",
       "title": "调试视图全量验收：3 个 TreeView 功能完整 + 调试命令可用 + 构建通过",
       "status": "pending",
-      "depends_on": ["evo_v5_004"],
+      "depends_on": [
+        "evo_v5_004"
+      ],
       "acceptance": "VSCode 编译通过；package.json 包含完整的 viewsContainers + views + commands 声明；3 个 TreeDataProvider 均已注册且实现 getTreeItem/getChildren/onDidChangeTreeData；connection-tree 展示 WS/MCP/模型状态；message-tree 支持实时消息流和清空命令；agent-tree 支持多次运行记录和步骤展示；所有新增命令已注册（clearMessageLog, exportDebugLog）；Chrome 构建也通过（无回归）",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && grep -q 'viewsContainers' package.json && grep -q 'browser-agent-connection' package.json && grep -q 'browser-agent-messages' package.json && grep -q 'browser-agent-agent-loop' package.json && grep -q 'TreeDataProvider' src/connection-tree.ts && grep -q 'TreeDataProvider' src/message-tree.ts && grep -q 'TreeDataProvider' src/agent-tree.ts && grep -q 'registerTreeDataProvider\\|createTreeView' src/extension.ts && cd ../chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 调试视图全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用"

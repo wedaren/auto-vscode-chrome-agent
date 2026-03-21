@@ -17,11 +17,31 @@ export class WsServer {
   private wss: WebSocketServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private outputChannel: vscode.OutputChannel;
-  private port: number;
+  private _port: number;
+  private _listening = false;
+
+  /** 状态变更事件，当 listening / clientCount 变化时触发 */
+  private readonly _onDidChangeState = new vscode.EventEmitter<void>();
+  readonly onDidChangeState = this._onDidChangeState.event;
 
   constructor(outputChannel: vscode.OutputChannel, port: number = 7777) {
     this.outputChannel = outputChannel;
-    this.port = port;
+    this._port = port;
+  }
+
+  /** 当前监听端口 */
+  get port(): number {
+    return this._port;
+  }
+
+  /** 是否正在监听 */
+  get listening(): boolean {
+    return this._listening;
+  }
+
+  /** 已连接客户端数 */
+  get clientCount(): number {
+    return this.clients.size;
   }
 
   /**
@@ -30,15 +50,17 @@ export class WsServer {
    */
   start(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.wss = new WebSocketServer({ port: this.port });
+      this.wss = new WebSocketServer({ port: this._port });
 
       this.wss.on('listening', () => {
+        this._listening = true;
         this.outputChannel.appendLine(
-          `[WsServer] WebSocket 服务端已在端口 ${this.port} 上监听`,
+          `[WsServer] WebSocket 服务端已在端口 ${this._port} 上监听`,
         );
         vscode.window.showInformationMessage(
-          `Browser Agent WebSocket listening on port ${this.port}`,
+          `Browser Agent WebSocket listening on port ${this._port}`,
         );
+        this._onDidChangeState.fire();
         resolve();
       });
 
@@ -47,6 +69,7 @@ export class WsServer {
         this.outputChannel.appendLine(
           `[WsServer] 新客户端连接 (当前连接数: ${this.clients.size})`,
         );
+        this._onDidChangeState.fire();
 
         ws.on('message', (data: Buffer) => {
           try {
@@ -67,6 +90,7 @@ export class WsServer {
           this.outputChannel.appendLine(
             `[WsServer] 客户端断开 (当前连接数: ${this.clients.size})`,
           );
+          this._onDidChangeState.fire();
         });
 
         ws.on('error', (err: Error) => {
@@ -78,7 +102,7 @@ export class WsServer {
 
       this.wss.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') {
-          const msg = `端口 ${this.port} 已被占用，请修改 browserAgent.port 设置`;
+          const msg = `端口 ${this._port} 已被占用，请修改 browserAgent.port 设置`;
           this.outputChannel.appendLine(`[WsServer] ${msg}`);
           vscode.window.showErrorMessage(`Browser Agent: ${msg}`);
         } else {
@@ -171,7 +195,10 @@ export class WsServer {
       this.clients.clear();
       this.wss.close();
       this.wss = null;
+      this._listening = false;
+      this._onDidChangeState.fire();
       this.outputChannel.appendLine('[WsServer] 服务端已关闭');
     }
+    this._onDidChangeState.dispose();
   }
 }
