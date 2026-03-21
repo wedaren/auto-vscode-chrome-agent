@@ -378,7 +378,7 @@
       "id": "evo_v3_004",
       "type": "coding",
       "title": "Chrome: useChat 处理 agent_step/agent_complete 消息，MessageBubble 集成 AgentStepView",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v3_003"
       ],

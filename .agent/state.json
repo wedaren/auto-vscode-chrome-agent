@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v3_004",
+  "current_task": "evo_v3_005",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 98,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v3_004",
+    "task_id": "evo_v3_005",
     "result": "pass",
-    "score": 98,
+    "score": 95,
     "issues": [
-      "WARN: Duplicated imports 'Message' from useChat.ts and message-factory.ts（WXT 构建警告，非阻塞）"
+      "WARN: Duplicated imports 'Message' from useChat.ts and message-factory.ts（WXT 构建警告，非阻塞，上一轮遗留）"
     ],
     "acceptance_cmd_output": "PASS"
   },
