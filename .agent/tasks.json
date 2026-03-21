@@ -1128,7 +1128,7 @@
       "id": "evo_v16_001",
       "type": "coding",
       "title": "Server 单客户端模式：Set<WebSocket> → activeClient 单引用 + 新连接踢旧连接",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v15_005"
       ],

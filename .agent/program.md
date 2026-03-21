@@ -61,4 +61,4 @@
 - [x] 修复消息日志一直出现list_models 导致 vsocde 卡死（已拆解为 evo_v13_001, evo_v13_002, evo_v13_003, evo_v13_004, evo_v13_005 — React useEffect 无限循环修复 + VSCode 侧 list_models 节流 + connectionDetails 浅比较优化 + TreeView 刷新节流）
 - [x] 修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue.（已拆解为 evo_v14_001, evo_v14_002, evo_v14_003, evo_v14_004, evo_v14_005 — debugLog 对象引用不稳定导致 React 渲染队列错误：useEffect/useCallback 依赖修复 + useDebugLog 返回值 useMemo 稳定化）
 - [~] 结合 debug-log 日志文件优化（已拆解为 evo_v15_001, evo_v15_002, evo_v15_003, evo_v15_004, evo_v15_005 — 重连指数退避 + 导航等待页面加载 + 工具参数自动修正 + 心跳容错优化）
-- [~] 考虑只有唯一客户端，减少没必要的重连（已拆解为 evo_v16_001, evo_v16_002, evo_v16_003, evo_v16_004, evo_v16_005 — 单客户端优化：Server activeClient 单引用 + 踢旧连接 + Client 连接去重 + 可见性感知重连 + welcome 握手）
+- [x] 考虑只有唯一客户端，减少没必要的重连（已拆解为 evo_v16_001, evo_v16_002, evo_v16_003, evo_v16_004, evo_v16_005 — 单客户端优化：Server activeClient 单引用 + 踢旧连接 + Client 连接去重 + 可见性感知重连 + welcome 握手）

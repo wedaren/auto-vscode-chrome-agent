@@ -5,7 +5,7 @@
 // disconnected → connecting → connected ⇄ reconnecting → failed
 // 心跳：每 15 秒发送 ping，10 秒内未收到 pong 或任何业务消息则判定失效并触发重连
 // 心跳容错：收到任何有效 BridgeMessage（不限于 pong）都会重置超时计时器
-// 重连：指数退避 1s→2s→4s→8s→...→max30s + 随机 jitter，最多 20 次
+// 重连：指数退避 1s→2s→4s→8s→...→max30s + 随机 jitter，最多 10 次
 //
 // === 支持的消息类型 ===
 // 聊天类：ping/pong, chat, chat_response_chunk, chat_response_end
@@ -55,7 +55,7 @@ export interface ConnectionDetails {
 /** 重连指数退避常量 */
 const BASE_RECONNECT_INTERVAL = 1000;   // 首次重连等待 1s
 const MAX_RECONNECT_INTERVAL = 30_000;  // 指数退避上限 30s
-const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
+const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
 /** 重连日志合并：首次 / 每 5 次 / 最后一次 打印 */
 const RECONNECT_LOG_INTERVAL = 5;
 
@@ -64,7 +64,7 @@ export interface WsClientOptions {
   url?: string;
   /** 重连基准间隔（毫秒），默认 1000，实际间隔按指数退避计算 */
   reconnectInterval?: number;
-  /** 最大重连次数，默认 20 */
+  /** 最大重连次数，默认 10 */
   maxReconnectAttempts?: number;
   /** 心跳发送间隔（毫秒），默认 15000 */
   heartbeatInterval?: number;
@@ -148,9 +148,22 @@ export class WsClient {
     };
   }
 
-  /** 连接到 WebSocket 服务端 */
+  /** 连接到 WebSocket 服务端（已连接或正在连接时跳过，防止重复连接） */
   connect(): void {
     if (this.disposed) return;
+
+    // 连接去重：已处于 OPEN 或 CONNECTING 状态时直接跳过，防止重复连接
+    if (this.ws) {
+      if (this.ws.readyState === WebSocket.OPEN) {
+        console.log('[WsClient] already connected, skipping connect()');
+        return;
+      }
+      if (this.ws.readyState === WebSocket.CONNECTING) {
+        console.log('[WsClient] already connecting, skipping connect()');
+        return;
+      }
+    }
+
     this.cleanup();
     this.setState('connecting');
 
@@ -387,7 +400,7 @@ export class WsClient {
       this.reconnectInterval * Math.pow(2, this.reconnectCount - 1),
       MAX_RECONNECT_INTERVAL,
     );
-    // 随机 jitter：±25% 防止多客户端同步重连
+    // 随机 jitter：±25% 防止定时器对齐导致重连风暴
     const jitter = exponentialDelay * (0.75 + Math.random() * 0.5);
     const delay = Math.round(jitter);
 
