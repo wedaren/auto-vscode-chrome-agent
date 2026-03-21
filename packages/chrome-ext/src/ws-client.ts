@@ -1,9 +1,10 @@
 // ws-client.ts — WebSocket 客户端，负责与 VSCode 插件的双向通信
-// 提供自动重连、心跳检测、完整连接状态机、消息类型校验
+// 提供自动重连（指数退避 + jitter）、心跳检测、完整连接状态机、消息类型校验
 //
 // === 连接状态机 ===
 // disconnected → connecting → connected ⇄ reconnecting → failed
 // 心跳：每 15 秒发送 ping，10 秒内未收到 pong 则判定失效并触发重连
+// 重连：指数退避 1s→2s→4s→8s→...→max30s + 随机 jitter，最多 20 次
 //
 // === 支持的消息类型 ===
 // 聊天类：ping/pong, chat, chat_response_chunk, chat_response_end
@@ -50,12 +51,19 @@ export interface ConnectionDetails {
   url: string;
 }
 
+/** 重连指数退避常量 */
+const BASE_RECONNECT_INTERVAL = 1000;   // 首次重连等待 1s
+const MAX_RECONNECT_INTERVAL = 30_000;  // 指数退避上限 30s
+const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
+/** 重连日志合并：首次 / 每 5 次 / 最后一次 打印 */
+const RECONNECT_LOG_INTERVAL = 5;
+
 export interface WsClientOptions {
   /** WebSocket 服务端地址，默认 ws://localhost:7777 */
   url?: string;
-  /** 自动重连间隔（毫秒），默认 3000 */
+  /** 重连基准间隔（毫秒），默认 1000，实际间隔按指数退避计算 */
   reconnectInterval?: number;
-  /** 最大重连次数，默认 Infinity */
+  /** 最大重连次数，默认 20 */
   maxReconnectAttempts?: number;
   /** 心跳发送间隔（毫秒），默认 15000 */
   heartbeatInterval?: number;
@@ -99,8 +107,8 @@ export class WsClient {
 
   constructor(options: WsClientOptions = {}) {
     this.url = options.url ?? 'ws://localhost:7777';
-    this.reconnectInterval = options.reconnectInterval ?? 3000;
-    this.maxReconnectAttempts = options.maxReconnectAttempts ?? Infinity;
+    this.reconnectInterval = options.reconnectInterval ?? BASE_RECONNECT_INTERVAL;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.heartbeatInterval = options.heartbeatInterval ?? 15000;
     this.heartbeatTimeout = options.heartbeatTimeout ?? 10000;
     this.sessionId = crypto.randomUUID();
@@ -154,7 +162,12 @@ export class WsClient {
     }
 
     this.ws.onopen = () => {
-      console.log('[WsClient] 已连接到', this.url);
+      const wasReconnecting = this.reconnectCount > 0;
+      if (wasReconnecting) {
+        console.log(`[WsClient] 重连成功（经过 ${this.reconnectCount} 次尝试），已连接到 ${this.url}`);
+      } else {
+        console.log('[WsClient] 已连接到', this.url);
+      }
       this.reconnectCount = 0;
       this.setState('connected');
       this._lastActiveTime = Date.now();
@@ -341,20 +354,41 @@ export class WsClient {
     }
   }
 
+  /**
+   * 指数退避重连：delay = min(base * 2^count, MAX_RECONNECT_INTERVAL) + jitter
+   * 日志合并：仅首次、每 RECONNECT_LOG_INTERVAL 次、最后一次打印
+   */
   private scheduleReconnect(): void {
     if (this.disposed) return;
     if (this.reconnectCount >= this.maxReconnectAttempts) {
-      console.log('[WsClient] 已达最大重连次数，停止重连');
+      console.log(`[WsClient] 已达最大重连次数 (${this.maxReconnectAttempts})，停止重连`);
       this.setState('failed');
       return;
     }
     this.reconnectCount++;
-    console.log(
-      `[WsClient] ${this.reconnectInterval}ms 后第 ${this.reconnectCount} 次重连...`,
+
+    // 指数退避：base * 2^(count-1)，上限 MAX_RECONNECT_INTERVAL
+    const exponentialDelay = Math.min(
+      this.reconnectInterval * Math.pow(2, this.reconnectCount - 1),
+      MAX_RECONNECT_INTERVAL,
     );
+    // 随机 jitter：±25% 防止多客户端同步重连
+    const jitter = exponentialDelay * (0.75 + Math.random() * 0.5);
+    const delay = Math.round(jitter);
+
+    // 合并重连日志：首次 / 每 N 次 / 最后一次
+    const isFirst = this.reconnectCount === 1;
+    const isLast = this.reconnectCount === this.maxReconnectAttempts;
+    const isNth = this.reconnectCount % RECONNECT_LOG_INTERVAL === 0;
+    if (isFirst || isLast || isNth) {
+      console.log(
+        `[WsClient] 第 ${this.reconnectCount}/${this.maxReconnectAttempts} 次重连，${delay}ms 后尝试...`,
+      );
+    }
+
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, this.reconnectInterval);
+    }, delay);
   }
 }

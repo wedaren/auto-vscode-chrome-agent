@@ -1040,7 +1040,7 @@
       "id": "evo_v14_004",
       "type": "coding",
       "title": "useDebugLog 返回值稳定化：用 useMemo 包裹返回对象，仅在 logs/timeline/toggles/stats 变化时重建",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v14_003"
       ],
@@ -1052,7 +1052,7 @@
       "id": "evo_v14_005",
       "type": "validation",
       "title": "React queue 错误修复全量验收：Chrome 插件构建通过 + App.tsx 无 debugLog 直接依赖 + 无 React queue 警告",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v14_002",
         "evo_v14_003",
@@ -1061,6 +1061,68 @@
       "acceptance": "pnpm build 全量通过；App.tsx 所有 useEffect/useCallback 依赖数组均不直接包含 debugLog（仅用 debugLogRef）；useDebugLog.ts 返回值使用 useMemo 稳定化；无 TS 编译错误；运行时不再出现 '[render] Should have a queue' 警告",
       "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && grep -c 'debugLog\\]' entrypoints/sidepanel/App.tsx | xargs -I{} test {} -eq 0 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
       "evolution_goal": "修复 debug 持续显示 [render] Should have a queue. This is likely a bug in React. Please file an issue."
+    },
+    {
+      "id": "evo_v15_001",
+      "type": "coding",
+      "title": "WsClient 重连指数退避：固定 3s 改为 1s→2s→4s→8s→max30s + jitter + maxReconnectAttempts=20 + 合并重连日志",
+      "status": "pending",
+      "depends_on": [
+        "evo_v14_005"
+      ],
+      "acceptance": "ws-client.ts scheduleReconnect() 使用指数退避算法（baseInterval * 2^count + random jitter）；有 MAX_RECONNECT_INTERVAL 常量（30s）；maxReconnectAttempts 默认 20（非 Infinity）；connect() 内不再每次都打 console.log，改为首次/每 5 次/最后一次打印；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'Math.min\\|Math.pow\\|backoff\\|exponential\\|jitter' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep -c 'MAX_RECONNECT\\|maxReconnect.*=.*[0-9]' src/ws-client.ts | xargs -I{} test {} -ge 1 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
+    },
+    {
+      "id": "evo_v15_002",
+      "type": "coding",
+      "title": "Navigate 等待页面加载完成：background.ts browser.tabs.update 后监听 onUpdated(status=complete) + 验证 content script 就绪再返回成功",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_001"
+      ],
+      "acceptance": "background.ts navigate 处理中：tabs.update() 后注册 tabs.onUpdated 监听器等待 status==='complete'；完成后尝试 tabs.sendMessage ping content script 确认就绪；有 15s 超时保护；整个过程完成后才 sendResponse；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'onUpdated\\|status.*complete\\|waitFor.*load\\|pageLoad' entrypoints/background.ts | xargs -I{} test {} -ge 2 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
+    },
+    {
+      "id": "evo_v15_003",
+      "type": "coding",
+      "title": "工具参数自动修正：tool-bridge.ts toAction 增加 type 操作 text→value 兼容映射 + browser-tools.ts 优化 browser_type 描述防止 LLM 混淆",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_001"
+      ],
+      "acceptance": "tool-bridge.ts toAction() 针对 toolName==='type' 时如果有 text 无 value 则自动映射 text→value；browser-tools.ts browser_type 描述中明确强调 'Use the `value` parameter (NOT `text`)'；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'text.*value\\|value.*text\\|toolArgs.*text' utils/tool-bridge.ts | xargs -I{} test {} -ge 1 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && cd ../../packages/vscode-ext && grep -i 'not.*text\\|value.*parameter' src/browser-tools.ts && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
+    },
+    {
+      "id": "evo_v15_004",
+      "type": "coding",
+      "title": "心跳容错优化：ws-client.ts 收到任何业务消息时重置 pong 超时计时器，避免 Agent 执行期间误判断连",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_001"
+      ],
+      "acceptance": "ws-client.ts onmessage 回调中，收到任何有效 BridgeMessage 时都执行 resetPongTimeout()（清除并重新启动 pong 超时定时器）；不仅仅响应 heartbeat_pong/pong；确保 Agent 执行期间有消息流动就不会触发心跳超时断连；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -c 'resetPongTimeout\\|clearPongTimeout\\|restartPongTimer\\|pongTimeoutTimer' src/ws-client.ts | xargs -I{} test {} -ge 3 && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
+    },
+    {
+      "id": "evo_v15_005",
+      "type": "validation",
+      "title": "Debug 日志优化全量验收：双端构建通过 + 重连指数退避 + 导航等待加载 + 工具参数兼容 + 心跳容错",
+      "status": "pending",
+      "depends_on": [
+        "evo_v15_002",
+        "evo_v15_003",
+        "evo_v15_004"
+      ],
+      "acceptance": "pnpm build 全量通过；ws-client.ts 有指数退避+jitter+maxReconnect 上限；background.ts navigate 等待 page load complete；tool-bridge.ts 有 text→value 兼容映射；ws-client.ts 业务消息重置心跳超时；所有 TS 编译无错误",
+      "acceptance_cmd": "cd packages/chrome-ext && npm run build 2>&1 | grep -i 'error' | wc -l | xargs -I{} test {} -eq 0 && grep -c 'backoff\\|exponential\\|Math.min' src/ws-client.ts | xargs -I{} test {} -ge 1 && grep -c 'onUpdated\\|status.*complete' entrypoints/background.ts | xargs -I{} test {} -ge 2 && grep -c 'text.*value' utils/tool-bridge.ts | xargs -I{} test {} -ge 1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log-2026-03-21T14-34-26-549Z.json 日志文件优化"
     }
   ]
 }

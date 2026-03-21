@@ -13,7 +13,7 @@
   "extensionDependencies": [
     "github.copilot-chat"
   ],
-  "activationEvents": [],
+  "activationEvents": ["*"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
