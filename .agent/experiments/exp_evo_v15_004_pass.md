@@ -16,3 +16,16 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+### 评分明细
+| 项目 | 分值 | 得分 | 说明 |
+|---|---|---|---|
+| acceptance_cmd 通过 | 60 | 60 | grep count=14 ≥ 3 ✅, build error=0 ✅, 输出 PASS |
+| 代码无 TypeScript 错误 | 20 | 20 | npm run build 零 error，仅有 WARN（重复导入、chunk size） |
+| 符合 program.md 约束 | 20 | 20 | 无外部依赖、不内置模型、无需 API key、文件有顶部注释 |
