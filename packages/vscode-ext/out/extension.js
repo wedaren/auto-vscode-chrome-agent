@@ -48,12 +48,14 @@ const message_tree_1 = require("./message-tree");
 const agent_tree_1 = require("./agent-tree");
 const browser_tools_1 = require("./browser-tools");
 const skill_registry_1 = require("./skill-registry");
+const skill_runner_1 = require("./skill-runner");
 const skill_tree_1 = require("./skill-tree");
 let lmService;
 let wsServer;
 let mcpClient;
 let browserToolProvider;
 let skillRegistry;
+let skillRunner;
 let reportGenerator;
 let connectionTree;
 let messageTree;
@@ -78,8 +80,11 @@ function activate(context) {
     skillRegistry = new skill_registry_1.SkillRegistry(outputChannel);
     skillRegistry.loadSkills();
     outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
-    // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider 以支持多工具源 AgentLoop 模式）
-    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider);
+    // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）
+    skillRunner = new skill_runner_1.SkillRunner(browserToolProvider, mcpClient, outputChannel);
+    outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
+    // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider + Skill 系统以支持多工具源 AgentLoop 模式）
+    const messageHandler = new message_handler_1.MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner);
     wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
     // 初始化报告生成器
     reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
@@ -107,7 +112,7 @@ function activate(context) {
         treeDataProvider: skillTree,
     });
     // 注册 Skill 管理命令
-    const runSkillCmd = vscode.commands.registerCommand('browser-agent.runSkill', (item) => (0, skill_tree_1.runSkillCommand)(item, skillRegistry, outputChannel));
+    const runSkillCmd = vscode.commands.registerCommand('browser-agent.runSkill', (item) => (0, skill_tree_1.runSkillCommand)(item, skillRegistry, outputChannel, skillRunner));
     const toggleSkillCmd = vscode.commands.registerCommand('browser-agent.toggleSkill', (item) => (0, skill_tree_1.toggleSkillCommand)(item, skillRegistry));
     const addCustomSkillCmd = vscode.commands.registerCommand('browser-agent.addCustomSkill', () => (0, skill_tree_1.addCustomSkillCommand)(skillRegistry, outputChannel));
     outputChannel.appendLine('[BrowserAgent] Skill 管理 TreeView 已注册');
@@ -138,6 +143,7 @@ function activate(context) {
 function deactivate() {
     reportGenerator?.cancel();
     reportGenerator = undefined;
+    skillRunner = undefined;
     skillRegistry?.dispose();
     skillRegistry = undefined;
     browserToolProvider?.dispose();

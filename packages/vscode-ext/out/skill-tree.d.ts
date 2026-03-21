@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SkillRegistry, Skill } from './skill-registry';
+import { SkillRunner } from './skill-runner';
 /** 节点类型标识 */
 type SkillNodeType = 'category' | 'skill';
 /** Skill TreeView 的树节点 */
@@ -65,12 +66,9 @@ export declare class SkillTreeDataProvider implements vscode.TreeDataProvider<Sk
     dispose(): void;
 }
 /**
- * 运行指定 Skill：弹出参数输入框（QuickPick / InputBox），收集参数后触发运行
- *
- * 注：当前版本仅收集参数并输出到 OutputChannel，
- *     实际执行逻辑将由 evo_v8_003 的 SkillRunner 实现。
+ * 运行指定 Skill：弹出参数输入框（QuickPick / InputBox），收集参数后通过 SkillRunner 执行
  */
-export declare function runSkillCommand(item: SkillTreeItem | undefined, registry: SkillRegistry | undefined, outputChannel: vscode.OutputChannel): Promise<void>;
+export declare function runSkillCommand(item: SkillTreeItem | undefined, registry: SkillRegistry | undefined, outputChannel: vscode.OutputChannel, skillRunner?: SkillRunner): Promise<void>;
 /**
  * 切换 Skill 的启用/禁用状态
  */

@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { LmService } from './lm-service';
 import { McpClient } from './mcp-client';
 import { BrowserToolProvider } from './browser-tools';
+import { SkillRegistry } from './skill-registry';
+import { SkillRunner } from './skill-runner';
 /** Agent 单步执行记录 */
 export interface AgentStep {
     /** 当前步序号（从 1 开始） */
@@ -54,10 +56,12 @@ export declare class AgentLoop {
     private readonly lmService;
     private readonly mcpClient;
     private readonly browserToolProvider?;
+    private readonly skillRegistry?;
+    private readonly skillRunner?;
     private readonly outputChannel;
     /** 默认最大步数（LLM 调用轮数） */
     static readonly MAX_STEPS = 15;
-    constructor(lmService: LmService, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider?: BrowserToolProvider);
+    constructor(lmService: LmService, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider?: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
     /**
      * 执行 ReAct Agent 循环
      * @param userMessage 用户输入的指令/问题
@@ -91,10 +95,15 @@ export declare class AgentLoop {
      * 执行工具调用并格式化结果。
      *
      * 路由策略：
+     * - run_skill → SkillRunner.execute（Skill 执行引擎）
      * - browser_* 前缀 且 BrowserToolProvider 可用 → BrowserToolProvider.callTool（原生通道）
      * - 其他 → McpClient.callTool
      */
     private executeTool;
+    /**
+     * 执行 run_skill 工具：解析 LLM 传入的 skill_name + params，调用 SkillRunner
+     */
+    private executeRunSkill;
     /**
      * 格式化 MCP 工具调用结果为可读文本
      */

@@ -199,12 +199,9 @@ exports.SkillTreeDataProvider = SkillTreeDataProvider;
 // 命令处理函数（在 extension.ts 中注册）
 // ────────────────────────────────────────────────────────────────
 /**
- * 运行指定 Skill：弹出参数输入框（QuickPick / InputBox），收集参数后触发运行
- *
- * 注：当前版本仅收集参数并输出到 OutputChannel，
- *     实际执行逻辑将由 evo_v8_003 的 SkillRunner 实现。
+ * 运行指定 Skill：弹出参数输入框（QuickPick / InputBox），收集参数后通过 SkillRunner 执行
  */
-async function runSkillCommand(item, registry, outputChannel) {
+async function runSkillCommand(item, registry, outputChannel, skillRunner) {
     if (!registry) {
         vscode.window.showWarningMessage('SkillRegistry 未初始化');
         return;
@@ -286,10 +283,50 @@ async function runSkillCommand(item, registry, outputChannel) {
             }
         }
     }
-    // 输出日志（实际执行将由 SkillRunner 处理，当前仅日志占位）
     outputChannel.appendLine(`[SkillTree] 运行 Skill: ${skill.name} 参数: ${JSON.stringify(paramValues)}`);
     outputChannel.show(true);
-    vscode.window.showInformationMessage(`Skill "${skill.displayName}" 已提交运行（参数: ${JSON.stringify(paramValues)}）`);
+    // 通过 SkillRunner 执行 Skill
+    if (!skillRunner) {
+        vscode.window.showWarningMessage('SkillRunner 未初始化，无法执行 Skill');
+        return;
+    }
+    // 使用 CancellationTokenSource 支持取消
+    const cts = new vscode.CancellationTokenSource();
+    const skillRef = skill; // 捕获引用
+    // 使用 withProgress 显示执行进度
+    void vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `运行 Skill: ${skillRef.displayName}`,
+        cancellable: true,
+    }, async (progress, progressToken) => {
+        // 连接取消令牌
+        progressToken.onCancellationRequested(() => cts.cancel());
+        try {
+            const result = await skillRunner.execute(skillRef, paramValues, (sp) => {
+                const pct = Math.round(((sp.stepIndex + 1) / sp.totalSteps) * 100);
+                progress.report({
+                    increment: Math.round(100 / sp.totalSteps),
+                    message: `[${sp.stepIndex + 1}/${sp.totalSteps}] ${sp.description} (${sp.status})`,
+                });
+                outputChannel.appendLine(`[SkillTree] 进度: ${pct}% - ${sp.description} (${sp.status})`);
+            }, cts.token);
+            if (result.success) {
+                vscode.window.showInformationMessage(`Skill "${skillRef.displayName}" 执行成功（${result.stepResults.length} 步）`);
+            }
+            else {
+                vscode.window.showWarningMessage(`Skill "${skillRef.displayName}" 执行失败`);
+            }
+            outputChannel.appendLine(`[SkillTree] 执行结果:\n${result.summary}`);
+        }
+        catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Skill 执行错误: ${errMsg}`);
+            outputChannel.appendLine(`[SkillTree] 执行错误: ${errMsg}`);
+        }
+        finally {
+            cts.dispose();
+        }
+    });
 }
 /**
  * 切换 Skill 的启用/禁用状态

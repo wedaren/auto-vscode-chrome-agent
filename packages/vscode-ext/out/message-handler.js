@@ -55,15 +55,19 @@ class MessageHandler {
     wsServer;
     mcpClient;
     browserToolProvider;
+    skillRegistry;
+    skillRunner;
     outputChannel;
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     activeChatTokens = new Map();
-    constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider) {
+    constructor(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner) {
         this.lmService = lmService;
         this.wsServer = wsServer;
         this.mcpClient = mcpClient;
         this.outputChannel = outputChannel;
         this.browserToolProvider = browserToolProvider;
+        this.skillRegistry = skillRegistry;
+        this.skillRunner = skillRunner;
     }
     /**
      * 消息路由入口，根据 msg.type 分发到对应处理方法。
@@ -166,7 +170,7 @@ class MessageHandler {
             // 注册到 Agent 循环 TreeView（实时可视化）
             const runId = (0, agent_tree_1.startAgentRun)(text);
             try {
-                const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel, this.browserToolProvider);
+                const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel, this.browserToolProvider, this.skillRegistry, this.skillRunner);
                 const result = await agentLoop.run(text, {
                     systemPrompt,
                     onStep: (step) => {

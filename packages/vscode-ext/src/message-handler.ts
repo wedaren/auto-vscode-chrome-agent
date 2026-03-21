@@ -8,6 +8,8 @@ import { LmService } from './lm-service';
 import { WsServer, BridgeMessage } from './ws-server';
 import { McpClient } from './mcp-client';
 import { BrowserToolProvider } from './browser-tools';
+import { SkillRegistry } from './skill-registry';
+import { SkillRunner } from './skill-runner';
 import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
 
@@ -25,6 +27,8 @@ export class MessageHandler {
   private readonly wsServer: WsServer;
   private readonly mcpClient: McpClient;
   private readonly browserToolProvider: BrowserToolProvider;
+  private readonly skillRegistry?: SkillRegistry;
+  private readonly skillRunner?: SkillRunner;
   private readonly outputChannel: vscode.OutputChannel;
 
   /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
@@ -36,12 +40,16 @@ export class MessageHandler {
     mcpClient: McpClient,
     outputChannel: vscode.OutputChannel,
     browserToolProvider: BrowserToolProvider,
+    skillRegistry?: SkillRegistry,
+    skillRunner?: SkillRunner,
   ) {
     this.lmService = lmService;
     this.wsServer = wsServer;
     this.mcpClient = mcpClient;
     this.outputChannel = outputChannel;
     this.browserToolProvider = browserToolProvider;
+    this.skillRegistry = skillRegistry;
+    this.skillRunner = skillRunner;
   }
 
   /**
@@ -180,6 +188,8 @@ export class MessageHandler {
           this.mcpClient,
           this.outputChannel,
           this.browserToolProvider,
+          this.skillRegistry,
+          this.skillRunner,
         );
 
         const result = await agentLoop.run(

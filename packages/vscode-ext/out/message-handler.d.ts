@@ -4,6 +4,8 @@ import { LmService } from './lm-service';
 import { WsServer, BridgeMessage } from './ws-server';
 import { McpClient } from './mcp-client';
 import { BrowserToolProvider } from './browser-tools';
+import { SkillRegistry } from './skill-registry';
+import { SkillRunner } from './skill-runner';
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
@@ -18,10 +20,12 @@ export declare class MessageHandler {
     private readonly wsServer;
     private readonly mcpClient;
     private readonly browserToolProvider;
+    private readonly skillRegistry?;
+    private readonly skillRunner?;
     private readonly outputChannel;
     /** 跟踪每个 WebSocket 连接上正在进行的流式请求，以便支持 cancel_chat */
     private readonly activeChatTokens;
-    constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider);
+    constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
     /**
      * 消息路由入口，根据 msg.type 分发到对应处理方法。
      * 应注册到 wsServer.onMessage()。

@@ -11,6 +11,7 @@ import { MessageTreeDataProvider, MessageDocumentProvider, MESSAGE_SCHEME, getCa
 import { AgentTreeDataProvider } from './agent-tree';
 import { BrowserToolProvider } from './browser-tools';
 import { SkillRegistry } from './skill-registry';
+import { SkillRunner } from './skill-runner';
 import { SkillTreeDataProvider, runSkillCommand, toggleSkillCommand, addCustomSkillCommand } from './skill-tree';
 
 let lmService: LmService | undefined;
@@ -18,6 +19,7 @@ let wsServer: WsServer | undefined;
 let mcpClient: McpClient | undefined;
 let browserToolProvider: BrowserToolProvider | undefined;
 let skillRegistry: SkillRegistry | undefined;
+let skillRunner: SkillRunner | undefined;
 let reportGenerator: ReportGenerator | undefined;
 let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
@@ -50,8 +52,12 @@ export function activate(context: vscode.ExtensionContext): void {
   skillRegistry.loadSkills();
   outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
 
-  // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider 以支持多工具源 AgentLoop 模式）
-  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider);
+  // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）
+  skillRunner = new SkillRunner(browserToolProvider, mcpClient, outputChannel);
+  outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
+
+  // 注册 WebSocket 消息处理器（注入 McpClient + BrowserToolProvider + Skill 系统以支持多工具源 AgentLoop 模式）
+  const messageHandler = new MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner);
   wsServer.onMessage((ws, msg) => messageHandler.handle(ws, msg));
 
   // 初始化报告生成器
@@ -87,7 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // 注册 Skill 管理命令
   const runSkillCmd = vscode.commands.registerCommand(
     'browser-agent.runSkill',
-    (item) => runSkillCommand(item, skillRegistry, outputChannel),
+    (item) => runSkillCommand(item, skillRegistry, outputChannel, skillRunner),
   );
   const toggleSkillCmd = vscode.commands.registerCommand(
     'browser-agent.toggleSkill',
@@ -165,6 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   reportGenerator?.cancel();
   reportGenerator = undefined;
+  skillRunner = undefined;
   skillRegistry?.dispose();
   skillRegistry = undefined;
   browserToolProvider?.dispose();

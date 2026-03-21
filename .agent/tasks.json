@@ -655,7 +655,7 @@
       "id": "evo_v8_002",
       "type": "coding",
       "title": "VSCode Skill 管理 TreeView：Activity Bar 新增 Skill 视图，展示/运行/管理所有 Skill",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v8_001"
       ],

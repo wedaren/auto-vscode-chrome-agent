@@ -35,8 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AgentLoop = void 0;
 // agent-loop.ts — ReAct 风格的 Agent 循环，实现 think→act→observe 闭环
-// 职责：接收用户指令，通过 LLM 推理和多工具源（MCP + BrowserTools）执行的迭代循环，产出最终答案
-// 支持：MCP 工具（chrome-devtools-mcp）和原生浏览器工具（browser_* 前缀，通过 WebSocket 直连 Chrome）
+// 职责：接收用户指令，通过 LLM 推理和多工具源（MCP + BrowserTools + Skill）执行的迭代循环，产出最终答案
+// 支持：MCP 工具（chrome-devtools-mcp）、原生浏览器工具（browser_* 前缀）、run_skill 工具（Skill 执行引擎）
 // 参考：ReportGenerator 的 MCP/LM 调用模式，但更通用——适用于任意对话场景
 const vscode = __importStar(require("vscode"));
 /**
@@ -60,14 +60,18 @@ class AgentLoop {
     lmService;
     mcpClient;
     browserToolProvider;
+    skillRegistry;
+    skillRunner;
     outputChannel;
     /** 默认最大步数（LLM 调用轮数） */
     static MAX_STEPS = 15;
-    constructor(lmService, mcpClient, outputChannel, browserToolProvider) {
+    constructor(lmService, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner) {
         this.lmService = lmService;
         this.mcpClient = mcpClient;
         this.outputChannel = outputChannel;
         this.browserToolProvider = browserToolProvider;
+        this.skillRegistry = skillRegistry;
+        this.skillRunner = skillRunner;
     }
     /**
      * 执行 ReAct Agent 循环
@@ -223,6 +227,26 @@ class AgentLoop {
                 this.outputChannel.appendLine(`[AgentLoop] 获取 MCP 工具列表失败: ${err instanceof Error ? err.message : String(err)}`);
             }
         }
+        // 3. run_skill 工具（当 SkillRegistry + SkillRunner 可用时注册）
+        if (this.skillRegistry && this.skillRunner) {
+            const enabledSkills = this.skillRegistry.getAll().filter((s) => s.enabled);
+            if (enabledSkills.length > 0) {
+                const skillList = enabledSkills
+                    .map((s) => {
+                    const paramDesc = Object.entries(s.parameters.properties)
+                        .map(([k, v]) => `${k}: ${v.description}${s.parameters.required.includes(k) ? ' (必填)' : ''}`)
+                        .join(', ');
+                    return `  - ${s.name}: ${s.description}${paramDesc ? ` [参数: ${paramDesc}]` : ''}`;
+                })
+                    .join('\n');
+                allTools.push({
+                    name: 'run_skill',
+                    description: `执行预定义 Skill（多步骤浏览器操作序列）。参数: {"skill_name": "技能名称", "params": {"参数名": "值"}}。可用 Skill:\n${skillList}`,
+                    source: 'skill',
+                });
+                this.outputChannel.appendLine(`[AgentLoop] 注册 run_skill 工具，${enabledSkills.length} 个可用 Skill`);
+            }
+        }
         if (allTools.length === 0) {
             this.outputChannel.appendLine('[AgentLoop] 无可用工具');
             return '(无可用工具)';
@@ -316,10 +340,15 @@ FINAL_ANSWER: <your complete answer to the user>
      * 执行工具调用并格式化结果。
      *
      * 路由策略：
+     * - run_skill → SkillRunner.execute（Skill 执行引擎）
      * - browser_* 前缀 且 BrowserToolProvider 可用 → BrowserToolProvider.callTool（原生通道）
      * - 其他 → McpClient.callTool
      */
     async executeTool(toolName, toolArgs) {
+        // run_skill 路由到 SkillRunner
+        if (toolName === 'run_skill') {
+            return this.executeRunSkill(toolArgs);
+        }
         const useBrowserChannel = toolName.startsWith('browser_') &&
             this.browserToolProvider?.connected === true;
         const source = useBrowserChannel ? 'BrowserToolProvider' : 'McpClient';
@@ -336,6 +365,38 @@ FINAL_ANSWER: <your complete answer to the user>
         }
         catch (err) {
             const errMsg = `工具调用失败 (${toolName} via ${source}): ${err instanceof Error ? err.message : String(err)}`;
+            this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
+            return errMsg;
+        }
+    }
+    /**
+     * 执行 run_skill 工具：解析 LLM 传入的 skill_name + params，调用 SkillRunner
+     */
+    async executeRunSkill(toolArgs) {
+        const skillName = toolArgs.skill_name;
+        const params = toolArgs.params ?? {};
+        this.outputChannel.appendLine(`[AgentLoop] run_skill: skill_name=${skillName}, params=${JSON.stringify(params)}`);
+        if (!skillName) {
+            return 'run_skill 错误: 缺少 skill_name 参数';
+        }
+        if (!this.skillRegistry || !this.skillRunner) {
+            return 'run_skill 错误: Skill 系统未初始化';
+        }
+        const skill = this.skillRegistry.getByName(skillName);
+        if (!skill) {
+            const available = this.skillRegistry
+                .getAll()
+                .filter((s) => s.enabled)
+                .map((s) => s.name)
+                .join(', ');
+            return `run_skill 错误: 未找到 Skill "${skillName}"。可用 Skill: ${available}`;
+        }
+        try {
+            const result = await this.skillRunner.execute(skill, params);
+            return result.summary;
+        }
+        catch (err) {
+            const errMsg = `run_skill 执行失败: ${err instanceof Error ? err.message : String(err)}`;
             this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
             return errMsg;
         }
