@@ -32,6 +32,12 @@ export declare class MessageHandler {
     private readonly wsCloseRegistered;
     /** disposed 标志：dispose 后拒绝新增 activeChatTokens 条目 */
     private _disposed;
+    /** list_models 节流：最小间隔 5 秒，防止高频请求压垮 vscode.lm API */
+    private static readonly LIST_MODELS_THROTTLE_MS;
+    /** 上次成功处理 list_models 的时间戳（Date.now()） */
+    private _lastListModelsTime;
+    /** list_models 缓存结果，节流期间直接返回 */
+    private _cachedModelsList;
     constructor(lmService: LmService, wsServer: WsServer, mcpClient: McpClient, outputChannel: vscode.OutputChannel, browserToolProvider: BrowserToolProvider, skillRegistry?: SkillRegistry, skillRunner?: SkillRunner);
     /**
      * 注册 WebSocket close 事件监听器（每个 ws 只注册一次），
@@ -48,7 +54,8 @@ export declare class MessageHandler {
      */
     handle(ws: WebSocket, msg: BridgeMessage): void;
     /**
-     * 处理 list_models：返回可用模型列表
+     * 处理 list_models：返回可用模型列表（带节流防护）
+     * 5 秒内的重复请求直接返回缓存结果，避免高频调用 vscode.lm API 导致 Extension Host 卡死。
      */
     private handleListModels;
     /**

@@ -44,6 +44,15 @@ export class MessageHandler {
   /** disposed 标志：dispose 后拒绝新增 activeChatTokens 条目 */
   private _disposed = false;
 
+  /** list_models 节流：最小间隔 5 秒，防止高频请求压垮 vscode.lm API */
+  private static readonly LIST_MODELS_THROTTLE_MS = 5000;
+
+  /** 上次成功处理 list_models 的时间戳（Date.now()） */
+  private _lastListModelsTime = 0;
+
+  /** list_models 缓存结果，节流期间直接返回 */
+  private _cachedModelsList: Array<{ id: string; name: string }> | null = null;
+
   constructor(
     lmService: LmService,
     wsServer: WsServer,
@@ -141,12 +150,33 @@ export class MessageHandler {
   }
 
   /**
-   * 处理 list_models：返回可用模型列表
+   * 处理 list_models：返回可用模型列表（带节流防护）
+   * 5 秒内的重复请求直接返回缓存结果，避免高频调用 vscode.lm API 导致 Extension Host 卡死。
    */
   private handleListModels(ws: WebSocket, msg: BridgeMessage): void {
+    const now = Date.now();
+    const elapsed = now - this._lastListModelsTime;
+
+    // 节流：5 秒内重复请求直接返回缓存
+    if (elapsed < MessageHandler.LIST_MODELS_THROTTLE_MS && this._cachedModelsList !== null) {
+      this.outputChannel.appendLine(
+        `[BrowserAgent] list_models 节流：距上次 ${elapsed}ms < ${MessageHandler.LIST_MODELS_THROTTLE_MS}ms，返回缓存 (${this._cachedModelsList.length} 个模型)`,
+      );
+      this.wsServer.send(ws, {
+        type: 'models_list',
+        payload: { models: this._cachedModelsList },
+        sessionId: msg.sessionId,
+      });
+      return;
+    }
+
     void (async () => {
       try {
         const models = await this.lmService.listModels();
+        // 更新缓存和时间戳
+        this._cachedModelsList = models;
+        this._lastListModelsTime = Date.now();
+
         this.wsServer.send(ws, {
           type: 'models_list',
           payload: { models },

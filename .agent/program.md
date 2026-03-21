@@ -58,4 +58,4 @@
 - [x] 不考虑时间，使用最优解，在对话窗口提供按钮，可以下载完整的 llm 请求细节，方便 debugger 也方便分析优化（已拆解为 evo_v10_001, evo_v10_002, evo_v10_003, evo_v10_004, evo_v10_005 — LLM 请求细节下载：VSCode 侧 LlmRequestCollector 数据采集 + WebSocket llmDetail 协议扩展 + Chrome 下载工具函数 + MessageBubble 下载按钮）
 - [x] vsocde 插件可以配置用户信息的目录，默认配置在 ～ 目录下；可以存放 skills 等等需要持久化的信息（已拆解为 evo_v11_001, evo_v11_002, evo_v11_003, evo_v11_004, evo_v11_005 — 全局用户数据目录：UserDataManager 服务 + 配置 schema + SkillRegistry 文件持久化迁移 + 管理命令 + 调试视图状态展示）
 - [x] vscode 插件容易崩溃；分析优化（已拆解为 evo_v12_001, evo_v12_002, evo_v12_003, evo_v12_004, evo_v12_005 — 稳定性优化：全局错误兜底 + CancellationToken 生命周期修复 + 内存管理 + WebSocket 心跳 + AgentLoop 超时保护）
-- [~] 修复消息日志一直出现list_models 导致 vsocde 卡死（已拆解为 evo_v13_001, evo_v13_002, evo_v13_003, evo_v13_004, evo_v13_005 — React useEffect 无限循环修复 + VSCode 侧 list_models 节流 + connectionDetails 浅比较优化 + TreeView 刷新节流）
+- [x] 修复消息日志一直出现list_models 导致 vsocde 卡死（已拆解为 evo_v13_001, evo_v13_002, evo_v13_003, evo_v13_004, evo_v13_005 — React useEffect 无限循环修复 + VSCode 侧 list_models 节流 + connectionDetails 浅比较优化 + TreeView 刷新节流）
