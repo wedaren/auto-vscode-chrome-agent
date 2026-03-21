@@ -1,9 +1,11 @@
 // useChat.ts — 自定义 Hook：封装 messages 状态、isStreaming、streamingMsgIdRef、handleSendMessage、handleCancel 逻辑
 // 支持普通聊天流式响应 + Agent 模式（agent_step / agent_complete）消息处理
-import { useState, useRef, useCallback } from 'react';
+// 集成 useChatStorage 实现消息持久化：页面刷新后自动恢复会话
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
 import { createMessage, type Message } from '../utils/message-factory';
 import type { AgentStep } from '../components/AgentStepView';
+import { useChatStorage, type Conversation } from './useChatStorage';
 
 // 从 message-factory 统一导出 Message 类型
 export type { Message } from '../utils/message-factory';
@@ -27,6 +29,8 @@ export interface UseChatReturn {
   messages: Message[];
   /** 是否正在流式接收 */
   isStreaming: boolean;
+  /** 当前会话 ID（持久化标识） */
+  conversationId: string;
   /** 当前流式消息 ID ref（用于 TypingIndicator 显示判断） */
   streamingMsgIdRef: React.RefObject<string | null>;
   /** 发送用户消息 */
@@ -54,6 +58,55 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamingMsgIdRef = useRef<string | null>(null);
+
+  // --- 持久化：useChatStorage 集成 ---
+  const { saveConversation, loadConversation, listConversations } = useChatStorage();
+  const conversationIdRef = useRef<string>(crypto.randomUUID());
+  const conversationCreatedAtRef = useRef<number>(Date.now());
+  const isStorageInitializedRef = useRef(false);
+
+  // 挂载时加载最近一次会话
+  useEffect(() => {
+    (async () => {
+      try {
+        const convList = await listConversations();
+        if (convList.length > 0) {
+          const latestMeta = convList[0]; // 已按 updatedAt 降序排列
+          const conv = await loadConversation(latestMeta.id);
+          if (conv && conv.messages.length > 0) {
+            conversationIdRef.current = conv.id;
+            conversationCreatedAtRef.current = conv.createdAt;
+            setMessages(conv.messages);
+            console.log('[useChat] 已恢复会话:', conv.id, conv.title);
+          }
+        }
+      } catch (err) {
+        console.error('[useChat] 加载会话失败:', err);
+      } finally {
+        isStorageInitializedRef.current = true;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 消息变更时自动持久化（防抖 500ms，避免流式 chunk 频繁写入）
+  useEffect(() => {
+    if (!isStorageInitializedRef.current) return;
+    if (messages.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const conversation: Conversation = {
+        id: conversationIdRef.current,
+        title: '', // saveConversation 内部自动生成
+        messages,
+        createdAt: conversationCreatedAtRef.current,
+        updatedAt: Date.now(),
+      };
+      saveConversation(conversation);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [messages, saveConversation]);
 
   /** 处理来自 WebSocket 的聊天相关消息 */
   const handleChatMessage = useCallback((msg: BridgeMessage) => {
@@ -232,6 +285,7 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
   return {
     messages,
     isStreaming,
+    conversationId: conversationIdRef.current,
     streamingMsgIdRef,
     handleSendMessage,
     handleCancel,

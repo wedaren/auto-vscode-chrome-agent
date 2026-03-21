@@ -27,6 +27,7 @@ declare global {
   const useAppConfig: typeof import('wxt/client')['useAppConfig']
   const useCallback: typeof import('react')['useCallback']
   const useChat: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')['useChat']
+  const useChatStorage: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage')['useChatStorage']
   const useContext: typeof import('react')['useContext']
   const useEffect: typeof import('react')['useEffect']
   const useMemo: typeof import('react')['useMemo']
@@ -53,6 +54,9 @@ declare global {
   // @ts-ignore
   export type { UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')
+  // @ts-ignore
+  export type { Conversation, ConversationMeta } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage')
   // @ts-ignore
   export type { PageContext, UsePageContextReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')

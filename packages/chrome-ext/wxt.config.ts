@@ -7,6 +7,6 @@ export default defineConfig({
     name: 'Browser Agent',
     description: '浏览器上下文感知 + 深度报告生成',
     action: {},
-    permissions: ['activeTab', 'sidePanel', 'tabs'],
+    permissions: ['activeTab', 'sidePanel', 'storage', 'tabs'],
   },
 });
