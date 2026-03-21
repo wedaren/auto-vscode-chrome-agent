@@ -88,6 +88,8 @@ class WsServer {
     static HEARTBEAT_INTERVAL_MS = 30_000;
     /** 单客户端存活标记（收到 pong 时标记为 true） */
     isClientAlive = false;
+    /** 当前活跃客户端的 sessionId（从第一条消息中获取） */
+    activeSessionId = null;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     _onDidChangeState = new vscode.EventEmitter();
     onDidChangeState = this._onDidChangeState.event;
@@ -130,7 +132,8 @@ class WsServer {
             });
             this.wss.on('connection', (ws) => {
                 // 单客户端模式：新连接到达时踢掉旧连接
-                if (this.activeClient && (this.activeClient.readyState === ws_1.WebSocket.OPEN || this.activeClient.readyState === ws_1.WebSocket.CONNECTING)) {
+                const replacedPrevious = !!(this.activeClient && (this.activeClient.readyState === ws_1.WebSocket.OPEN || this.activeClient.readyState === ws_1.WebSocket.CONNECTING));
+                if (replacedPrevious) {
                     this.outputChannel.appendLine('[WsServer] 新连接到达，踢掉旧客户端 (replaced by new connection)');
                     this.activeClient.close(4001, 'replaced by new connection');
                 }
@@ -139,6 +142,13 @@ class WsServer {
                 this.isClientAlive = true;
                 this.outputChannel.appendLine('[WsServer] 新客户端连接 (单客户端模式)');
                 this._onDidChangeState.fire();
+                // welcome 握手：通知客户端连接已建立，告知是否替换了旧连接
+                this.send(ws, {
+                    type: 'welcome',
+                    payload: { replacedPrevious },
+                    sessionId: '',
+                });
+                this.outputChannel.appendLine(`[WsServer] 已发送 welcome 握手 (replacedPrevious=${replacedPrevious})`);
                 // 心跳：收到 pong 时标记为存活
                 ws.on('pong', () => {
                     this.isClientAlive = true;
@@ -147,6 +157,11 @@ class WsServer {
                     try {
                         const msg = JSON.parse(data.toString());
                         this.outputChannel.appendLine(`[WsServer] 收到消息: type=${msg.type}, sessionId=${msg.sessionId}`);
+                        // 记录客户端 sessionId（首次消息时记录，后续变更时更新）
+                        if (msg.sessionId && msg.sessionId !== this.activeSessionId) {
+                            this.activeSessionId = msg.sessionId;
+                            this.outputChannel.appendLine(`[WsServer] 记录客户端 sessionId=${msg.sessionId}`);
+                        }
                         (0, message_tree_1.captureMessage)('receive', msg);
                         this.handleMessage(ws, msg);
                     }
@@ -159,6 +174,7 @@ class WsServer {
                     if (this.activeClient === ws) {
                         this.activeClient = null;
                         this.isClientAlive = false;
+                        this.activeSessionId = null;
                     }
                     this.outputChannel.appendLine('[WsServer] 客户端断开');
                     this._onDidChangeState.fire();

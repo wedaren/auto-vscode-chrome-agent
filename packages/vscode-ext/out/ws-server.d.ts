@@ -37,6 +37,8 @@ export declare class WsServer {
     private static readonly HEARTBEAT_INTERVAL_MS;
     /** 单客户端存活标记（收到 pong 时标记为 true） */
     private isClientAlive;
+    /** 当前活跃客户端的 sessionId（从第一条消息中获取） */
+    private activeSessionId;
     /** 状态变更事件，当 listening / clientCount 变化时触发 */
     private readonly _onDidChangeState;
     readonly onDidChangeState: vscode.Event<void>;

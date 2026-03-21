@@ -1152,7 +1152,7 @@
       "id": "evo_v16_003",
       "type": "coding",
       "title": "Client 可见性感知重连：Side Panel 隐藏时暂停重连，可见时立即恢复",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v16_002"
       ],

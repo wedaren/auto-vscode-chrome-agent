@@ -26,6 +26,7 @@
 //                        payload: { skillName, stepIndex, totalSteps, status, description, result? }
 //   skill_complete     — VSCode → Chrome：执行完成/失败
 //                        payload: { skillName, success, summary }
+// 握手类：welcome（Server → Client，新连接建立时发送，payload: { replacedPrevious }）
 // 心跳类：heartbeat_ping / heartbeat_pong（内部使用，区别于业务 ping/pong）
 
 /** Chrome ↔ VSCode 桥接消息协议（与 VSCode 侧 BridgeMessage 保持一致） */
@@ -221,6 +222,19 @@ export class WsClient {
         // ★ 心跳容错：收到任何有效业务消息时重置 pong 超时计时器
         // 只要有数据流动就认为连接存活，避免 Agent 执行期间误判断连
         this.resetPongTimeout();
+
+        // 处理 welcome 握手消息：Server 在新连接建立时发送
+        if (bridgeMsg.type === 'welcome') {
+          const welcomePayload = bridgeMsg.payload as { replacedPrevious?: boolean } | null;
+          console.log(
+            `[WsClient] 收到 welcome 握手: replacedPrevious=${welcomePayload?.replacedPrevious ?? false}`,
+          );
+          // welcome 消息也分发给外部 handler，UI 可据此展示连接确认
+          for (const handler of this.messageHandlers) {
+            handler(bridgeMsg);
+          }
+          return;
+        }
 
         // 处理心跳 pong 响应（内部消息，不分发给外部 handler）
         if (bridgeMsg.type === 'heartbeat_pong' || bridgeMsg.type === 'pong') {
