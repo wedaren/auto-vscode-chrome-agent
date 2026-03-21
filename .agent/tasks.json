@@ -426,7 +426,7 @@
       "id": "evo_v4_003",
       "type": "coding",
       "title": "Chrome 侧消息交互增强：复制消息/重新生成/时间戳显示/欢迎引导页",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v4_002"
       ],

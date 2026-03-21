@@ -1,7 +1,7 @@
 // App.tsx — Side Panel 主组件，纯 UI 渲染层，所有逻辑由 Hook 管理
 // 集成 ConversationList 侧栏实现多会话管理（左侧抽屉式布局）
 // 空会话时显示 WelcomeScreen 引导页
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ChatInput from '../../components/ChatInput';
 import ModelSelector, { type ModelInfo } from '../../components/ModelSelector';
 import MessageBubble from '../../components/MessageBubble';
@@ -101,6 +101,31 @@ export default function App() {
   const closeSidebar = useCallback(() => {
     setSidebarOpen(false);
   }, []);
+
+  // --- 斜杠命令回调 ---
+  /** 清空当前会话（/clear 命令 + Cmd+L 快捷键） */
+  const handleClearConversation = useCallback(() => {
+    if (isStreaming) return;
+    createNewConversation();
+  }, [isStreaming, createNewConversation]);
+
+  /** 打开/聚焦模型选择器（/models 命令） */
+  const handleToggleModels = useCallback(() => {
+    const modelSelector = document.getElementById('model-selector');
+    if (modelSelector) {
+      modelSelector.focus();
+      // 触发下拉展开（模拟点击）
+      if (modelSelector instanceof HTMLSelectElement) {
+        modelSelector.click();
+      }
+    }
+  }, []);
+
+  /** 提取用户消息历史（供 ChatInput ArrowUp 使用） */
+  const userMessages = useMemo(
+    () => messages.filter((m) => m.role === 'user').map((m) => m.content),
+    [messages],
+  );
 
   /**
    * 重新生成指定 assistant 消息：找到该消息之前最近的 user 消息并重发
@@ -237,8 +262,15 @@ export default function App() {
         )}
       </div>
 
-      {/* Chat input */}
-      <ChatInput onSend={handleSendMessage} disabled={isStreaming} />
+      {/* Chat input — 斜杠命令 + 快捷键 + 输入历史 */}
+      <ChatInput
+        onSend={handleSendMessage}
+        disabled={isStreaming}
+        onNewConversation={createNewConversation}
+        onClearConversation={handleClearConversation}
+        onToggleModels={handleToggleModels}
+        userMessages={userMessages}
+      />
     </div>
   );
 }
