@@ -1,17 +1,11 @@
 {
   "phase": "idle",
-  "current_task": "evo_v3_002",
+  "current_task": "evo_v3_003",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
-  "last_validation": {
-    "task_id": "evo_v3_002",
-    "result": "pass",
-    "score": 100,
-    "issues": [],
-    "acceptance_cmd_output": "PASS — grep AgentLoop/McpClient/agent_step/agent_complete 全部通过；npm run compile 零 error；strict 模式启用；顶部注释完整；vscode.lm API 合规；无禁止依赖"
-  },
+  "last_score": 92,
+  "last_validation": null,
   "last_tick": "2026-03-21T00:00:00.000000Z",
   "pm_done": true
 }
