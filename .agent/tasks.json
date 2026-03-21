@@ -907,7 +907,7 @@
       "id": "evo_v12_003",
       "type": "coding",
       "title": "内存管理优化：LlmRequestCollector 添加环形缓冲淘汰策略（最多保留 50 条）+ activeChatTokens/pendingRequests disposal guard + ConnectionTree 异步回调 disposed 检查",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v12_002"
       ],
