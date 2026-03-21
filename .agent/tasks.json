@@ -1314,7 +1314,7 @@
       "id": "evo_v19_001",
       "type": "coding",
       "title": "沉浸式翻译浏览器工具：browser_extract_paragraphs + browser_inject_bilingual",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v18_005"
       ],

@@ -99,8 +99,8 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
 
-  // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）
-  skillRunner = new SkillRunner(browserToolProvider, mcpClient, outputChannel);
+  // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient + LmService）
+  skillRunner = new SkillRunner(browserToolProvider, mcpClient, outputChannel, lmService);
   outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
 
   // === 异步初始化 WebSocket 服务 + 健康检查 ===

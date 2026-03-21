@@ -111,8 +111,8 @@ function activate(context) {
         outputChannel.appendLine(`[BrowserAgent] SkillRegistry 加载失败: ${err instanceof Error ? err.message : String(err)}`);
     });
     outputChannel.appendLine('[BrowserAgent] SkillRegistry 已初始化');
-    // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient）
-    skillRunner = new skill_runner_1.SkillRunner(browserToolProvider, mcpClient, outputChannel);
+    // 初始化 Skill 执行引擎（注入 BrowserToolProvider + McpClient + LmService）
+    skillRunner = new skill_runner_1.SkillRunner(browserToolProvider, mcpClient, outputChannel, lmService);
     outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
     // === 异步初始化 WebSocket 服务 + 健康检查 ===
     // wsServer.start() 失败时标记不健康并阻断 MessageHandler 注册，防止下游级联崩溃

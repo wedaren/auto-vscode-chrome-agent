@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SkillRunner = void 0;
+const llm_tools_1 = require("./llm-tools");
 // ────────────────────────────────────────────────────────────────
 // SkillRunner 类
 // ────────────────────────────────────────────────────────────────
@@ -22,10 +23,12 @@ class SkillRunner {
     browserToolProvider;
     mcpClient;
     outputChannel;
-    constructor(browserToolProvider, mcpClient, outputChannel) {
+    lmService;
+    constructor(browserToolProvider, mcpClient, outputChannel, lmService) {
         this.browserToolProvider = browserToolProvider;
         this.mcpClient = mcpClient;
         this.outputChannel = outputChannel;
+        this.lmService = lmService;
     }
     /**
      * 执行指定 Skill
@@ -81,7 +84,7 @@ class SkillRunner {
                 description: step.description,
             });
             // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
-            const stepResult = await this.executeStep(step, i, resolvedParams, stepResults);
+            const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token);
             stepResults.push(stepResult);
             if (stepResult.success) {
                 // 报告进度：success
@@ -139,11 +142,12 @@ class SkillRunner {
      * @param stepIndex 当前步骤序号
      * @param params 用户参数
      * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
+     * @param token 取消令牌（传递给 llm_* 工具）
      */
-    async executeStep(step, stepIndex, params, previousResults) {
+    async executeStep(step, stepIndex, params, previousResults, token) {
         const resolvedArgs = this.interpolateArgs(step.argsTemplate, params, previousResults);
         try {
-            const result = await this.callTool(step.toolName, resolvedArgs);
+            const result = await this.callTool(step.toolName, resolvedArgs, token);
             const resultText = this.formatToolResult(result);
             return {
                 stepIndex,
@@ -231,9 +235,24 @@ class SkillRunner {
         return value;
     }
     /**
-     * 路由工具调用：browser_* 前缀 → BrowserToolProvider，其余 → McpClient
+     * 路由工具调用：
+     * - browser_* 前缀 → BrowserToolProvider（浏览器操作）
+     * - llm_* 前缀     → LLM 工具（本地 vscode.lm API）
+     * - 其余           → McpClient
      */
-    async callTool(toolName, args) {
+    async callTool(toolName, args, token) {
+        // 1. llm_* 前缀 → LLM 工具（本地，通过 LmService 调用语言模型）
+        if ((0, llm_tools_1.isLlmTool)(toolName)) {
+            this.outputChannel.appendLine(`[SkillRunner] 调用工具: ${toolName} (via LlmTools), 参数: ${JSON.stringify(args)}`);
+            if (!this.lmService) {
+                return {
+                    content: [{ type: 'text', text: `LLM 工具 ${toolName} 不可用: LmService 未初始化` }],
+                    isError: true,
+                };
+            }
+            return (0, llm_tools_1.callLlmTool)(toolName, args, this.lmService, this.outputChannel, token);
+        }
+        // 2. browser_* 前缀 → BrowserToolProvider
         const useBrowserChannel = toolName.startsWith('browser_') &&
             this.browserToolProvider.connected;
         const source = useBrowserChannel ? 'BrowserToolProvider' : 'McpClient';
@@ -241,6 +260,7 @@ class SkillRunner {
         if (useBrowserChannel) {
             return this.browserToolProvider.callTool(toolName, args);
         }
+        // 3. 其余 → McpClient
         return this.mcpClient.callTool(toolName, args);
     }
     /**

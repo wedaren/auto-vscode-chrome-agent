@@ -2,11 +2,14 @@
 // 职责：按 Skill 定义的有序步骤列表逐步执行工具调用，
 //       支持 {{param}} 变量插值、{{$prev}} 上一步结果引用、
 //       {{$step_N}} 指定步骤结果引用、进度回调、取消中断、可选步骤跳过。
+//       工具路由：browser_* → BrowserToolProvider，llm_* → LLM 工具（本地），其余 → McpClient。
 //       是 Skill 系统从「数据定义」到「实际执行」的桥梁。
 import * as vscode from 'vscode';
 import { Skill, SkillStep } from './skill-registry';
 import { BrowserToolProvider } from './browser-tools';
 import { McpClient, McpToolResult } from './mcp-client';
+import { LmService } from './lm-service';
+import { isLlmTool, callLlmTool } from './llm-tools';
 
 // ────────────────────────────────────────────────────────────────
 // 类型定义
@@ -78,15 +81,18 @@ export class SkillRunner {
   private readonly browserToolProvider: BrowserToolProvider;
   private readonly mcpClient: McpClient;
   private readonly outputChannel: vscode.OutputChannel;
+  private readonly lmService: LmService;
 
   constructor(
     browserToolProvider: BrowserToolProvider,
     mcpClient: McpClient,
     outputChannel: vscode.OutputChannel,
+    lmService?: LmService,
   ) {
     this.browserToolProvider = browserToolProvider;
     this.mcpClient = mcpClient;
     this.outputChannel = outputChannel;
+    this.lmService = lmService!;
   }
 
   /**
@@ -160,7 +166,7 @@ export class SkillRunner {
       });
 
       // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
-      const stepResult = await this.executeStep(step, i, resolvedParams, stepResults);
+      const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token);
       stepResults.push(stepResult);
 
       if (stepResult.success) {
@@ -233,17 +239,19 @@ export class SkillRunner {
    * @param stepIndex 当前步骤序号
    * @param params 用户参数
    * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
+   * @param token 取消令牌（传递给 llm_* 工具）
    */
   private async executeStep(
     step: SkillStep,
     stepIndex: number,
     params: Record<string, string>,
     previousResults: SkillStepResult[],
+    token?: vscode.CancellationToken,
   ): Promise<SkillStepResult> {
     const resolvedArgs = this.interpolateArgs(step.argsTemplate, params, previousResults);
 
     try {
-      const result = await this.callTool(step.toolName, resolvedArgs);
+      const result = await this.callTool(step.toolName, resolvedArgs, token);
       const resultText = this.formatToolResult(result);
 
       return {
@@ -361,12 +369,31 @@ export class SkillRunner {
   }
 
   /**
-   * 路由工具调用：browser_* 前缀 → BrowserToolProvider，其余 → McpClient
+   * 路由工具调用：
+   * - browser_* 前缀 → BrowserToolProvider（浏览器操作）
+   * - llm_* 前缀     → LLM 工具（本地 vscode.lm API）
+   * - 其余           → McpClient
    */
   private async callTool(
     toolName: string,
     args: Record<string, unknown>,
+    token?: vscode.CancellationToken,
   ): Promise<McpToolResult> {
+    // 1. llm_* 前缀 → LLM 工具（本地，通过 LmService 调用语言模型）
+    if (isLlmTool(toolName)) {
+      this.outputChannel.appendLine(
+        `[SkillRunner] 调用工具: ${toolName} (via LlmTools), 参数: ${JSON.stringify(args)}`,
+      );
+      if (!this.lmService) {
+        return {
+          content: [{ type: 'text', text: `LLM 工具 ${toolName} 不可用: LmService 未初始化` }],
+          isError: true,
+        };
+      }
+      return callLlmTool(toolName, args, this.lmService, this.outputChannel, token);
+    }
+
+    // 2. browser_* 前缀 → BrowserToolProvider
     const useBrowserChannel =
       toolName.startsWith('browser_') &&
       this.browserToolProvider.connected;
@@ -379,6 +406,8 @@ export class SkillRunner {
     if (useBrowserChannel) {
       return this.browserToolProvider.callTool(toolName, args);
     }
+
+    // 3. 其余 → McpClient
     return this.mcpClient.callTool(toolName, args);
   }
 

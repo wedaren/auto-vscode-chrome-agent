@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { Skill } from './skill-registry';
 import { BrowserToolProvider } from './browser-tools';
 import { McpClient } from './mcp-client';
+import { LmService } from './lm-service';
 /** 单步执行结果 */
 export interface SkillStepResult {
     /** 步骤序号（从 0 开始） */
@@ -61,7 +62,8 @@ export declare class SkillRunner {
     private readonly browserToolProvider;
     private readonly mcpClient;
     private readonly outputChannel;
-    constructor(browserToolProvider: BrowserToolProvider, mcpClient: McpClient, outputChannel: vscode.OutputChannel);
+    private readonly lmService;
+    constructor(browserToolProvider: BrowserToolProvider, mcpClient: McpClient, outputChannel: vscode.OutputChannel, lmService?: LmService);
     /**
      * 执行指定 Skill
      *
@@ -79,6 +81,7 @@ export declare class SkillRunner {
      * @param stepIndex 当前步骤序号
      * @param params 用户参数
      * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
+     * @param token 取消令牌（传递给 llm_* 工具）
      */
     private executeStep;
     /**
@@ -102,7 +105,10 @@ export declare class SkillRunner {
      */
     private interpolateValue;
     /**
-     * 路由工具调用：browser_* 前缀 → BrowserToolProvider，其余 → McpClient
+     * 路由工具调用：
+     * - browser_* 前缀 → BrowserToolProvider（浏览器操作）
+     * - llm_* 前缀     → LLM 工具（本地 vscode.lm API）
+     * - 其余           → McpClient
      */
     private callTool;
     /**
