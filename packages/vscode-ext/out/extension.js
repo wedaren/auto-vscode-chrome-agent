@@ -108,11 +108,11 @@ function activate(context) {
     // 初始化报告生成器
     reportGenerator = new report_generator_1.ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
     // 注册所有命令
-    const commandRegistry = new command_registry_1.CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel);
+    const commandRegistry = new command_registry_1.CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel, userDataManager);
     const commandDisposables = commandRegistry.registerAll();
     // 注册 Activity Bar TreeView（调试视图）
     connectionTree = new connection_tree_1.ConnectionTreeDataProvider();
-    connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider);
+    connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider, userDataManager);
     messageTree = new message_tree_1.MessageTreeDataProvider();
     agentTree = new agent_tree_1.AgentTreeDataProvider();
     const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {

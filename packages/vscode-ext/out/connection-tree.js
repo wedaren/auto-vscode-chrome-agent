@@ -35,9 +35,11 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConnectionTreeDataProvider = exports.ConnectionTreeItem = void 0;
 // connection-tree.ts — 连接状态 TreeView 的 TreeDataProvider 实现
-// 展示 4 个顶级节点：WebSocket Server / MCP 连接 / 原生浏览器工具 / 当前模型
+// 展示 5 个顶级节点：WebSocket Server / MCP 连接 / 原生浏览器工具 / 当前模型 / 用户数据目录
 // 订阅各服务的状态变更事件实现自动刷新
 const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("node:fs"));
+const user_data_manager_1 = require("./user-data-manager");
 /** 连接状态树节点 */
 class ConnectionTreeItem extends vscode.TreeItem {
     nodeType;
@@ -56,6 +58,9 @@ class ConnectionTreeDataProvider {
     mcpClient;
     lmService;
     browserToolProvider;
+    userDataManager;
+    /** 缓存的磁盘占用字符串，避免每次 getChildren 都计算 */
+    cachedDiskUsage = '计算中...';
     constructor() {
         // 默认构造；通过 bind() 注入服务实例
     }
@@ -63,11 +68,12 @@ class ConnectionTreeDataProvider {
      * 绑定核心服务并订阅状态变更事件
      * 在 extension.ts 中创建服务后调用
      */
-    bind(wsServer, mcpClient, lmService, browserToolProvider) {
+    bind(wsServer, mcpClient, lmService, browserToolProvider, userDataManager) {
         this.wsServer = wsServer;
         this.mcpClient = mcpClient;
         this.lmService = lmService;
         this.browserToolProvider = browserToolProvider;
+        this.userDataManager = userDataManager;
         // 订阅 WsServer 状态变更（也影响 BrowserToolProvider 的连接状态）
         this.disposables.push(wsServer.onDidChangeState(() => this.refresh()));
         // 订阅 McpClient 状态变更
@@ -77,6 +83,15 @@ class ConnectionTreeDataProvider {
         // 订阅 BrowserToolProvider 状态变更
         if (browserToolProvider) {
             this.disposables.push(browserToolProvider.onDidChangeState(() => this.refresh()));
+        }
+        // 订阅 UserDataManager 目录变更
+        if (userDataManager) {
+            this.disposables.push(userDataManager.onDidChangeRoot(() => {
+                this.updateDiskUsage();
+                this.refresh();
+            }));
+            // 首次计算磁盘占用
+            this.updateDiskUsage();
         }
         // 首次刷新
         this.refresh();
@@ -102,6 +117,8 @@ class ConnectionTreeDataProvider {
                 return this.getBrowserToolsChildren();
             case 'model':
                 return this.getModelChildren();
+            case 'user-data':
+                return this.getUserDataChildren();
             default:
                 return [];
         }
@@ -148,6 +165,14 @@ class ConnectionTreeDataProvider {
             ? `${modelInfo.name} (${modelInfo.vendor}/${modelInfo.family})`
             : '尚未选择语言模型';
         items.push(modelItem);
+        // 5. 用户数据目录节点
+        const userDataDir = this.userDataManager?.getRootDir() ?? '未配置';
+        const dirExists = this.userDataManager ? fs.existsSync(this.userDataManager.getRootDir()) : false;
+        const userDataStatus = dirExists ? '$(check) 已就绪' : '$(circle-slash) 不存在';
+        const userDataItem = new ConnectionTreeItem(`用户数据目录 — ${userDataStatus}`, vscode.TreeItemCollapsibleState.Expanded, 'user-data');
+        userDataItem.iconPath = new vscode.ThemeIcon(dirExists ? 'folder' : 'folder-library');
+        userDataItem.tooltip = `用户数据持久化目录: ${userDataDir}`;
+        items.push(userDataItem);
         return items;
     }
     /** WebSocket Server 子节点：端口、监听状态、客户端数 */
@@ -224,6 +249,83 @@ class ConnectionTreeDataProvider {
         const tokensItem = new ConnectionTreeItem(`Max Input Tokens: ${modelInfo.maxInputTokens.toLocaleString()}`, vscode.TreeItemCollapsibleState.None, 'detail');
         tokensItem.iconPath = new vscode.ThemeIcon('symbol-number');
         return [nameItem, vendorItem, familyItem, tokensItem];
+    }
+    /** 用户数据目录子节点：路径、磁盘占用 */
+    getUserDataChildren() {
+        const items = [];
+        const rootDir = this.userDataManager?.getRootDir() ?? '未配置';
+        // 路径
+        const pathItem = new ConnectionTreeItem(`路径: ${rootDir}`, vscode.TreeItemCollapsibleState.None, 'detail');
+        pathItem.iconPath = new vscode.ThemeIcon('file-directory');
+        pathItem.tooltip = rootDir;
+        items.push(pathItem);
+        // 磁盘占用
+        const sizeItem = new ConnectionTreeItem(`磁盘占用: ${this.cachedDiskUsage}`, vscode.TreeItemCollapsibleState.None, 'detail');
+        sizeItem.iconPath = new vscode.ThemeIcon('database');
+        items.push(sizeItem);
+        // 配置来源
+        const configuredDir = user_data_manager_1.UserDataManager.getConfiguredDir();
+        const isDefault = configuredDir === '~/.browser-agent';
+        const sourceItem = new ConnectionTreeItem(`配置: ${isDefault ? '默认 (~/.browser-agent)' : '自定义'}`, vscode.TreeItemCollapsibleState.None, 'detail');
+        sourceItem.iconPath = new vscode.ThemeIcon('settings-gear');
+        sourceItem.tooltip = isDefault
+            ? '使用默认数据目录 ~/.browser-agent'
+            : `自定义路径: ${configuredDir}`;
+        items.push(sourceItem);
+        return items;
+    }
+    /**
+     * 异步计算用户数据目录的磁盘占用并缓存结果
+     */
+    updateDiskUsage() {
+        const rootDir = this.userDataManager?.getRootDir();
+        if (!rootDir) {
+            this.cachedDiskUsage = '未配置';
+            return;
+        }
+        // 异步计算，完成后刷新树
+        this.calculateDirSize(rootDir).then((bytes) => {
+            this.cachedDiskUsage = ConnectionTreeDataProvider.formatBytes(bytes);
+            this.refresh();
+        }).catch(() => {
+            this.cachedDiskUsage = '无法计算';
+        });
+    }
+    /**
+     * 递归计算目录大小（字节数）
+     */
+    async calculateDirSize(dirPath) {
+        let totalSize = 0;
+        try {
+            const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = `${dirPath}/${entry.name}`;
+                if (entry.isDirectory()) {
+                    totalSize += await this.calculateDirSize(fullPath);
+                }
+                else if (entry.isFile()) {
+                    const stat = await fs.promises.stat(fullPath);
+                    totalSize += stat.size;
+                }
+            }
+        }
+        catch {
+            // 目录不存在或权限不足
+        }
+        return totalSize;
+    }
+    /**
+     * 将字节数格式化为人类可读的字符串
+     */
+    static formatBytes(bytes) {
+        if (bytes === 0) {
+            return '0 B';
+        }
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const k = 1024;
+        const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
+        const value = bytes / Math.pow(k, i);
+        return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
     }
     dispose() {
         for (const d of this.disposables) {

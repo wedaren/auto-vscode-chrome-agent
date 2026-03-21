@@ -91,12 +91,12 @@ export function activate(context: vscode.ExtensionContext): void {
   reportGenerator = new ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
 
   // 注册所有命令
-  const commandRegistry = new CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel);
+  const commandRegistry = new CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel, userDataManager);
   const commandDisposables = commandRegistry.registerAll();
 
   // 注册 Activity Bar TreeView（调试视图）
   connectionTree = new ConnectionTreeDataProvider();
-  connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider);
+  connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider, userDataManager);
   messageTree = new MessageTreeDataProvider();
   agentTree = new AgentTreeDataProvider();
 

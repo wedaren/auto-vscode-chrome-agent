@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommandRegistry = void 0;
 // command-registry.ts — 命令注册模块，封装所有 vscode.commands.registerCommand 调用
-// 职责：generateReport / connectDevtools / ask 命令的注册和处理逻辑
+// 职责：generateReport / connectDevtools / ask / openUserDataDir / revealUserDataDir 命令的注册和处理逻辑
 const vscode = __importStar(require("vscode"));
 /**
  * CommandRegistry 封装所有 VSCode 命令的注册逻辑。
@@ -46,11 +46,13 @@ class CommandRegistry {
     mcpClient;
     reportGenerator;
     outputChannel;
-    constructor(lmService, mcpClient, reportGenerator, outputChannel) {
+    userDataManager;
+    constructor(lmService, mcpClient, reportGenerator, outputChannel, userDataManager) {
         this.lmService = lmService;
         this.mcpClient = mcpClient;
         this.reportGenerator = reportGenerator;
         this.outputChannel = outputChannel;
+        this.userDataManager = userDataManager;
     }
     /**
      * 注册所有命令，返回 Disposable 数组供 context.subscriptions 使用。
@@ -60,6 +62,8 @@ class CommandRegistry {
             this.registerGenerateReport(),
             this.registerConnectDevtools(),
             this.registerAsk(),
+            this.registerOpenUserDataDir(),
+            this.registerRevealUserDataDir(),
         ];
     }
     /**
@@ -131,6 +135,28 @@ class CommandRegistry {
                 this.outputChannel.appendLine(`[BrowserAgent] 错误: ${message}`);
                 void vscode.window.showErrorMessage(`Browser Agent: ${message}`);
             }
+        });
+    }
+    /**
+     * 注册命令：在系统文件管理器中打开用户数据目录
+     */
+    registerOpenUserDataDir() {
+        return vscode.commands.registerCommand('browser-agent.openUserDataDir', async () => {
+            const rootDir = this.userDataManager.getRootDir();
+            this.outputChannel.appendLine(`[BrowserAgent] 在文件管理器中打开用户数据目录: ${rootDir}`);
+            const uri = vscode.Uri.file(rootDir);
+            await vscode.env.openExternal(uri);
+        });
+    }
+    /**
+     * 注册命令：在 VSCode 中打开用户数据目录
+     */
+    registerRevealUserDataDir() {
+        return vscode.commands.registerCommand('browser-agent.revealUserDataDir', async () => {
+            const rootDir = this.userDataManager.getRootDir();
+            this.outputChannel.appendLine(`[BrowserAgent] 在 VSCode 中打开用户数据目录: ${rootDir}`);
+            const uri = vscode.Uri.file(rootDir);
+            await vscode.commands.executeCommand('revealFileInOS', uri);
         });
     }
 }

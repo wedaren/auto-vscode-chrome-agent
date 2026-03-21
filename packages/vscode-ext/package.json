@@ -48,6 +48,16 @@
         "command": "browser-agent.addCustomSkill",
         "title": "Browser Agent: 添加自定义 Skill",
         "icon": "$(add)"
+      },
+      {
+        "command": "browser-agent.openUserDataDir",
+        "title": "Browser Agent: 在文件管理器中打开数据目录",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "browser-agent.revealUserDataDir",
+        "title": "Browser Agent: 在 VSCode 中打开数据目录",
+        "icon": "$(folder)"
       }
     ],
     "menus": {

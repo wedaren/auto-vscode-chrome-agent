@@ -847,7 +847,7 @@
       "id": "evo_v11_003",
       "type": "coding",
       "title": "重构 SkillRegistry 持久化：从 workspace config 迁移到 UserDataManager 文件存储",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v11_002"
       ],
