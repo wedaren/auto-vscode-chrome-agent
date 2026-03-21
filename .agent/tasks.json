@@ -811,7 +811,7 @@
       "id": "evo_v10_005",
       "type": "validate",
       "title": "LLM 请求细节下载功能全量验收：双端构建通过，assistant 消息可下载包含 model/systemPrompt/messages/response/timing 的完整 JSON",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v10_004"
       ],
