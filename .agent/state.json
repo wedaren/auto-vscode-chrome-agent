@@ -1,16 +1,18 @@
 {
   "phase": "idle",
-  "current_task": "evo_v7_005",
+  "current_task": "evo_v8_001",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v7_005",
+    "task_id": "evo_v8_001",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "PASS",
+    "validated_at": "2026-03-21T19:00:00.000000Z",
+    "validator_notes": "acceptance_cmd PASS; tsc 编译 0 error; strict 模式继承自 tsconfig.base.json; 无外部 API key 依赖; skill-registry.ts 顶部注释完整; 模型调用不涉及（纯数据层）; 5 个预设 Skill 全部存在"
   },
   "last_tick": "2026-03-21T19:00:00.000000Z",
   "pm_done": true

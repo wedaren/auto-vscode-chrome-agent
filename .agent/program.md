@@ -52,5 +52,5 @@
 - [x] 不考虑时间，使用最优解，方便调试体验，在 vsocde 插件有对应的视图方便查看与使用（已拆解为 evo_v5_001, evo_v5_002, evo_v5_003, evo_v5_004, evo_v5_005 — VSCode 调试视图体系：Activity Bar 容器 + 连接状态 TreeView + 消息检查器 TreeView + Agent 循环可视化 TreeView）
 - [x] 不考虑时间，使用最优解，让 agent 能使用工具替用户在浏览器上操作（已拆解为 evo_v6_001, evo_v6_002, evo_v6_003, evo_v6_004, evo_v6_005 — 原生浏览器操作工具：Chrome content script 操作执行器 + WebSocket 双向工具调用协议 + BrowserToolProvider 工具注册表 + AgentLoop 多工具源集成）
 - [x] 希望有简要的功能使用文档及使用案例，指导用户使用（已拆解为 evo_v7_001, evo_v7_002, evo_v7_003, evo_v7_004, evo_v7_005 — 项目 README + Chrome 插件使用指南 + VSCode 插件使用指南 + 5 个典型使用案例）
-- [ ] 不考虑时间，使用最优解，希望能遵循 skill， mcp 规范，有个 vsocde 视图配置配置，可以预设一批操作浏览器的 skill，进入指定页面，整理 tab，友好型将页面翻译，等；如果需要可以考虑重构；
+- [~] 不考虑时间，使用最优解，希望能遵循 skill， mcp 规范，有个 vsocde 视图配置配置，可以预设一批操作浏览器的 skill，进入指定页面，整理 tab，友好型将页面翻译，等；如果需要可以考虑重构（已拆解为 evo_v8_001, evo_v8_002, evo_v8_003, evo_v8_004, evo_v8_005 — Skill 系统：MCP 风格数据模型 + VSCode TreeView 管理视图 + SkillRunner 执行引擎 + Chrome Skill 面板 + 5 个内置预设 Skill）
 - [ ] 不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug
