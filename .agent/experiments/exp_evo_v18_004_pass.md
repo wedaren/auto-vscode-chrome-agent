@@ -24,3 +24,14 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收细节：
+- acceptance_cmd 输出 PASS（60/60）：grep 匹配数 8 ≥ 3 ✓，run_skill/browser_ 存在 ✓，npm run compile 通过 ✓
+- TypeScript 编译零错误（20/20）：tsc -p ./tsconfig.json 无报错
+- program.md 约束符合（20/20）：模型调用通过 vscode.lm API（lm-service.ts）、agent-loop.ts 无外部 API key 依赖、Chrome 插件不内置模型、文件有顶部注释
