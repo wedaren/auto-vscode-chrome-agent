@@ -367,13 +367,14 @@ function AppContent({ errorLog }: AppContentProps) {
   }, [messages]);
 
   // 将全局 errorLog 条目同步到 debugLog（方便在 Debug 面板统一查看）
+  // 修复：移除 debugLog 依赖，通过 debugLogRef.current 读取，避免对象引用变化触发无限循环
   useEffect(() => {
     if (errorLog.length === 0) return;
     const latest = errorLog[0]; // errorLog 是倒序的
     if (latest) {
-      debugLog.logError(`[${latest.source}] ${latest.message}`, latest.stack);
+      debugLogRef.current.logError(`[${latest.source}] ${latest.message}`, latest.stack);
     }
-  }, [errorLog, debugLog]);
+  }, [errorLog]);
 
   const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
