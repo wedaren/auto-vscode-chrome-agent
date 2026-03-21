@@ -2,6 +2,7 @@
 // 支持普通聊天流式响应 + Agent 模式（agent_step / agent_complete）消息处理
 // 集成 useChatStorage 实现消息持久化：页面刷新后自动恢复会话
 // 支持多会话管理：创建新会话、切换会话、删除会话
+// 支持消息发送状态跟踪（sending/sent/failed）+ 失败消息一键重试
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
 import { createMessage, type Message } from '../utils/message-factory';
@@ -20,10 +21,17 @@ interface ChatContext {
   selectedText: string;
 }
 
+/** Toast 回调类型（由调用方注入，避免 Hook 直接依赖 UI 层） */
+export interface ChatToastCallback {
+  (options: { type: 'success' | 'error' | 'warning' | 'info'; message: string; action?: { label: string; onClick: () => void } }): void;
+}
+
 /** useChat Hook 配置项 */
 interface UseChatOptions {
   /** WebSocket 消息发送函数（来自 useWebSocket） */
   sendMessage: (type: string, payload: unknown) => boolean;
+  /** Toast 通知回调（可选，用于非阻塞错误提示） */
+  onToast?: ChatToastCallback;
 }
 
 /** useChat Hook 返回值 */
@@ -54,6 +62,8 @@ export interface UseChatReturn {
   deleteConversation: (id: string) => Promise<void>;
   /** 刷新会话列表（手动触发） */
   refreshConversations: () => Promise<void>;
+  /** 重试发送失败的消息（一键重试） */
+  retryMessage: (messageId: string) => void;
 }
 
 /**
@@ -67,7 +77,7 @@ export interface UseChatReturn {
  * - 发送消息（附加页面上下文）
  * - 取消流式生成
  */
-export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
+export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
@@ -208,10 +218,16 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
 
           if (!streamingMsgIdRef.current) {
             // 首个 chunk：创建新的 assistant message
+            // 同时将所有 sending 状态的用户消息标记为 sent（收到响应即确认发送成功）
             const newMsg = createMessage('assistant', fragment);
             streamingMsgIdRef.current = newMsg.id;
             setIsStreaming(true);
-            setMessages((prev) => [...prev, newMsg]);
+            setMessages((prev) => [
+              ...prev.map((m) =>
+                m.role === 'user' && m.status === 'sending' ? { ...m, status: 'sent' as const } : m,
+              ),
+              newMsg,
+            ]);
           } else {
             // 后续 chunk：追加到已有消息
             const targetId = streamingMsgIdRef.current;
@@ -331,7 +347,9 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
         // 流式生成中不允许发送新消息
         if (isStreaming) return;
 
-        setMessages((prev) => [...prev, createMessage('user', content)]);
+        // 创建带 sending 状态的用户消息
+        const userMsg = createMessage('user', content, { status: 'sending' });
+        setMessages((prev) => [...prev, userMsg]);
 
         // 进入等待状态（TypingIndicator 立即显示）
         setIsStreaming(true);
@@ -348,24 +366,72 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
             : undefined,
         });
 
-        if (!sent) {
-          // 发送失败：恢复 isStreaming 状态并显示错误提示
+        if (sent) {
+          // 发送成功：更新消息状态为 sent
+          setMessages((prev) =>
+            prev.map((m) => (m.id === userMsg.id ? { ...m, status: 'sent' as const } : m)),
+          );
+        } else {
+          // 发送失败：标记消息为 failed 状态，恢复 isStreaming
           setIsStreaming(false);
-          setMessages((prev) => [
-            ...prev,
-            createMessage('assistant', '\u26A0\uFE0F 消息发送失败，请检查 WebSocket 连接状态。'),
-          ]);
+          setMessages((prev) =>
+            prev.map((m) => (m.id === userMsg.id ? { ...m, status: 'failed' as const } : m)),
+          );
+          // 通过 Toast 非阻塞提示
+          onToast?.({
+            type: 'error',
+            message: '消息发送失败，请检查连接状态',
+            action: {
+              label: '重试',
+              onClick: () => retryMessageById(userMsg.id),
+            },
+          });
         }
       } catch (err) {
         console.error('[useChat] handleSendMessage 发送消息时出错:', err);
         setIsStreaming(false);
-        setMessages((prev) => [
-          ...prev,
-          createMessage('assistant', '\u26A0\uFE0F 发送消息时发生异常，请重试。'),
-        ]);
+        onToast?.({
+          type: 'error',
+          message: '发送消息时发生异常，请重试',
+        });
       }
     },
-    [isStreaming, sendMessage],
+    [isStreaming, sendMessage, onToast],
+  );
+
+  /**
+   * 重试发送失败的消息（resend）：
+   * 找到 failed 状态的消息，移除它，然后重新发送
+   */
+  const retryMessageById = useCallback(
+    (messageId: string) => {
+      const failedMsg = messages.find((m) => m.id === messageId && m.status === 'failed');
+      if (!failedMsg) return;
+      if (isStreaming) {
+        onToast?.({ type: 'warning', message: '正在等待响应，请稍后重试' });
+        return;
+      }
+
+      // 移除失败的消息（以及其后可能的错误提示 assistant 消息）
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx < 0) return prev;
+        // 只移除该条 failed 消息
+        return prev.filter((m) => m.id !== messageId);
+      });
+
+      // 重新发送
+      handleSendMessage(failedMsg.content);
+    },
+    [messages, isStreaming, handleSendMessage, onToast],
+  );
+
+  /** 重试发送失败的消息（公开接口，按 messageId 查找） */
+  const retryMessage = useCallback(
+    (messageId: string) => {
+      retryMessageById(messageId);
+    },
+    [retryMessageById],
   );
 
   /** 取消当前流式生成（try-catch 防护） */
@@ -405,5 +471,6 @@ export function useChat({ sendMessage }: UseChatOptions): UseChatReturn {
     switchConversation,
     deleteConversation: handleDeleteConversation,
     refreshConversations,
+    retryMessage,
   };
 }

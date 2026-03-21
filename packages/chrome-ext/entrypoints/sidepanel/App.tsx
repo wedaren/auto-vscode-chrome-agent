@@ -11,10 +11,12 @@ import TypingIndicator from '../../components/TypingIndicator';
 import ConversationList from '../../components/ConversationList';
 import WelcomeScreen from '../../components/WelcomeScreen';
 import SkillPanel from '../../components/SkillPanel';
+import ToastContainer from '../../components/Toast';
 import ErrorBoundary, { type ErrorLogEntry } from '../../components/ErrorBoundary';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
+import { useToast } from '../../hooks/useToast';
 import type { BridgeMessage } from '../../src/ws-client';
 
 /** 顶部 Tab 类型 */
@@ -96,6 +98,16 @@ interface AppContentProps {
 function AppContent({ errorLog: _errorLog }: AppContentProps) {
   // --- Hooks ---
   const { isConnected, connectionState, sendMessage, onMessage } = useWebSocket(WS_URL);
+  const { toasts, showToast, dismissToast } = useToast();
+
+  /** Toast 回调桥接：将 useChat 内部错误通过 Toast 显示 */
+  const handleChatToast = useCallback(
+    (options: { type: 'success' | 'error' | 'warning' | 'info'; message: string; action?: { label: string; onClick: () => void } }) => {
+      showToast(options);
+    },
+    [showToast],
+  );
+
   const {
     messages,
     isStreaming,
@@ -108,7 +120,8 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
     createNewConversation,
     switchConversation,
     deleteConversation,
-  } = useChat({ sendMessage });
+    retryMessage,
+  } = useChat({ sendMessage, onToast: handleChatToast });
   const { pageContext } = usePageContext();
 
   // --- 模型选择状态 ---
@@ -153,16 +166,18 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
     return unsub;
   }, [onMessage, handleChatMessage]);
 
-  // 连接状态变化：连接时请求模型列表，断连时恢复流式状态
+  // 连接状态变化：连接时请求模型列表，断连时恢复流式状态 + Toast 提示
   useEffect(() => {
     if (connectionState === 'connected') {
       setModelsLoading(true);
       sendMessage('list_models', null);
+      showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
     if (connectionState === 'disconnected') {
       resetStreamingState();
+      showToast({ type: 'warning', message: '与 VSCode 断开连接，正在重连...' });
     }
-  }, [connectionState, sendMessage, resetStreamingState]);
+  }, [connectionState, sendMessage, resetStreamingState, showToast]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -232,6 +247,9 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
   // --- UI 渲染 ---
   return (
     <div className="relative flex flex-col h-screen bg-white overflow-hidden">
+      {/* Toast 通知容器（固定在右上角） */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* 侧栏遮罩层（点击关闭） */}
       {sidebarOpen && (
         <div
@@ -351,12 +369,18 @@ function AppContent({ errorLog: _errorLog }: AppContentProps) {
                     role={msg.role}
                     content={msg.content}
                     timestamp={msg.timestamp}
+                    status={msg.status}
                     steps={msg.steps}
                     isAgentMode={msg.isAgentMode}
                     isRunning={isStreaming && msg.isAgentMode && msg.id === messages[messages.length - 1]?.id}
                     onRegenerate={
                       msg.role === 'assistant' && !isStreaming
                         ? () => handleRegenerate(index)
+                        : undefined
+                    }
+                    onRetry={
+                      msg.role === 'user' && msg.status === 'failed'
+                        ? () => retryMessage(msg.id)
                         : undefined
                     }
                   />

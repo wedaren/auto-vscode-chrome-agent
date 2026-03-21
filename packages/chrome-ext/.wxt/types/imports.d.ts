@@ -12,6 +12,7 @@ declare global {
   const MigrationError: typeof import('wxt/storage')['MigrationError']
   const ModelSelector: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')['default']
   const SkillPanel: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/SkillPanel')['default']
+  const Toast: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/Toast')['default']
   const TypingIndicator: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')['default']
   const WelcomeScreen: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen')['default']
   const browser: typeof import('wxt/browser')['browser']
@@ -42,6 +43,7 @@ declare global {
   const useReducer: typeof import('react')['useReducer']
   const useRef: typeof import('react')['useRef']
   const useState: typeof import('react')['useState']
+  const useToast: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useToast')['useToast']
   const useWebSocket: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')['useWebSocket']
 }
 // for type re-export
@@ -59,13 +61,16 @@ declare global {
   export type { ModelInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/ModelSelector')
   // @ts-ignore
+  export type { ToastContainerProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/Toast'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/Toast')
+  // @ts-ignore
   export type { TypingIndicatorProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/TypingIndicator')
   // @ts-ignore
   export type { WelcomeScreenProps } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/components/WelcomeScreen')
   // @ts-ignore
-  export type { UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
+  export type { ChatToastCallback, UseChatReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChat')
   // @ts-ignore
   export type { Conversation, ConversationMeta } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useChatStorage'
@@ -74,13 +79,16 @@ declare global {
   export type { PageContext, UsePageContextReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/usePageContext')
   // @ts-ignore
+  export type { ToastType, ToastItem, ShowToastOptions } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useToast'
+  import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useToast')
+  // @ts-ignore
   export type { UseWebSocketReturn } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/hooks/useWebSocket')
   // @ts-ignore
   export type { ActionType, ScrollMode, BrowserAction, ActionResult, ElementInfo } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor')
   // @ts-ignore
-  export type { MessageRole, Message } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory'
+  export type { MessageRole, MessageStatus, Message } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory'
   import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/message-factory')
   // @ts-ignore
   export type { ToolExecutePayload, ToolResultPayload } from '/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge'

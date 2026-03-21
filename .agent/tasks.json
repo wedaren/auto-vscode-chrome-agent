@@ -703,8 +703,10 @@
       "id": "evo_v9_001",
       "type": "coding",
       "title": "React Error Boundary + 全局错误拦截层：防止组件崩溃白屏，自动恢复不丢会话",
-      "status": "pending",
-      "depends_on": ["evo_v8_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v8_005"
+      ],
       "acceptance": "Chrome 侧新增 ErrorBoundary 组件包裹 App 根节点；崩溃时显示友好 fallback UI（含错误摘要 + '重新加载' 按钮）；添加 window.onerror 和 unhandledrejection 全局监听器捕获异步错误并记录到 errorLog 状态；错误恢复后保留当前会话 ID 和已持久化的消息；所有 hooks（useChat/useWebSocket/useChatStorage）的关键操作均有 try-catch 防护",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ErrorBoundary.tsx && grep -q 'componentDidCatch\\|ErrorBoundary' components/ErrorBoundary.tsx && grep -q 'ErrorBoundary' entrypoints/sidepanel/App.tsx && grep -q 'onerror\\|unhandledrejection' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Error Boundary 未正确实现'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
@@ -714,7 +716,9 @@
       "type": "coding",
       "title": "Toast 通知系统 + 消息发送重试机制：非阻塞错误提示，失败消息可一键重试",
       "status": "pending",
-      "depends_on": ["evo_v9_001"],
+      "depends_on": [
+        "evo_v9_001"
+      ],
       "acceptance": "新增 Toast 组件（支持 success/warning/error/info 四种类型，3 秒自动消失，可手动关闭）；新增 useToast hook 提供 showToast 方法供全局调用；WebSocket 断连、消息发送失败、工具执行异常、存储错误等场景均触发对应 toast 通知；发送失败的消息显示红色边框 + '重试' 按钮；点击重试按钮重新发送原始消息；Message 类型新增 status 字段（sending/sent/failed）；ChatInput 发送时消息先标记 sending，收到响应后标记 sent，超时或错误标记 failed",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/Toast.tsx && test -f hooks/useToast.ts && grep -q 'Toast\\|toast' components/Toast.tsx && grep -q 'showToast' hooks/useToast.ts && grep -q 'retry\\|重试\\|resend' hooks/useChat.ts && grep -q 'sending\\|sent\\|failed' utils/message-factory.ts && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Toast 通知系统或重试机制未正确实现'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
@@ -724,7 +728,9 @@
       "type": "coding",
       "title": "WebSocket 连接健壮性增强：心跳检测 + 连接状态机 + 流式中断恢复 + 手动重连按钮",
       "status": "pending",
-      "depends_on": ["evo_v9_002"],
+      "depends_on": [
+        "evo_v9_002"
+      ],
       "acceptance": "ws-client.ts 新增心跳机制（每 15 秒发送 ping，10 秒内未收到 pong 则判定连接失效并触发重连）；连接状态从简单的 connected/disconnected 扩展为完整状态机（disconnected/connecting/connected/reconnecting/failed）；流式传输中断时自动保留已接收的部分内容并显示 '⚠️ 连接中断，回复不完整' 提示；连接指示器升级为可点击组件，显示详细状态弹窗（重连次数、最后活跃时间、延迟）；弹窗包含手动 '重新连接' 按钮；所有入站消息增加基础类型校验（必须包含 type 字段）",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'ping\\|heartbeat' utils/ws-client.ts && grep -q 'reconnecting\\|failed' utils/ws-client.ts && grep -q '连接中断\\|不完整' hooks/useChat.ts && grep -q '重新连接\\|reconnect' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: WebSocket 健壮性增强未正确实现'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
@@ -734,7 +740,9 @@
       "type": "coding",
       "title": "Chrome Side Panel 新增 Debug 调试面板：实时消息日志 + 连接仪表盘 + 执行时间线 + 开关控制",
       "status": "pending",
-      "depends_on": ["evo_v9_003"],
+      "depends_on": [
+        "evo_v9_003"
+      ],
       "acceptance": "App.tsx 顶部 Tab 栏新增第三个 '调试' Tab（Chat | Skills | Debug）；Debug 面板包含三个折叠区域：(1) 连接仪表盘 — 显示 WebSocket 状态、重连次数、心跳延迟、会话 ID、已选模型；(2) 消息日志 — 环形缓冲区保留最近 50 条 WebSocket 消息，每条显示方向箭头（↑发送/↓接收）、类型标签、时间戳，点击可展开完整 payload JSON；(3) 执行时间线 — 展示当前/最近一次 Agent 执行的 think/act/observe 步骤链，每步标记耗时；面板顶部提供开关：'详细日志'（控制是否记录 payload）、'自动滚动'；新增 useDebugLog hook 管理日志状态；构建通过无回归",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/DebugPanel.tsx && test -f hooks/useDebugLog.ts && grep -q 'DebugPanel\\|debug' components/DebugPanel.tsx && grep -q '调试\\|Debug' entrypoints/sidepanel/App.tsx && grep -q 'useDebugLog' hooks/useDebugLog.ts && grep -q '消息日志\\|messageLog\\|MessageLog' components/DebugPanel.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: Debug 调试面板未正确实现'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"
@@ -744,7 +752,9 @@
       "type": "validate",
       "title": "稳定性体系全量验收：Error Boundary + Toast + WebSocket 健壮性 + Debug 面板，双端构建通过",
       "status": "pending",
-      "depends_on": ["evo_v9_004"],
+      "depends_on": [
+        "evo_v9_004"
+      ],
       "acceptance": "全链路验证：ErrorBoundary 包裹 App 根节点且含 fallback UI；Toast 组件支持四种类型且 useToast 提供全局 showToast；消息发送失败可重试（Message.status 字段 + 重试按钮）；ws-client 心跳机制正常（ping/pong 间隔）；连接状态包含 reconnecting/failed 等完整状态；流式中断有保留和提示；连接指示器可点击显示详情和手动重连；Debug Tab 存在且含连接仪表盘 + 消息日志 + 执行时间线三个区域；useDebugLog hook 正常工作；双端构建均通过无 TS 错误",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ErrorBoundary.tsx && test -f components/Toast.tsx && test -f hooks/useToast.ts && test -f components/DebugPanel.tsx && test -f hooks/useDebugLog.ts && grep -q 'ErrorBoundary' entrypoints/sidepanel/App.tsx && grep -q 'Toast' components/Toast.tsx && grep -q 'heartbeat\\|ping' utils/ws-client.ts && grep -q '调试\\|Debug' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | grep -i 'error TS' | wc -l | xargs -I{} test {} -eq 0 && cd ../vscode-ext && npm run compile 2>&1 | grep -c 'error' | xargs -I{} test {} -eq 0 && echo PASS || echo 'FAIL: 稳定性体系全量验收失败'",
       "evolution_goal": "不考虑时间，使用最优解，希望 chrome 对话体验要稳定，尽可能避免出错。可以考虑补充相关开关或者 tab 页面等，背后执行逻辑方便用户查看，或者说方便 debug"

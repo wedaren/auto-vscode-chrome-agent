@@ -6,12 +6,15 @@ import { Marked } from 'marked';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import AgentStepView, { type AgentStep } from './AgentStepView';
+import type { MessageStatus } from '../utils/message-factory';
 
 export interface MessageBubbleProps {
   role: 'user' | 'assistant';
   content: string;
   /** 消息创建时间戳（Date.now()） */
   timestamp?: number;
+  /** 消息发送状态（user 消息使用） */
+  status?: MessageStatus;
   /** Agent ReAct 循环步骤（仅 agent 模式消息） */
   steps?: AgentStep[];
   /** 是否为 Agent 模式消息 */
@@ -20,6 +23,8 @@ export interface MessageBubbleProps {
   isRunning?: boolean;
   /** 重新生成回调（仅 assistant 消息可用，点击后重发上一条 user 消息） */
   onRegenerate?: () => void;
+  /** 重试发送回调（仅 failed 状态的 user 消息可用） */
+  onRetry?: () => void;
 }
 
 /** 创建配置了 highlight.js 的 marked 实例 */
@@ -96,10 +101,12 @@ export default function MessageBubble({
   role,
   content,
   timestamp,
+  status,
   steps,
   isAgentMode,
   isRunning,
   onRegenerate,
+  onRetry,
 }: MessageBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -171,8 +178,11 @@ export default function MessageBubble({
     };
   }, [role, renderedHtml]);
 
-  // User 消息：纯文本样式 + hover 操作栏
+  // User 消息：纯文本样式 + hover 操作栏 + 发送状态 + 重试按钮
   if (role === 'user') {
+    const isFailed = status === 'failed';
+    const isSending = status === 'sending';
+
     return (
       <div
         className="group relative max-w-[85%] ml-auto"
@@ -203,16 +213,49 @@ export default function MessageBubble({
           </button>
         </div>
 
-        <div className="rounded-lg px-3 py-2 text-sm bg-blue-500 text-white whitespace-pre-wrap break-words">
+        <div
+          className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+            isFailed
+              ? 'bg-red-400 text-white'
+              : isSending
+                ? 'bg-blue-400 text-white/80'
+                : 'bg-blue-500 text-white'
+          }`}
+        >
           {content}
         </div>
 
-        {/* 时间戳 */}
-        {relativeTime && (
-          <div className="text-[10px] text-gray-400 mt-0.5 text-right select-none">
-            {relativeTime}
-          </div>
-        )}
+        {/* 状态栏：时间戳 + 发送状态 + 重试按钮 */}
+        <div className="flex items-center justify-end gap-1.5 mt-0.5">
+          {/* 发送状态指示 */}
+          {isSending && (
+            <span className="text-[10px] text-gray-400 select-none">发送中...</span>
+          )}
+          {isFailed && (
+            <span className="text-[10px] text-red-500 select-none">发送失败</span>
+          )}
+
+          {/* 重试按钮（仅 failed 状态显示） */}
+          {isFailed && onRetry && (
+            <button
+              onClick={onRetry}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+              title="重试发送"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重试
+            </button>
+          )}
+
+          {/* 时间戳 */}
+          {relativeTime && (
+            <span className="text-[10px] text-gray-400 select-none">
+              {relativeTime}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
