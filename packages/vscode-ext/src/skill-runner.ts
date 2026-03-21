@@ -1,6 +1,7 @@
 // skill-runner.ts — Skill 执行引擎
 // 职责：按 Skill 定义的有序步骤列表逐步执行工具调用，
-//       支持 {{param}} 变量插值、进度回调、取消中断、可选步骤跳过。
+//       支持 {{param}} 变量插值、{{$prev}} 上一步结果引用、
+//       {{$step_N}} 指定步骤结果引用、进度回调、取消中断、可选步骤跳过。
 //       是 Skill 系统从「数据定义」到「实际执行」的桥梁。
 import * as vscode from 'vscode';
 import { Skill, SkillStep } from './skill-registry';
@@ -64,7 +65,10 @@ export interface SkillProgress {
  *
  * 按 Skill.steps 列表顺序执行每个工具调用：
  * 1. 校验 skill.enabled 和参数完整性
- * 2. 逐步遍历 steps，将 argsTemplate 中的 {{param}} 替换为实际参数值
+ * 2. 逐步遍历 steps，将 argsTemplate 中的占位符替换为实际值：
+ *    - {{param}}   → 用户参数值
+ *    - {{$prev}}   → 上一步的 resultText（步骤结果传递）
+ *    - {{$step_N}} → 第 N 步的 resultText（跨步骤结果引用）
  * 3. 根据 toolName 前缀路由到 BrowserToolProvider（browser_*）或 McpClient
  * 4. 通过 onProgress 回调报告每步进度
  * 5. 支持 CancellationToken 中断
@@ -155,8 +159,8 @@ export class SkillRunner {
         description: step.description,
       });
 
-      // 执行步骤
-      const stepResult = await this.executeStep(step, i, resolvedParams);
+      // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
+      const stepResult = await this.executeStep(step, i, resolvedParams, stepResults);
       stepResults.push(stepResult);
 
       if (stepResult.success) {
@@ -224,13 +228,19 @@ export class SkillRunner {
 
   /**
    * 执行单个 SkillStep
+   *
+   * @param step 当前步骤定义
+   * @param stepIndex 当前步骤序号
+   * @param params 用户参数
+   * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
    */
   private async executeStep(
     step: SkillStep,
     stepIndex: number,
     params: Record<string, string>,
+    previousResults: SkillStepResult[],
   ): Promise<SkillStepResult> {
-    const resolvedArgs = this.interpolateArgs(step.argsTemplate, params);
+    const resolvedArgs = this.interpolateArgs(step.argsTemplate, params, previousResults);
 
     try {
       const result = await this.callTool(step.toolName, resolvedArgs);
@@ -263,18 +273,24 @@ export class SkillRunner {
   }
 
   /**
-   * 将 argsTemplate 中的 {{param}} 占位符替换为实际参数值
+   * 将 argsTemplate 中的占位符替换为实际值
+   *
+   * 支持三种占位符：
+   * - {{paramName}}  — 替换为用户提供的参数值
+   * - {{$prev}}      — 替换为上一步的 resultText
+   * - {{$step_N}}    — 替换为第 N 步（从 0 开始）的 resultText
    *
    * 递归处理嵌套对象和数组中的字符串值
    */
   private interpolateArgs(
     template: Record<string, unknown>,
     params: Record<string, string>,
+    previousResults: SkillStepResult[] = [],
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(template)) {
-      result[key] = this.interpolateValue(value, params);
+      result[key] = this.interpolateValue(value, params, previousResults);
     }
 
     return result;
@@ -282,26 +298,61 @@ export class SkillRunner {
 
   /**
    * 递归插值单个值
+   *
+   * 占位符解析优先级：
+   * 1. {{$prev}}    → previousResults 中最后一项的 resultText
+   * 2. {{$step_N}}  → previousResults[N] 的 resultText（N 从 0 开始）
+   * 3. {{paramName}} → params[paramName]（用户提供的参数值）
    */
   private interpolateValue(
     value: unknown,
     params: Record<string, string>,
+    previousResults: SkillStepResult[] = [],
   ): unknown {
     if (typeof value === 'string') {
-      // 替换所有 {{paramName}} 占位符
-      return value.replace(/\{\{(\w+)\}\}/g, (_match, paramName: string) => {
-        return params[paramName] ?? '';
-      });
+      // 匹配 {{$prev}}、{{$step_N}}、{{paramName}} 三种占位符
+      return value.replace(
+        /\{\{(\$prev|\$step_\d+|\w+)\}\}/g,
+        (_match, placeholder: string) => {
+          // {{$prev}} → 上一步结果文本
+          if (placeholder === '$prev') {
+            if (previousResults.length === 0) {
+              this.outputChannel.appendLine(
+                '[SkillRunner] 警告: {{$prev}} 无可用的上一步结果（当前是第一步）',
+              );
+              return '';
+            }
+            return previousResults[previousResults.length - 1].resultText;
+          }
+
+          // {{$step_N}} → 第 N 步结果文本
+          const stepMatch = placeholder.match(/^\$step_(\d+)$/);
+          if (stepMatch) {
+            const stepIdx = parseInt(stepMatch[1], 10);
+            if (stepIdx >= previousResults.length) {
+              this.outputChannel.appendLine(
+                `[SkillRunner] 警告: {{$step_${stepIdx}}} 引用的步骤尚未执行（已完成 ${previousResults.length} 步）`,
+              );
+              return '';
+            }
+            return previousResults[stepIdx].resultText;
+          }
+
+          // {{paramName}} → 用户参数
+          return params[placeholder] ?? '';
+        },
+      );
     }
 
     if (Array.isArray(value)) {
-      return value.map((item) => this.interpolateValue(item, params));
+      return value.map((item) => this.interpolateValue(item, params, previousResults));
     }
 
     if (value !== null && typeof value === 'object') {
       return this.interpolateArgs(
         value as Record<string, unknown>,
         params,
+        previousResults,
       );
     }
 

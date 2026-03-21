@@ -22,7 +22,11 @@ export interface SkillParametersSchema {
 export interface SkillStep {
     /** 要调用的工具名称（browser_navigate / browser_click / browser_get_text 等） */
     toolName: string;
-    /** 参数模板，支持 {{param}} 变量插值，运行时替换为实际参数值 */
+    /** 参数模板，支持三种变量插值语法，运行时替换为实际值：
+     *  - {{param}}    — 用户提供的参数值
+     *  - {{$prev}}    — 上一步的执行结果文本
+     *  - {{$step_N}}  — 第 N 步（从 0 开始）的执行结果文本
+     */
     argsTemplate: Record<string, unknown>;
     /** 步骤描述（人类可读） */
     description: string;

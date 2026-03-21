@@ -48,7 +48,10 @@ export interface SkillProgress {
  *
  * 按 Skill.steps 列表顺序执行每个工具调用：
  * 1. 校验 skill.enabled 和参数完整性
- * 2. 逐步遍历 steps，将 argsTemplate 中的 {{param}} 替换为实际参数值
+ * 2. 逐步遍历 steps，将 argsTemplate 中的占位符替换为实际值：
+ *    - {{param}}   → 用户参数值
+ *    - {{$prev}}   → 上一步的 resultText（步骤结果传递）
+ *    - {{$step_N}} → 第 N 步的 resultText（跨步骤结果引用）
  * 3. 根据 toolName 前缀路由到 BrowserToolProvider（browser_*）或 McpClient
  * 4. 通过 onProgress 回调报告每步进度
  * 5. 支持 CancellationToken 中断
@@ -71,16 +74,31 @@ export declare class SkillRunner {
     execute(skill: Skill, params: Record<string, string>, onProgress?: (progress: SkillProgress) => void, token?: vscode.CancellationToken): Promise<SkillRunResult>;
     /**
      * 执行单个 SkillStep
+     *
+     * @param step 当前步骤定义
+     * @param stepIndex 当前步骤序号
+     * @param params 用户参数
+     * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
      */
     private executeStep;
     /**
-     * 将 argsTemplate 中的 {{param}} 占位符替换为实际参数值
+     * 将 argsTemplate 中的占位符替换为实际值
+     *
+     * 支持三种占位符：
+     * - {{paramName}}  — 替换为用户提供的参数值
+     * - {{$prev}}      — 替换为上一步的 resultText
+     * - {{$step_N}}    — 替换为第 N 步（从 0 开始）的 resultText
      *
      * 递归处理嵌套对象和数组中的字符串值
      */
     private interpolateArgs;
     /**
      * 递归插值单个值
+     *
+     * 占位符解析优先级：
+     * 1. {{$prev}}    → previousResults 中最后一项的 resultText
+     * 2. {{$step_N}}  → previousResults[N] 的 resultText（N 从 0 开始）
+     * 3. {{paramName}} → params[paramName]（用户提供的参数值）
      */
     private interpolateValue;
     /**

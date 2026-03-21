@@ -1251,7 +1251,7 @@
       "id": "evo_v18_001",
       "type": "coding",
       "title": "扩展核心浏览器工具集：browser-tools.ts 新增 5 个工具 + action-executor.ts 新增 3 个 ActionType",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v17_005"
       ],
