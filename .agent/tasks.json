@@ -1201,7 +1201,7 @@
       "id": "evo_v17_002",
       "type": "coding",
       "title": "Chrome 侧上下文采集预截断：content.ts selectedText 限制 + usePageContext 防护",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v17_001"
       ],

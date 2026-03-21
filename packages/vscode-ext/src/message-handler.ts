@@ -13,6 +13,14 @@ import { SkillRunner } from './skill-runner';
 import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
 import { LlmRequestCollector, LlmRequestDetail } from './llm-request-collector';
+import {
+  smartTruncate,
+  estimateTokens,
+  MAX_SELECTED_TEXT_CHARS,
+  MAX_URL_CHARS,
+  MAX_TITLE_CHARS,
+  MAX_SYSTEM_PROMPT_CONTEXT_CHARS,
+} from './context-budget';
 
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
@@ -665,24 +673,63 @@ export class MessageHandler {
   }
 
   /**
-   * 根据浏览器上下文动态构建 system prompt
+   * 根据浏览器上下文动态构建 system prompt（带上下文预算控制）
+   *
+   * 分层截断策略：
+   *   1. 每个字段独立截断（url → MAX_URL_CHARS, title → MAX_TITLE_CHARS, selectedText → MAX_SELECTED_TEXT_CHARS）
+   *   2. 拼接后的上下文部分总量不超过 MAX_SYSTEM_PROMPT_CONTEXT_CHARS
+   *   3. 日志输出上下文字符数 + token 估算值
    */
   private buildSystemPrompt(
     context?: { url?: string; title?: string; selectedText?: string },
   ): string {
-    let systemPrompt = 'You are a helpful browser agent assistant. Answer concisely.';
-    if (context) {
-      const contextParts: string[] = [];
-      if (context.url) {
-        contextParts.push(`用户正在浏览 ${context.url}${context.title ? ` (${context.title})` : ''}`);
-      }
-      if (context.selectedText) {
-        contextParts.push(`用户选中了以下文本:\n"""\n${context.selectedText}\n"""`);
-      }
-      if (contextParts.length > 0) {
-        systemPrompt += '\n\n当前浏览器上下文:\n' + contextParts.join('\n');
-      }
+    const basePrompt = 'You are a helpful browser agent assistant. Answer concisely.';
+
+    if (!context) {
+      return basePrompt;
     }
+
+    // ── 1. 字段级截断 ──────────────────────────────────────
+    const url = context.url ? smartTruncate(context.url, MAX_URL_CHARS) : '';
+    const title = context.title ? smartTruncate(context.title, MAX_TITLE_CHARS) : '';
+    const selectedText = context.selectedText
+      ? smartTruncate(context.selectedText, MAX_SELECTED_TEXT_CHARS)
+      : '';
+
+    // ── 2. 拼接上下文片段 ──────────────────────────────────
+    const contextParts: string[] = [];
+    if (url) {
+      contextParts.push(`用户正在浏览 ${url}${title ? ` (${title})` : ''}`);
+    }
+    if (selectedText) {
+      contextParts.push(`用户选中了以下文本:\n"""\n${selectedText}\n"""`);
+    }
+
+    if (contextParts.length === 0) {
+      return basePrompt;
+    }
+
+    let contextSection = contextParts.join('\n');
+
+    // ── 3. 总量预算控制 ────────────────────────────────────
+    if (contextSection.length > MAX_SYSTEM_PROMPT_CONTEXT_CHARS) {
+      contextSection = smartTruncate(contextSection, MAX_SYSTEM_PROMPT_CONTEXT_CHARS);
+    }
+
+    const systemPrompt = basePrompt + '\n\n当前浏览器上下文:\n' + contextSection;
+
+    // ── 4. 日志：上下文字符数 + token 估算 ─────────────────
+    const contextChars = contextSection.length;
+    const contextTokensEstimate = estimateTokens(contextSection);
+    const totalChars = systemPrompt.length;
+    const totalTokensEstimate = estimateTokens(systemPrompt);
+
+    this.outputChannel.appendLine(
+      `[BrowserAgent][ContextBudget] system prompt 上下文: ${contextChars} 字符 (~${contextTokensEstimate} tokens), ` +
+      `总 prompt: ${totalChars} 字符 (~${totalTokensEstimate} tokens), ` +
+      `预算上限: ${MAX_SYSTEM_PROMPT_CONTEXT_CHARS} 字符`,
+    );
+
     return systemPrompt;
   }
 }

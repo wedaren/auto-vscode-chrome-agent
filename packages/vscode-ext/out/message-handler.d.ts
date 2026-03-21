@@ -102,7 +102,12 @@ export declare class MessageHandler {
      */
     dispose(): void;
     /**
-     * 根据浏览器上下文动态构建 system prompt
+     * 根据浏览器上下文动态构建 system prompt（带上下文预算控制）
+     *
+     * 分层截断策略：
+     *   1. 每个字段独立截断（url → MAX_URL_CHARS, title → MAX_TITLE_CHARS, selectedText → MAX_SELECTED_TEXT_CHARS）
+     *   2. 拼接后的上下文部分总量不超过 MAX_SYSTEM_PROMPT_CONTEXT_CHARS
+     *   3. 日志输出上下文字符数 + token 估算值
      */
     private buildSystemPrompt;
 }
