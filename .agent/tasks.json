@@ -498,7 +498,7 @@
       "id": "evo_v5_004",
       "type": "coding",
       "title": "Agent 循环可视化 TreeView：ReAct 步骤实时展示 + 历史执行记录浏览",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v5_003"
       ],
