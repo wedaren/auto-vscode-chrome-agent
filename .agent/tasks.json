@@ -775,7 +775,7 @@
       "id": "evo_v10_002",
       "type": "coding",
       "title": "WebSocket 协议扩展 + Chrome 侧数据接收：chat_response_end / agent_complete payload 附加 llmDetail 字段，Chrome useChat hook 接收并关联到对应 assistant 消息",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v10_001"
       ],

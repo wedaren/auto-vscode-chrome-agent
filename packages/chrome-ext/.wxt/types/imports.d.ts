@@ -28,6 +28,7 @@ declare global {
   const defineContentScript: typeof import('wxt/sandbox')['defineContentScript']
   const defineUnlistedScript: typeof import('wxt/sandbox')['defineUnlistedScript']
   const defineWxtPlugin: typeof import('wxt/sandbox')['defineWxtPlugin']
+  const downloadLlmDetail: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/download-llm-detail')['downloadLlmDetail']
   const executeAction: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/action-executor')['executeAction']
   const fakeBrowser: typeof import('wxt/testing')['fakeBrowser']
   const handleToolExecute: typeof import('/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/packages/chrome-ext/utils/tool-bridge')['handleToolExecute']

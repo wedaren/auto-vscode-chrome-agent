@@ -10,7 +10,7 @@
     "result": "pass",
     "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "PASS — downloadLlmDetail, Blob, createObjectURL all found in download-llm-detail.ts; wxt build OK"
+    "acceptance_cmd_output": "PASS — acceptance_cmd grep matched downloadLlmDetail/Blob/createObjectURL; wxt build OK (2.393s); 无外部依赖; 顶部注释完整; program.md 约束全部满足"
   },
   "last_tick": "2026-03-21T12:30:11.714844Z",
   "pm_done": true,

@@ -24,3 +24,10 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无重大问题
+- tsconfig.json include 未显式包含 utils/，但 WXT 自动导入机制已正确处理，build 通过
