@@ -486,7 +486,7 @@
       "id": "evo_v5_003",
       "type": "coding",
       "title": "消息检查器 TreeView：实时 WebSocket 消息流日志 + 点击查看完整 JSON",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v5_002"
       ],

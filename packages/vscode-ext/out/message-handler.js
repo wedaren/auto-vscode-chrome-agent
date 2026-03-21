@@ -40,6 +40,7 @@ exports.MessageHandler = void 0;
 //       McpClient 已连接时自动切换为 AgentLoop（agent_step/agent_complete 推送）
 const vscode = __importStar(require("vscode"));
 const agent_loop_1 = require("./agent-loop");
+const agent_tree_1 = require("./agent-tree");
 /**
  * MessageHandler 封装所有 WebSocket 消息的处理逻辑。
  * 由 extension.ts 创建并注册到 WsServer.onMessage()。
@@ -155,12 +156,14 @@ class MessageHandler {
         void (async () => {
             const cts = new vscode.CancellationTokenSource();
             this.activeChatTokens.set(ws, cts);
+            // 注册到 Agent 循环 TreeView（实时可视化）
+            const runId = (0, agent_tree_1.startAgentRun)(text);
             try {
                 const agentLoop = new agent_loop_1.AgentLoop(this.lmService, this.mcpClient, this.outputChannel);
                 const result = await agentLoop.run(text, {
                     systemPrompt,
                     onStep: (step) => {
-                        // 每个 AgentStep 实时推送 agent_step 消息
+                        // 每个 AgentStep 实时推送 agent_step 消息（→ Chrome UI）
                         this.wsServer.send(ws, {
                             type: 'agent_step',
                             payload: {
@@ -172,9 +175,13 @@ class MessageHandler {
                             },
                             sessionId: msg.sessionId,
                         });
+                        // 同步追加到 Agent 循环 TreeView（→ VSCode 调试面板）
+                        (0, agent_tree_1.addAgentStep)(runId, step);
                     },
                 }, cts.token);
-                // AgentLoop 完成，发送 agent_complete 消息
+                // AgentLoop 完成，标记运行结束
+                (0, agent_tree_1.completeAgentRun)(runId, 'completed');
+                // 发送 agent_complete 消息
                 this.wsServer.send(ws, {
                     type: 'agent_complete',
                     payload: {
@@ -189,7 +196,8 @@ class MessageHandler {
             catch (err) {
                 const isCancelled = cts.token.isCancellationRequested;
                 if (isCancelled) {
-                    // 被取消时发送 agent_complete 标记结束（无最终答案）
+                    // 被取消时标记为 cancelled
+                    (0, agent_tree_1.completeAgentRun)(runId, 'cancelled');
                     this.wsServer.send(ws, {
                         type: 'agent_complete',
                         payload: {
@@ -203,8 +211,9 @@ class MessageHandler {
                     this.outputChannel.appendLine('[BrowserAgent] AgentLoop 被用户取消');
                 }
                 else {
-                    // 错误时发送 agent_complete 包含错误信息
+                    // 错误时标记为 error
                     const errMsg = err instanceof Error ? err.message : String(err);
+                    (0, agent_tree_1.completeAgentRun)(runId, 'error', errMsg);
                     this.wsServer.send(ws, {
                         type: 'agent_complete',
                         payload: {
