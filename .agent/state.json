@@ -1,19 +1,19 @@
 {
   "phase": "idle",
-  "current_task": "evo_v8_001",
+  "current_task": "evo_v8_002",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 93,
   "last_validation": {
-    "task_id": "evo_v8_001",
+    "task_id": "evo_v8_002",
     "result": "pass",
     "score": 95,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-21T19:00:00.000000Z",
-    "validator_notes": "acceptance_cmd PASS; tsc 编译 0 error; strict 模式继承自 tsconfig.base.json; 无外部 API key 依赖; skill-registry.ts 顶部注释完整; 模型调用不涉及（纯数据层）; 5 个预设 Skill 全部存在"
+    "validated_at": "2026-03-21T20:00:00.000000Z",
+    "validator_notes": "Validator 复核: acceptance_cmd PASS; tsc 编译 0 error（无任何输出）; skill-tree.ts 顶部注释完整（4行）; 无外部依赖引入（仅 import vscode + 本地 skill-registry）; SkillTreeDataProvider 按 preset/custom 分组; inline 按钮运行+切换+context menu 配置正确; 3 命令注册完整（runSkill/toggleSkill/addCustomSkill）; package.json views/commands/menus 配置正确; extension.ts 绑定 SkillRegistry + 订阅 onDidChange; 符合 program.md 全部约束"
   },
-  "last_tick": "2026-03-21T19:00:00.000000Z",
+  "last_tick": "2026-03-21T19:30:00.000000Z",
   "pm_done": true
 }
