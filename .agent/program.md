@@ -47,3 +47,4 @@
 - [x] chrome 对话要做到 vscode Copilot 一样好用（已拆解为 evo_v1_006, evo_v1_007, evo_v1_008, evo_v1_009, evo_v1_010）
 - [x] 现在 chrome 对话无法正常对话（已拆解为 evo_v1_011, evo_v1_012, evo_v1_013, evo_v1_014）
 - [x] 重构这个项目（已拆解为 evo_v2_001, evo_v2_002, evo_v2_003, evo_v2_004, evo_v2_005）
+- [~] 不考虑时间，仅考虑你认为这个 agent 的愿景，规划实现它（已拆解为 evo_v3_001, evo_v3_002, evo_v3_003, evo_v3_004, evo_v3_005 — Agentic Tool Use: ReAct 循环让 LM 在对话中自主使用 MCP 浏览器工具）
