@@ -27,6 +27,14 @@ export interface AgentStep {
   toolName?: string;
   /** act 步骤的工具参数 */
   toolArgs?: Record<string, unknown>;
+  /** observe 步骤的图片数据（data:image/... base64 URL），用于 Chrome UI 渲染图片而非纯文本 */
+  imageData?: string;
+}
+
+/** formatToolResult 返回值：文本摘要 + 可选图片数据 */
+interface ToolResultFormatted {
+  text: string;
+  imageData?: string;
 }
 
 /** AgentLoop 配置项 */
@@ -233,21 +241,21 @@ export class AgentLoop {
           onStep?.(actStep);
 
           // 执行 MCP 工具调用
-          const rawObservation = await this.executeTool(
+          const toolResult = await this.executeTool(
             parsed.toolName!,
             parsed.toolArgs ?? {},
           );
 
           // 截断观察结果，防止单次工具返回过大文本撑爆上下文
-          const observation = smartTruncate(rawObservation, MAX_OBSERVATION_CHARS);
-          if (observation.length < rawObservation.length) {
+          const observation = smartTruncate(toolResult.text, MAX_OBSERVATION_CHARS);
+          if (observation.length < toolResult.text.length) {
             this.outputChannel.appendLine(
-              `[AgentLoop] 观察结果已截断: ${rawObservation.length} → ${observation.length} chars (上限 ${MAX_OBSERVATION_CHARS})`,
+              `[AgentLoop] 观察结果已截断: ${toolResult.text.length} → ${observation.length} chars (上限 ${MAX_OBSERVATION_CHARS})`,
             );
           }
 
-          // Observe 步骤
-          const observeStep = this.createStep(roundCount, 'observe', observation);
+          // Observe 步骤（图片数据通过 imageData 传递给前端，不进入 LLM 上下文）
+          const observeStep = this.createStep(roundCount, 'observe', observation, undefined, undefined, toolResult.imageData);
           steps.push(observeStep);
           onStep?.(observeStep);
 
@@ -707,10 +715,10 @@ If a tool call fails or returns unexpected results:
   private async executeTool(
     toolName: string,
     toolArgs: Record<string, unknown>,
-  ): Promise<string> {
+  ): Promise<ToolResultFormatted> {
     // run_skill 路由到 SkillRunner
     if (toolName === 'run_skill') {
-      return this.executeRunSkill(toolArgs);
+      return { text: await this.executeRunSkill(toolArgs) };
     }
 
     const useBrowserChannel =
@@ -733,7 +741,7 @@ If a tool call fails or returns unexpected results:
     } catch (err) {
       const errMsg = `工具调用失败 (${toolName} via ${source}): ${err instanceof Error ? err.message : String(err)}`;
       this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
-      return errMsg;
+      return { text: errMsg };
     }
   }
 
@@ -779,26 +787,36 @@ If a tool call fails or returns unexpected results:
   }
 
   /**
-   * 格式化 MCP 工具调用结果为可读文本
+   * 格式化 MCP 工具调用结果为可读文本 + 可选图片数据。
+   *
+   * image 类型内容返回文本摘要（"[截图已获取]"），避免 base64 原文撑爆 LLM 上下文；
+   * 同时将完整 data URL 通过 imageData 字段传递给前端渲染。
    */
-  private formatToolResult(result: McpToolResult): string {
+  private formatToolResult(result: McpToolResult): ToolResultFormatted {
     if (result.isError) {
-      return `工具返回错误: ${JSON.stringify(result.content)}`;
+      return { text: `工具返回错误: ${JSON.stringify(result.content)}` };
     }
 
     if (!result.content || result.content.length === 0) {
-      return '(工具未返回内容)';
+      return { text: '(工具未返回内容)' };
     }
 
-    return result.content
-      .map((item) => {
-        const typedItem = item as { type?: string; text?: string };
-        if (typedItem.type === 'text' && typedItem.text) {
-          return typedItem.text;
-        }
-        return JSON.stringify(item);
-      })
-      .join('\n');
+    let imageData: string | undefined;
+    const textParts = result.content.map((item) => {
+      const typedItem = item as { type?: string; text?: string; data?: string; mimeType?: string };
+      if (typedItem.type === 'image' && typedItem.data) {
+        // 还原完整 data URL 供前端渲染
+        const mime = typedItem.mimeType || 'image/png';
+        imageData = `data:${mime};base64,${typedItem.data}`;
+        return `[截图已获取]`;
+      }
+      if (typedItem.type === 'text' && typedItem.text) {
+        return typedItem.text;
+      }
+      return JSON.stringify(item);
+    });
+
+    return { text: textParts.join('\n'), imageData };
   }
 
   /**
@@ -810,8 +828,13 @@ If a tool call fails or returns unexpected results:
     content: string,
     toolName?: string,
     toolArgs?: Record<string, unknown>,
+    imageData?: string,
   ): AgentStep {
-    return { step, type, content, toolName, toolArgs };
+    const s: AgentStep = { step, type, content, toolName, toolArgs };
+    if (imageData) {
+      s.imageData = imageData;
+    }
+    return s;
   }
 
   /**

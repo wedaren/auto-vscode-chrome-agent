@@ -164,14 +164,14 @@ class AgentLoop {
                     steps.push(actStep);
                     onStep?.(actStep);
                     // 执行 MCP 工具调用
-                    const rawObservation = await this.executeTool(parsed.toolName, parsed.toolArgs ?? {});
+                    const toolResult = await this.executeTool(parsed.toolName, parsed.toolArgs ?? {});
                     // 截断观察结果，防止单次工具返回过大文本撑爆上下文
-                    const observation = (0, context_budget_1.smartTruncate)(rawObservation, context_budget_1.MAX_OBSERVATION_CHARS);
-                    if (observation.length < rawObservation.length) {
-                        this.outputChannel.appendLine(`[AgentLoop] 观察结果已截断: ${rawObservation.length} → ${observation.length} chars (上限 ${context_budget_1.MAX_OBSERVATION_CHARS})`);
+                    const observation = (0, context_budget_1.smartTruncate)(toolResult.text, context_budget_1.MAX_OBSERVATION_CHARS);
+                    if (observation.length < toolResult.text.length) {
+                        this.outputChannel.appendLine(`[AgentLoop] 观察结果已截断: ${toolResult.text.length} → ${observation.length} chars (上限 ${context_budget_1.MAX_OBSERVATION_CHARS})`);
                     }
-                    // Observe 步骤
-                    const observeStep = this.createStep(roundCount, 'observe', observation);
+                    // Observe 步骤（图片数据通过 imageData 传递给前端，不进入 LLM 上下文）
+                    const observeStep = this.createStep(roundCount, 'observe', observation, undefined, undefined, toolResult.imageData);
                     steps.push(observeStep);
                     onStep?.(observeStep);
                     // 将观察结果反馈给 LLM
@@ -552,7 +552,7 @@ If a tool call fails or returns unexpected results:
     async executeTool(toolName, toolArgs) {
         // run_skill 路由到 SkillRunner
         if (toolName === 'run_skill') {
-            return this.executeRunSkill(toolArgs);
+            return { text: await this.executeRunSkill(toolArgs) };
         }
         const useBrowserChannel = toolName.startsWith('browser_') &&
             this.browserToolProvider?.connected === true;
@@ -571,7 +571,7 @@ If a tool call fails or returns unexpected results:
         catch (err) {
             const errMsg = `工具调用失败 (${toolName} via ${source}): ${err instanceof Error ? err.message : String(err)}`;
             this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
-            return errMsg;
+            return { text: errMsg };
         }
     }
     /**
@@ -607,30 +607,43 @@ If a tool call fails or returns unexpected results:
         }
     }
     /**
-     * 格式化 MCP 工具调用结果为可读文本
+     * 格式化 MCP 工具调用结果为可读文本 + 可选图片数据。
+     *
+     * image 类型内容返回文本摘要（"[截图已获取]"），避免 base64 原文撑爆 LLM 上下文；
+     * 同时将完整 data URL 通过 imageData 字段传递给前端渲染。
      */
     formatToolResult(result) {
         if (result.isError) {
-            return `工具返回错误: ${JSON.stringify(result.content)}`;
+            return { text: `工具返回错误: ${JSON.stringify(result.content)}` };
         }
         if (!result.content || result.content.length === 0) {
-            return '(工具未返回内容)';
+            return { text: '(工具未返回内容)' };
         }
-        return result.content
-            .map((item) => {
+        let imageData;
+        const textParts = result.content.map((item) => {
             const typedItem = item;
+            if (typedItem.type === 'image' && typedItem.data) {
+                // 还原完整 data URL 供前端渲染
+                const mime = typedItem.mimeType || 'image/png';
+                imageData = `data:${mime};base64,${typedItem.data}`;
+                return `[截图已获取]`;
+            }
             if (typedItem.type === 'text' && typedItem.text) {
                 return typedItem.text;
             }
             return JSON.stringify(item);
-        })
-            .join('\n');
+        });
+        return { text: textParts.join('\n'), imageData };
     }
     /**
      * 创建 AgentStep 实例的工厂方法
      */
-    createStep(step, type, content, toolName, toolArgs) {
-        return { step, type, content, toolName, toolArgs };
+    createStep(step, type, content, toolName, toolArgs, imageData) {
+        const s = { step, type, content, toolName, toolArgs };
+        if (imageData) {
+            s.imageData = imageData;
+        }
+        return s;
     }
     /**
      * 计算单条消息的文本字符总数。

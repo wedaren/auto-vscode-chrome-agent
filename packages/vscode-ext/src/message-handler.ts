@@ -322,6 +322,7 @@ export class MessageHandler {
             systemPrompt,
             onStep: (step: AgentStep) => {
               // 每个 AgentStep 实时推送 agent_step 消息（→ Chrome UI）
+              // observe 步骤可能含 imageData（截图 base64 URL），传给前端渲染图片
               this.wsServer.send(ws, {
                 type: 'agent_step',
                 payload: {
@@ -330,6 +331,7 @@ export class MessageHandler {
                   content: step.content,
                   toolName: step.toolName,
                   toolArgs: step.toolArgs,
+                  ...(step.imageData ? { imageData: step.imageData } : {}),
                 },
                 sessionId: msg.sessionId,
               });

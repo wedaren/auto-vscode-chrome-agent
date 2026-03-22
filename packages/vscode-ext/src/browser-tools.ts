@@ -480,9 +480,34 @@ export class BrowserToolProvider {
   /**
    * 将 ToolResultPayload 转换为 McpToolResult 格式
    * 使 AgentLoop 可以统一处理 MCP 工具和浏览器工具的返回值
+   *
+   * 图片识别：当 result.data 含 screenshot 字段（data:image/... base64）时，
+   * 返回 { type: 'image', data, mimeType } 内容项，避免 base64 原文作为纯文本处理。
    */
   private toMcpToolResult(result: ToolResultPayload): McpToolResult {
     if (result.success) {
+      // 检测 screenshot 字段（browser_screenshot 返回 { screenshot: "data:image/png;base64,..." }）
+      const dataObj = result.data as Record<string, unknown> | undefined;
+      if (dataObj && typeof dataObj === 'object' && typeof dataObj.screenshot === 'string') {
+        const screenshotUrl = dataObj.screenshot as string;
+        // 解析 data URL: data:image/png;base64,XXXX
+        const match = screenshotUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+          const mimeType = match[1]; // e.g. 'image/png'
+          const base64Data = match[2];
+          const content: unknown[] = [
+            { type: 'image', data: base64Data, mimeType },
+          ];
+          // 如果 data 中还有其他非 screenshot 字段，也以文本形式附加
+          const rest = { ...dataObj };
+          delete rest.screenshot;
+          if (Object.keys(rest).length > 0) {
+            content.push({ type: 'text', text: JSON.stringify(rest, null, 2) });
+          }
+          return { content, isError: false };
+        }
+      }
+
       const text = result.data !== undefined
         ? (typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2))
         : '操作成功';

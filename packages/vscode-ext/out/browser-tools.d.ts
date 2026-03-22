@@ -92,6 +92,9 @@ export declare class BrowserToolProvider {
     /**
      * 将 ToolResultPayload 转换为 McpToolResult 格式
      * 使 AgentLoop 可以统一处理 MCP 工具和浏览器工具的返回值
+     *
+     * 图片识别：当 result.data 含 screenshot 字段（data:image/... base64）时，
+     * 返回 { type: 'image', data, mimeType } 内容项，避免 base64 原文作为纯文本处理。
      */
     private toMcpToolResult;
 }

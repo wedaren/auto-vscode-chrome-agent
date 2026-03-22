@@ -16,6 +16,8 @@ export interface AgentStep {
     toolName?: string;
     /** act 步骤的工具参数 */
     toolArgs?: Record<string, unknown>;
+    /** observe 步骤的图片数据（data:image/... base64 URL），用于 Chrome UI 渲染图片而非纯文本 */
+    imageData?: string;
 }
 /** AgentLoop 配置项 */
 export interface AgentLoopOptions {
@@ -121,7 +123,10 @@ export declare class AgentLoop {
      */
     private executeRunSkill;
     /**
-     * 格式化 MCP 工具调用结果为可读文本
+     * 格式化 MCP 工具调用结果为可读文本 + 可选图片数据。
+     *
+     * image 类型内容返回文本摘要（"[截图已获取]"），避免 base64 原文撑爆 LLM 上下文；
+     * 同时将完整 data URL 通过 imageData 字段传递给前端渲染。
      */
     private formatToolResult;
     /**
