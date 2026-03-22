@@ -22,10 +22,13 @@ export interface SkillParametersSchema {
 export interface SkillStep {
     /** 要调用的工具名称（browser_navigate / browser_click / browser_get_text 等） */
     toolName: string;
-    /** 参数模板，支持三种变量插值语法，运行时替换为实际值：
-     *  - {{param}}    — 用户提供的参数值
-     *  - {{$prev}}    — 上一步的执行结果文本
-     *  - {{$step_N}}  — 第 N 步（从 0 开始）的执行结果文本
+    /** 参数模板，支持变量插值语法，运行时替换为实际值：
+     *  - {{param}}          — 用户提供的参数值
+     *  - {{$prev}}          — 上一步的执行结果文本（完整）
+     *  - {{$prev.key}}      — 上一步结果 JSON 中提取 key 字段
+     *  - {{$prev.arr[].f}}  — 上一步结果 JSON 中 arr 数组映射，提取每项 f 字段
+     *  - {{$step_N}}        — 第 N 步（从 0 开始）的执行结果文本
+     *  - {{$step_N.key}}    — 第 N 步结果 JSON 中提取 key 字段
      */
     argsTemplate: Record<string, unknown>;
     /** 步骤描述（人类可读） */

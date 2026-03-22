@@ -50,9 +50,12 @@ export interface SkillProgress {
  * 按 Skill.steps 列表顺序执行每个工具调用：
  * 1. 校验 skill.enabled 和参数完整性
  * 2. 逐步遍历 steps，将 argsTemplate 中的占位符替换为实际值：
- *    - {{param}}   → 用户参数值
- *    - {{$prev}}   → 上一步的 resultText（步骤结果传递）
- *    - {{$step_N}} → 第 N 步的 resultText（跨步骤结果引用）
+ *    - {{param}}           → 用户参数值
+ *    - {{$prev}}           → 上一步的 resultText（完整文本）
+ *    - {{$prev.key}}       → 上一步结果 JSON 中的 key 字段
+ *    - {{$prev.arr[].f}}   → 上一步结果数组映射，提取每项的 f 字段
+ *    - {{$step_N}}         → 第 N 步的 resultText（完整文本）
+ *    - {{$step_N.key}}     → 第 N 步结果 JSON 中的 key 字段
  * 3. 根据 toolName 前缀路由到 BrowserToolProvider（browser_*）或 McpClient
  * 4. 通过 onProgress 回调报告每步进度
  * 5. 支持 CancellationToken 中断
@@ -99,11 +102,39 @@ export declare class SkillRunner {
      * 递归插值单个值
      *
      * 占位符解析优先级：
-     * 1. {{$prev}}    → previousResults 中最后一项的 resultText
-     * 2. {{$step_N}}  → previousResults[N] 的 resultText（N 从 0 开始）
-     * 3. {{paramName}} → params[paramName]（用户提供的参数值）
+     * 1. {{$prev}}          → previousResults 中最后一项的 resultText（完整文本）
+     * 2. {{$prev.key}}      → 上一步结果 JSON 中的 key 字段
+     * 3. {{$prev.arr[].f}}  → 上一步结果 JSON 中 arr 数组每项的 f 字段，组成新数组
+     * 4. {{$step_N}}        → previousResults[N] 的 resultText（完整文本）
+     * 5. {{$step_N.key}}    → 第 N 步结果 JSON 中的 key 字段
+     * 6. {{paramName}}      → params[paramName]（用户提供的参数值）
      */
     private interpolateValue;
+    /**
+     * 从结构化 JSON 文本中按路径表达式提取字段值
+     *
+     * 路径语法：
+     * - "key"              → obj.key
+     * - "key.subKey"       → obj.key.subKey
+     * - "arr[].field"      → obj.arr.map(e => e.field)，结果 JSON.stringify
+     * - "a.b[].c"          → obj.a.b.map(e => e.c)
+     *
+     * 返回值始终是字符串：
+     * - 原始值（string/number/boolean）→ String(value)
+     * - 对象/数组 → JSON.stringify(value)
+     *
+     * @param jsonText 工具返回的 resultText（可能是 JSON 字符串）
+     * @param path 点分隔的路径（不含前导 '.'），如 "paragraphs" 或 "data[].text"
+     * @param fullPlaceholder 完整占位符名（仅用于日志）
+     */
+    private resolvePath;
+    /**
+     * 从嵌套对象中按点分隔路径提取字段（用于数组映射内部）
+     *
+     * @param obj 单个数组元素
+     * @param path 点分隔路径，如 "text" 或 "meta.title"
+     */
+    private extractNestedField;
     /**
      * 路由工具调用：
      * - browser_* 前缀 → BrowserToolProvider（浏览器操作）

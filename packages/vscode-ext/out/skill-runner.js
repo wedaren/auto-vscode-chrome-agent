@@ -11,9 +11,12 @@ const llm_tools_1 = require("./llm-tools");
  * 按 Skill.steps 列表顺序执行每个工具调用：
  * 1. 校验 skill.enabled 和参数完整性
  * 2. 逐步遍历 steps，将 argsTemplate 中的占位符替换为实际值：
- *    - {{param}}   → 用户参数值
- *    - {{$prev}}   → 上一步的 resultText（步骤结果传递）
- *    - {{$step_N}} → 第 N 步的 resultText（跨步骤结果引用）
+ *    - {{param}}           → 用户参数值
+ *    - {{$prev}}           → 上一步的 resultText（完整文本）
+ *    - {{$prev.key}}       → 上一步结果 JSON 中的 key 字段
+ *    - {{$prev.arr[].f}}   → 上一步结果数组映射，提取每项的 f 字段
+ *    - {{$step_N}}         → 第 N 步的 resultText（完整文本）
+ *    - {{$step_N.key}}     → 第 N 步结果 JSON 中的 key 字段
  * 3. 根据 toolName 前缀路由到 BrowserToolProvider（browser_*）或 McpClient
  * 4. 通过 onProgress 回调报告每步进度
  * 5. 支持 CancellationToken 中断
@@ -195,33 +198,47 @@ class SkillRunner {
      * 递归插值单个值
      *
      * 占位符解析优先级：
-     * 1. {{$prev}}    → previousResults 中最后一项的 resultText
-     * 2. {{$step_N}}  → previousResults[N] 的 resultText（N 从 0 开始）
-     * 3. {{paramName}} → params[paramName]（用户提供的参数值）
+     * 1. {{$prev}}          → previousResults 中最后一项的 resultText（完整文本）
+     * 2. {{$prev.key}}      → 上一步结果 JSON 中的 key 字段
+     * 3. {{$prev.arr[].f}}  → 上一步结果 JSON 中 arr 数组每项的 f 字段，组成新数组
+     * 4. {{$step_N}}        → previousResults[N] 的 resultText（完整文本）
+     * 5. {{$step_N.key}}    → 第 N 步结果 JSON 中的 key 字段
+     * 6. {{paramName}}      → params[paramName]（用户提供的参数值）
      */
     interpolateValue(value, params, previousResults = []) {
         if (typeof value === 'string') {
-            // 匹配 {{$prev}}、{{$step_N}}、{{paramName}} 三种占位符
-            return value.replace(/\{\{(\$prev|\$step_\d+|\w+)\}\}/g, (_match, placeholder) => {
-                // {{$prev}} → 上一步结果文本
-                if (placeholder === '$prev') {
+            // 匹配 {{$prev}}, {{$prev.path}}, {{$step_N}}, {{$step_N.path}}, {{paramName}}
+            // 路径支持 dot 访问（.key）和数组映射（.arr[].field）
+            return value.replace(/\{\{(\$prev(?:\.[\w]+(?:\[\])?)*|\$step_\d+(?:\.[\w]+(?:\[\])?)*|\w+)\}\}/g, (_match, placeholder) => {
+                // ── $prev 系列 ──
+                if (placeholder.startsWith('$prev')) {
                     if (previousResults.length === 0) {
                         this.outputChannel.appendLine('[SkillRunner] 警告: {{$prev}} 无可用的上一步结果（当前是第一步）');
                         return '';
                     }
-                    return previousResults[previousResults.length - 1].resultText;
+                    const resultText = previousResults[previousResults.length - 1].resultText;
+                    const pathPart = placeholder.substring('$prev'.length); // '' 或 '.key.sub'
+                    if (!pathPart) {
+                        return resultText; // {{$prev}} — 向后兼容
+                    }
+                    return this.resolvePath(resultText, pathPart.substring(1), placeholder);
                 }
-                // {{$step_N}} → 第 N 步结果文本
-                const stepMatch = placeholder.match(/^\$step_(\d+)$/);
+                // ── $step_N 系列 ──
+                const stepMatch = placeholder.match(/^\$step_(\d+)(\..*)?$/);
                 if (stepMatch) {
                     const stepIdx = parseInt(stepMatch[1], 10);
                     if (stepIdx >= previousResults.length) {
-                        this.outputChannel.appendLine(`[SkillRunner] 警告: {{$step_${stepIdx}}} 引用的步骤尚未执行（已完成 ${previousResults.length} 步）`);
+                        this.outputChannel.appendLine(`[SkillRunner] 警告: {{${placeholder}}} 引用的步骤尚未执行（已完成 ${previousResults.length} 步）`);
                         return '';
                     }
-                    return previousResults[stepIdx].resultText;
+                    const resultText = previousResults[stepIdx].resultText;
+                    const pathPart = stepMatch[2]; // undefined 或 '.key.sub'
+                    if (!pathPart) {
+                        return resultText; // {{$step_N}} — 向后兼容
+                    }
+                    return this.resolvePath(resultText, pathPart.substring(1), placeholder);
                 }
-                // {{paramName}} → 用户参数
+                // ── {{paramName}} → 用户参数 ──
                 return params[placeholder] ?? '';
             });
         }
@@ -233,6 +250,102 @@ class SkillRunner {
         }
         // 数字、布尔等原始类型直接返回
         return value;
+    }
+    /**
+     * 从结构化 JSON 文本中按路径表达式提取字段值
+     *
+     * 路径语法：
+     * - "key"              → obj.key
+     * - "key.subKey"       → obj.key.subKey
+     * - "arr[].field"      → obj.arr.map(e => e.field)，结果 JSON.stringify
+     * - "a.b[].c"          → obj.a.b.map(e => e.c)
+     *
+     * 返回值始终是字符串：
+     * - 原始值（string/number/boolean）→ String(value)
+     * - 对象/数组 → JSON.stringify(value)
+     *
+     * @param jsonText 工具返回的 resultText（可能是 JSON 字符串）
+     * @param path 点分隔的路径（不含前导 '.'），如 "paragraphs" 或 "data[].text"
+     * @param fullPlaceholder 完整占位符名（仅用于日志）
+     */
+    resolvePath(jsonText, path, fullPlaceholder) {
+        // 1. 尝试将 resultText 解析为 JSON
+        let obj;
+        try {
+            obj = JSON.parse(jsonText);
+        }
+        catch {
+            this.outputChannel.appendLine(`[SkillRunner] 警告: {{${fullPlaceholder}}} 路径表达式需要 JSON，但上一步结果不是有效 JSON，回退返回原始文本`);
+            return jsonText;
+        }
+        // 2. 按 '.' 拆分路径段，逐段解析
+        const segments = path.split('.');
+        let current = obj;
+        for (let i = 0; i < segments.length; i++) {
+            const seg = segments[i];
+            if (current === null || current === undefined) {
+                this.outputChannel.appendLine(`[SkillRunner] 警告: {{${fullPlaceholder}}} 路径解析在 "${seg}" 处遇到 null/undefined`);
+                return '';
+            }
+            // 处理数组映射语法：segName[]
+            if (seg.endsWith('[]')) {
+                const arrayKey = seg.slice(0, -2);
+                const arr = current[arrayKey];
+                if (!Array.isArray(arr)) {
+                    this.outputChannel.appendLine(`[SkillRunner] 警告: {{${fullPlaceholder}}} 路径 "${arrayKey}" 不是数组`);
+                    return '';
+                }
+                // 剩余路径段用于映射数组中每个元素
+                const remainingPath = segments.slice(i + 1).join('.');
+                if (!remainingPath) {
+                    // 没有后续路径，直接返回整个数组
+                    current = arr;
+                }
+                else {
+                    // 从每个数组元素中提取 remainingPath 指定的字段
+                    current = arr.map((item) => this.extractNestedField(item, remainingPath));
+                }
+                // 数组映射消耗了所有剩余段，直接跳出
+                break;
+            }
+            // 普通属性访问
+            if (typeof current === 'object' && current !== null) {
+                current = current[seg];
+            }
+            else {
+                this.outputChannel.appendLine(`[SkillRunner] 警告: {{${fullPlaceholder}}} 路径 "${seg}" 无法从非对象值中提取`);
+                return '';
+            }
+        }
+        // 3. 将结果转为字符串
+        if (current === undefined || current === null) {
+            return '';
+        }
+        if (typeof current === 'string') {
+            return current;
+        }
+        return JSON.stringify(current);
+    }
+    /**
+     * 从嵌套对象中按点分隔路径提取字段（用于数组映射内部）
+     *
+     * @param obj 单个数组元素
+     * @param path 点分隔路径，如 "text" 或 "meta.title"
+     */
+    extractNestedField(obj, path) {
+        let current = obj;
+        for (const seg of path.split('.')) {
+            if (current === null || current === undefined) {
+                return undefined;
+            }
+            if (typeof current === 'object') {
+                current = current[seg];
+            }
+            else {
+                return undefined;
+            }
+        }
+        return current;
     }
     /**
      * 路由工具调用：

@@ -1453,7 +1453,7 @@
       "id": "evo_v21_002",
       "type": "coding",
       "title": "增强 llm_translate 参数解析健壮性：多参数名兼容 + 结构化结果自动提取",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v21_001"
       ],
