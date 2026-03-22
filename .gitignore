@@ -3,3 +3,5 @@ dist/
 .vsix
 *.log
 .env
+
+packages/vscode-ext/out/
