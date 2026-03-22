@@ -170,9 +170,14 @@ export class MessageHandler {
       this.outputChannel.appendLine(
         `[BrowserAgent] list_models 节流：距上次 ${elapsed}ms < ${MessageHandler.LIST_MODELS_THROTTLE_MS}ms，返回缓存 (${this._cachedModelsList.length} 个模型)`,
       );
+      const prefs = this.lmService.getModelPreferences();
       this.wsServer.send(ws, {
         type: 'models_list',
-        payload: { models: this._cachedModelsList },
+        payload: {
+          models: this._cachedModelsList,
+          defaultModelId: prefs.defaultModelId || undefined,
+          maxVisibleModels: prefs.maxVisibleModels,
+        },
         sessionId: msg.sessionId,
       });
       return;
@@ -185,9 +190,14 @@ export class MessageHandler {
         this._cachedModelsList = models;
         this._lastListModelsTime = Date.now();
 
+        const prefs = this.lmService.getModelPreferences();
         this.wsServer.send(ws, {
           type: 'models_list',
-          payload: { models },
+          payload: {
+            models,
+            defaultModelId: prefs.defaultModelId || undefined,
+            maxVisibleModels: prefs.maxVisibleModels,
+          },
           sessionId: msg.sessionId,
         });
         this.outputChannel.appendLine(

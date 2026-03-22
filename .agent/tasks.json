@@ -1642,7 +1642,7 @@
       "id": "evo_v24_002",
       "type": "coding",
       "title": "LmService 模型过滤 + 默认模型配置感知：listModels 过滤 hiddenModelIds，selectModel 优先使用 defaultModelId",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v24_001"
       ],
