@@ -53,13 +53,13 @@ jobs:
 
       - name: Publish to Marketplace (release)
         if: ${{ !inputs.pre_release }}
-        run: pnpm vsce publish --no-git-checks --no-dependencies
+        run: pnpm vsce publish --packagePath *.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Marketplace (pre-release)
         if: ${{ inputs.pre_release }}
-        run: pnpm vsce publish --pre-release --no-dependencies
+        run: pnpm vsce publish --pre-release --packagePath *.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
