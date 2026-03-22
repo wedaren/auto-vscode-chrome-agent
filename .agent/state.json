@@ -4,11 +4,11 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 92,
+  "last_score": 98,
   "last_validation": {
     "task_id": "evo_v27_003",
     "result": "pass",
-    "score": 92,
+    "score": 98,
     "issues": [
       "预存 TS 错误（browser/chrome 全局变量类型，WXT 项目特性，非本任务引入）"
     ],

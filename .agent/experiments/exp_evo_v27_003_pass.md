@@ -20,3 +20,12 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：98/100
+问题：
+- 预存 TS 错误（browser/chrome 全局变量类型，WXT 项目特性，非本任务引入）— 扣 2 分
+- acceptance_cmd: PASS（60/60）
+- 代码一致性：文件有顶部注释，无外部依赖引入，insertTranslationElement 三分支策略清晰（18/20）
+- 需求符合度：Chrome 不内置模型，无需外部 API key（20/20）
