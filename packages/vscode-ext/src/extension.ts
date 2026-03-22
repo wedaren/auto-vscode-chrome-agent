@@ -14,6 +14,8 @@ import { SkillRegistry } from './skill-registry';
 import { SkillRunner } from './skill-runner';
 import { SkillTreeDataProvider, runSkillCommand, toggleSkillCommand, addCustomSkillCommand } from './skill-tree';
 import { UserDataManager } from './user-data-manager';
+import { ObservabilityStore } from './observability-store';
+import { ObservabilityTreeDataProvider } from './observability-tree';
 
 let lmService: LmService | undefined;
 let wsServer: WsServer | undefined;
@@ -27,6 +29,8 @@ let messageTree: MessageTreeDataProvider | undefined;
 let agentTree: AgentTreeDataProvider | undefined;
 let skillTree: SkillTreeDataProvider | undefined;
 let userDataManager: UserDataManager | undefined;
+let observabilityStore: ObservabilityStore | undefined;
+let observabilityTree: ObservabilityTreeDataProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
@@ -66,15 +70,28 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   outputChannel.appendLine('[BrowserAgent] UserDataManager 已创建');
 
+  observabilityStore = new ObservabilityStore(userDataManager, outputChannel);
+  observabilityStore.init().catch((err: unknown) => {
+    outputChannel.appendLine(
+      `[BrowserAgent] ObservabilityStore 初始化失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+  outputChannel.appendLine('[BrowserAgent] ObservabilityStore 已创建');
+
   // 监听 browserAgent.userDataDir 配置变更，变更时重新初始化数据目录
   const configChangeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('browserAgent.userDataDir')) {
       outputChannel.appendLine('[BrowserAgent] 检测到 userDataDir 配置变更，重新初始化数据目录...');
-      userDataManager?.init().catch((err: unknown) => {
-        outputChannel.appendLine(
-          `[BrowserAgent] 配置变更后重新初始化失败: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+      void (async () => {
+        try {
+          await userDataManager?.init();
+          await observabilityStore?.init();
+        } catch (err: unknown) {
+          outputChannel.appendLine(
+            `[BrowserAgent] 配置变更后重新初始化失败: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
     }
   });
 
@@ -86,6 +103,7 @@ export function activate(context: vscode.ExtensionContext): void {
     .getConfiguration('browserAgent')
     .get<number>('port', 7777);
   wsServer = new WsServer(outputChannel, port);
+  wsServer.setObservabilityStore(observabilityStore);
 
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
@@ -125,7 +143,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (wsServerHealthy) {
       const messageHandler = new MessageHandler(
         lmService!, wsServer!, mcpClient!, outputChannel,
-        browserToolProvider!, skillRegistry, skillRunner,
+        browserToolProvider!, skillRegistry, skillRunner, observabilityStore,
       );
       wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
       outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（wsServer healthy）');
@@ -148,6 +166,8 @@ export function activate(context: vscode.ExtensionContext): void {
   connectionTree.bind(wsServer, mcpClient, lmService, browserToolProvider, userDataManager);
   messageTree = new MessageTreeDataProvider();
   agentTree = new AgentTreeDataProvider();
+  observabilityTree = new ObservabilityTreeDataProvider();
+  observabilityTree.bind(observabilityStore);
 
   const connectionTreeView = vscode.window.createTreeView('browser-agent-connection', {
     treeDataProvider: connectionTree,
@@ -157,6 +177,9 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   const agentTreeView = vscode.window.createTreeView('browser-agent-agent-loop', {
     treeDataProvider: agentTree,
+  });
+  const observabilityTreeView = vscode.window.createTreeView('browser-agent-observability', {
+    treeDataProvider: observabilityTree,
   });
 
   // 注册 Skill 管理 TreeView
@@ -214,6 +237,30 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
+  const refreshObservabilityCmd = vscode.commands.registerCommand(
+    'browser-agent.refreshObservability',
+    async () => {
+      await observabilityStore?.init();
+      observabilityTree?.refresh(true);
+      vscode.window.showInformationMessage('Browser Agent: observability 仓库已刷新');
+    },
+  );
+
+  const revealObservabilityDirCmd = vscode.commands.registerCommand(
+    'browser-agent.revealObservabilityDir',
+    async (target: 'root' | 'exports' = 'root') => {
+      const directory = target === 'exports'
+        ? observabilityStore?.getDiagnosticExportsDirectory()
+        : observabilityStore?.getObservabilityDirectory();
+      if (!directory) {
+        vscode.window.showWarningMessage('Browser Agent: observability 目录尚未初始化');
+        return;
+      }
+      const uri = vscode.Uri.file(directory);
+      await vscode.commands.executeCommand('revealFileInOS', uri);
+    },
+  );
+
   outputChannel.appendLine('[BrowserAgent] Activity Bar 调试视图已注册');
 
   // 注册 dispose（含进程级错误处理器清理，避免插件停用后干扰其他扩展）
@@ -230,16 +277,20 @@ export function activate(context: vscode.ExtensionContext): void {
     connectionTreeView,
     messageTreeView,
     agentTreeView,
+    observabilityTreeView,
     skillTreeView,
     docProviderDisposable,
     clearMessageLogCmd,
     openMessageDetailCmd,
+    refreshObservabilityCmd,
+    revealObservabilityDirCmd,
     runSkillCmd,
     toggleSkillCmd,
     addCustomSkillCmd,
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
+    { dispose: () => observabilityTree?.dispose() },
     { dispose: () => skillTree?.dispose() },
     { dispose: () => skillRegistry?.dispose() },
     { dispose: () => browserToolProvider?.dispose() },
@@ -252,7 +303,7 @@ export function activate(context: vscode.ExtensionContext): void {
   outputChannel.appendLine('[BrowserAgent] 插件激活完成');
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
   reportGenerator?.cancel();
   reportGenerator = undefined;
   skillRunner = undefined;
@@ -268,12 +319,14 @@ export function deactivate(): void {
   agentTree = undefined;
   skillTree?.dispose();
   skillTree = undefined;
-  userDataManager?.dispose();
-  userDataManager = undefined;
-  void mcpClient?.dispose();
-  mcpClient = undefined;
   wsServer?.dispose();
   wsServer = undefined;
+  await observabilityStore?.dispose();
+  observabilityStore = undefined;
+  userDataManager?.dispose();
+  userDataManager = undefined;
+  await mcpClient?.dispose();
+  mcpClient = undefined;
   lmService?.dispose();
   lmService = undefined;
 }

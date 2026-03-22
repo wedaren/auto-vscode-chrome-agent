@@ -13,6 +13,8 @@ import { SkillRunner } from './skill-runner';
 import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
 import { LlmRequestCollector, LlmRequestDetail } from './llm-request-collector';
+import { createChildMeta } from './observability';
+import type { ObservabilityStore } from './observability-store';
 import {
   smartTruncate,
   estimateTokens,
@@ -38,6 +40,7 @@ export class MessageHandler {
   private readonly browserToolProvider: BrowserToolProvider;
   private readonly skillRegistry?: SkillRegistry;
   private readonly skillRunner?: SkillRunner;
+  private readonly observabilityStore?: ObservabilityStore;
   private readonly outputChannel: vscode.OutputChannel;
 
   /** LLM 请求细节采集器，记录每次 chat/agent 请求的完整链路数据 */
@@ -69,6 +72,7 @@ export class MessageHandler {
     browserToolProvider: BrowserToolProvider,
     skillRegistry?: SkillRegistry,
     skillRunner?: SkillRunner,
+    observabilityStore?: ObservabilityStore,
   ) {
     this.lmService = lmService;
     this.wsServer = wsServer;
@@ -77,6 +81,16 @@ export class MessageHandler {
     this.browserToolProvider = browserToolProvider;
     this.skillRegistry = skillRegistry;
     this.skillRunner = skillRunner;
+    this.observabilityStore = observabilityStore;
+  }
+
+  private childMeta(msg: BridgeMessage, event: string, requestId?: string) {
+    return createChildMeta(msg.meta, {
+      source: 'vscode-agent',
+      event,
+      sessionId: msg.sessionId,
+      requestId,
+    });
   }
 
   /**
@@ -149,12 +163,27 @@ export class MessageHandler {
       case 'skill_execute':
         this.handleSkillExecute(ws, msg);
         break;
+      case 'observability_get_stats':
+        this.handleObservabilityGetStats(ws, msg);
+        break;
       default:
         this.outputChannel.appendLine(
           `[BrowserAgent] 未处理的消息类型: ${msg.type}`,
         );
         break;
     }
+  }
+
+  private handleObservabilityGetStats(ws: WebSocket, msg: BridgeMessage): void {
+    // 统计聚合也统一在仓库侧完成，避免 Chrome 本地数组和仓库口径不一致。
+    const payload = msg.payload as { windowMs?: number } | undefined;
+    const stats = this.observabilityStore?.getStats(payload?.windowMs) ?? null;
+    this.wsServer.send(ws, {
+      type: 'observability_stats_result',
+      payload: { stats },
+      sessionId: msg.sessionId,
+      meta: this.childMeta(msg, 'observability.stats.result'),
+    });
   }
 
   /**
@@ -179,6 +208,7 @@ export class MessageHandler {
           maxVisibleModels: prefs.maxVisibleModels,
         },
         sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'models.list.result'),
       });
       return;
     }
@@ -199,6 +229,7 @@ export class MessageHandler {
             maxVisibleModels: prefs.maxVisibleModels,
           },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'models.list.result'),
         });
         this.outputChannel.appendLine(
           `[BrowserAgent] 已返回 ${models.length} 个模型信息`,
@@ -223,6 +254,7 @@ export class MessageHandler {
           type: 'model_selected',
           payload: { success, modelId },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'models.select.result', modelId),
         });
         this.outputChannel.appendLine(
           `[BrowserAgent] select_model modelId=${modelId} 结果: ${success ? '成功' : '未找到'}`,
@@ -235,6 +267,7 @@ export class MessageHandler {
           type: 'model_selected',
           payload: { success: false, modelId: '' },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'models.select.result'),
         });
       }
     })();
@@ -259,7 +292,8 @@ export class MessageHandler {
       `[BrowserAgent] chat 收到消息，context: url=${context?.url ?? '无'}, title=${context?.title ?? '无'}, selectedText=${context?.selectedText ? `${context.selectedText.length}字` : '无'}`,
     );
 
-    // 只要 MCP 或原生浏览器工具任一可用，就进入 Agent 模式
+    // 只要 MCP 或原生浏览器工具任一可用，就进入 Agent 模式。
+    // 这样 observability trace 能覆盖 tool/agent 整条链路，而不退化成纯聊天流。
     const hasToolSource = this.mcpClient.connected || this.browserToolProvider.connected;
 
     if (hasToolSource) {
@@ -321,6 +355,7 @@ export class MessageHandler {
           {
             systemPrompt,
             onStep: (step: AgentStep) => {
+              // agent_step 既是前端实时 UI 更新，也是 trace 中的关键执行事件。
               // 每个 AgentStep 实时推送 agent_step 消息（→ Chrome UI）
               // observe 步骤可能含 imageData（截图 base64 URL），传给前端渲染图片
               this.wsServer.send(ws, {
@@ -334,6 +369,7 @@ export class MessageHandler {
                   ...(step.imageData ? { imageData: step.imageData } : {}),
                 },
                 sessionId: msg.sessionId,
+                meta: this.childMeta(msg, 'agent.step'),
               });
 
               // 同步追加到 Agent 循环 TreeView（→ VSCode 调试面板）
@@ -370,6 +406,7 @@ export class MessageHandler {
             llmDetail,
           },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'agent.complete'),
         });
 
         this.outputChannel.appendLine(
@@ -391,6 +428,7 @@ export class MessageHandler {
               cancelled: true,
             },
             sessionId: msg.sessionId,
+            meta: this.childMeta(msg, 'agent.cancelled'),
           });
           this.outputChannel.appendLine(
             '[BrowserAgent] AgentLoop 被用户取消',
@@ -409,6 +447,7 @@ export class MessageHandler {
               totalSteps: 0,
             },
             sessionId: msg.sessionId,
+            meta: this.childMeta(msg, 'agent.error'),
           });
           this.outputChannel.appendLine(
             `[BrowserAgent] AgentLoop 错误: ${errMsg}`,
@@ -456,10 +495,12 @@ export class MessageHandler {
         const fullText = await this.lmService.sendMessageStreaming(
           text,
           (fragment: string) => {
+            // 流式模式下每个 chunk 都沿原始 trace 返回，便于看 first-token/尾延迟。
             this.wsServer.send(ws, {
               type: 'chat_response_chunk',
               payload: { text: fragment, done: false },
               sessionId: msg.sessionId,
+              meta: this.childMeta(msg, 'chat.stream.chunk'),
             });
           },
           systemPrompt,
@@ -475,6 +516,7 @@ export class MessageHandler {
           type: 'chat_response_end',
           payload: { fullText, llmDetail },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'chat.stream.end'),
         });
       } catch (err) {
         const isCancelled = cts.token.isCancellationRequested;
@@ -497,6 +539,7 @@ export class MessageHandler {
             cancelled: isCancelled,
           },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, isCancelled ? 'chat.stream.cancelled' : 'chat.stream.error'),
         });
         if (!isCancelled) {
           this.outputChannel.appendLine(
@@ -532,6 +575,7 @@ export class MessageHandler {
         type: 'skill_list_result',
         payload: { skills: [], scenarios: [] },
         sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'skill.list.result'),
       });
       this.outputChannel.appendLine(
         '[BrowserAgent] skill_list 请求但 SkillRegistry 未初始化',
@@ -545,6 +589,7 @@ export class MessageHandler {
       type: 'skill_list_result',
       payload: { skills, scenarios },
       sessionId: msg.sessionId,
+      meta: this.childMeta(msg, 'skill.list.result'),
     });
     this.outputChannel.appendLine(
       `[BrowserAgent] 已返回 ${skills.length} 个 Skill, ${scenarios.length} 个预设场景`,
@@ -576,6 +621,7 @@ export class MessageHandler {
           summary: 'Skill 系统未初始化',
         },
         sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'skill.complete'),
       });
       this.outputChannel.appendLine(
         '[BrowserAgent] skill_execute 请求但 SkillRegistry/SkillRunner 未初始化',
@@ -593,6 +639,7 @@ export class MessageHandler {
           summary: `未找到 Skill: ${skillName}`,
         },
         sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'skill.complete'),
       });
       this.outputChannel.appendLine(
         `[BrowserAgent] skill_execute 未找到 Skill: ${skillName}`,
@@ -648,6 +695,7 @@ export class MessageHandler {
                 ...(progress.durationMs !== undefined ? { durationMs: progress.durationMs } : {}),
               },
               sessionId: msg.sessionId,
+              meta: this.childMeta(msg, 'skill.progress'),
             });
           },
           undefined, // token
@@ -663,6 +711,7 @@ export class MessageHandler {
             summary: result.summary,
           },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'skill.complete'),
         });
 
         this.outputChannel.appendLine(
@@ -678,6 +727,7 @@ export class MessageHandler {
             summary: `执行异常: ${errMsg}`,
           },
           sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'skill.complete'),
         });
         this.outputChannel.appendLine(
           `[BrowserAgent] Skill "${skillName}" 执行异常: ${errMsg}`,

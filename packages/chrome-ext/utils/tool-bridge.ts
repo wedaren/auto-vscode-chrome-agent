@@ -19,6 +19,7 @@
 //
 
 import type { BridgeMessage } from '../src/ws-client';
+import { createChildMeta, type BridgeMeta } from '../src/observability';
 import type { BrowserAction, ActionResult } from './action-executor';
 
 /** tool_execute 消息的 payload 结构 */
@@ -130,7 +131,7 @@ async function executeViaBackground(action: BrowserAction, targetTabId?: number)
  */
 export async function handleToolExecute(
   msg: BridgeMessage,
-  sendMessage: (type: string, payload: unknown) => boolean,
+  sendMessage: (type: string, payload: unknown, meta?: Partial<BridgeMeta>) => boolean,
 ): Promise<void> {
   const payload = msg.payload as ToolExecutePayload;
   const { requestId, toolName, toolArgs, targetTabId: payloadTargetTabId } = payload;
@@ -162,7 +163,11 @@ export async function handleToolExecute(
   console.log(`[ToolBridge] 发送 tool_result: requestId=${requestId}, success=${result.success}`);
 
   // 发送 tool_result 回 VSCode 侧
-  sendMessage('tool_result', result);
+  sendMessage('tool_result', result, createChildMeta(msg.meta, {
+    source: 'chrome-tool',
+    event: 'tool.result',
+    requestId,
+  }));
 }
 
 /**
@@ -173,7 +178,7 @@ export async function handleToolExecute(
  * @returns 消息处理回调（可注册到 onMessage）
  */
 export function createToolBridgeHandler(
-  sendMessage: (type: string, payload: unknown) => boolean,
+  sendMessage: (type: string, payload: unknown, meta?: Partial<BridgeMeta>) => boolean,
 ): (msg: BridgeMessage) => void {
   return (msg: BridgeMessage) => {
     if (msg.type === 'tool_execute') {

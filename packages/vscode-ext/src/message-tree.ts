@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import type { BridgeMessage } from './ws-server';
+import { sanitizeForLogging } from './observability';
 
 // ---------------------------------------------------------------------------
 // 数据模型
@@ -149,6 +150,7 @@ export class MessageDocumentProvider implements vscode.TextDocumentContentProvid
         messageId: captured.id,
       },
       ...captured.message,
+      payload: sanitizeForLogging(captured.message.payload),
     };
     return JSON.stringify(header, null, 2);
   }
@@ -245,8 +247,11 @@ export class MessageTreeDataProvider implements vscode.TreeDataProvider<MessageT
   private buildItem(captured: CapturedMessage): MessageTreeItem {
     const arrow = captured.direction === 'send' ? '↑' : '↓';
     const time = this.formatTime(captured.timestamp);
-    const payloadPreview = this.truncatePayload(captured.message.payload, 60);
-    const label = `${arrow} ${captured.message.type}  [${time}]  ${payloadPreview}`;
+    const sanitizedPayload = sanitizeForLogging(captured.message.payload);
+    const payloadPreview = this.truncatePayload(sanitizedPayload, 60);
+    const tracePreview = captured.message.meta?.traceId ? ` trace=${captured.message.meta.traceId.slice(0, 14)}` : '';
+    const requestPreview = captured.message.meta?.requestId ? ` request=${captured.message.meta.requestId.slice(0, 12)}` : '';
+    const label = `${arrow} ${captured.message.type}  [${time}]${tracePreview}${requestPreview}  ${payloadPreview}`;
 
     const item = new MessageTreeItem(label, captured);
 
@@ -260,7 +265,9 @@ export class MessageTreeDataProvider implements vscode.TreeDataProvider<MessageT
       `**${captured.direction === 'send' ? '发送' : '接收'}** \`${captured.message.type}\`\n\n` +
       `**时间:** ${captured.timestamp.toLocaleString()}\n\n` +
       `**Session:** ${captured.message.sessionId}\n\n` +
-      `**Payload 预览:**\n\`\`\`json\n${JSON.stringify(captured.message.payload, null, 2).substring(0, 500)}\n\`\`\`\n\n` +
+      `**Trace:** ${captured.message.meta?.traceId ?? 'n/a'}\n\n` +
+      `**Request:** ${captured.message.meta?.requestId ?? 'n/a'}\n\n` +
+      `**Payload 预览:**\n\`\`\`json\n${JSON.stringify(sanitizedPayload, null, 2).substring(0, 500)}\n\`\`\`\n\n` +
       `*点击查看完整 JSON*`,
     );
     (item.tooltip as vscode.MarkdownString).isTrusted = true;

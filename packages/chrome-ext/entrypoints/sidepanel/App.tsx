@@ -21,6 +21,7 @@ import { useChat } from '../../hooks/useChat';
 import { usePageContext } from '../../hooks/usePageContext';
 import { useToast } from '../../hooks/useToast';
 import { useDebugLog } from '../../hooks/useDebugLog';
+import { createRootMeta } from '../../src/observability';
 import type { BridgeMessage } from '../../src/ws-client';
 import type { ConnectionState, ConnectionDetails } from '../../src/ws-client';
 
@@ -29,7 +30,6 @@ type ActiveTab = 'chat' | 'skills' | 'debug';
 
 /** WebSocket 服务端地址（VSCode 插件侧） */
 const WS_URL = 'ws://localhost:7777';
-
 /** 错误日志最大条目数 */
 const MAX_ERROR_LOG_SIZE = 50;
 
@@ -224,9 +224,53 @@ interface AppContentProps {
 
 function AppContent({ errorLog }: AppContentProps) {
   // --- Hooks ---
-  const { isConnected, connectionState, connectionDetails, sendMessage, onMessage, reconnect } = useWebSocket(WS_URL);
   const { toasts, showToast, dismissToast } = useToast();
   const debugLog = useDebugLog();
+  const debugLogRef = useRef(debugLog);
+  debugLogRef.current = debugLog;
+  const bridgeObserver = useMemo(() => ({
+    onBridgeMessage: (direction: 'send' | 'receive', msg: BridgeMessage) => {
+      if (msg.type.startsWith('observability_')) return;
+      const debug = debugLogRef.current;
+      debug.logBridge(direction, msg);
+
+      if (direction === 'receive') {
+        if (msg.type === 'agent_step') {
+          const payload = msg.payload as { step?: string; description?: string; imageData?: string } | undefined;
+          debug.logExecution(
+            `Agent 步骤: ${payload?.step ?? 'unknown'}${payload?.imageData ? ' [含图片]' : ''}`,
+            payload?.description,
+            { meta: msg.meta },
+          );
+        }
+        if (msg.type === 'agent_complete') {
+          debug.logExecution('Agent 执行完成', msg.payload, { meta: msg.meta });
+        }
+        if (msg.type === 'tool_execute') {
+          const payload = msg.payload as { toolName?: string; requestId?: string } | undefined;
+          debug.startTimeline(`工具调用: ${payload?.toolName ?? 'unknown'}`, {
+            detail: payload?.requestId,
+            meta: {
+              ...msg.meta,
+              requestId: payload?.requestId ?? msg.meta?.requestId,
+            },
+          });
+        }
+        if (msg.type === 'skill_progress') {
+          const payload = msg.payload as { skillName?: string; description?: string } | undefined;
+          debug.logExecution(`Skill 进度: ${payload?.skillName ?? 'unknown'}`, payload?.description, { meta: msg.meta });
+        }
+      }
+
+      if (direction === 'send' && msg.type === 'tool_result') {
+        const payload = msg.payload as { requestId?: string; success?: boolean; error?: string } | undefined;
+        if (payload?.requestId) {
+          debug.endTimelineByRequestId(payload.requestId, payload.success ? 'done' : 'error', payload.error);
+        }
+      }
+    },
+  }), []);
+  const { isConnected, connectionState, connectionDetails, sendMessage, onMessage, reconnect } = useWebSocket(WS_URL, bridgeObserver);
 
   /** Toast 回调桥接：将 useChat 内部错误通过 Toast 显示 */
   const handleChatToast = useCallback(
@@ -265,9 +309,7 @@ function AppContent({ errorLog }: AppContentProps) {
   // connectionDetailsRef / debugLogRef: 避免将对象引用放入 effect 依赖数组
   const prevConnectionStateRef = useRef<ConnectionState>(connectionState);
   const connectionDetailsRef = useRef<ConnectionDetails>(connectionDetails);
-  const debugLogRef = useRef(debugLog);
   connectionDetailsRef.current = connectionDetails;
-  debugLogRef.current = debugLog;
 
   // --- 侧栏抽屉状态 ---
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -281,30 +323,6 @@ function AppContent({ errorLog }: AppContentProps) {
   // Debug：所有入站消息均记录到 debugLog
   useEffect(() => {
     const unsub = onMessage((msg: BridgeMessage) => {
-      // Debug 日志：记录所有入站消息（通过 ref 读取，避免 debugLog 对象引用进入依赖数组）
-      const debug = debugLogRef.current;
-      debug.logInbound(msg.type, msg.payload);
-
-      // 执行时间线：跟踪 agent_step / agent_complete / tool_execute / tool_result / skill 事件
-      if (msg.type === 'agent_step') {
-        const payload = msg.payload as { step?: string; type?: string; description?: string; imageData?: string } | undefined;
-        debug.logExecution(
-          `Agent 步骤: ${payload?.step ?? 'unknown'}${payload?.imageData ? ' [含图片]' : ''}`,
-          payload?.description,
-        );
-      }
-      if (msg.type === 'agent_complete') {
-        debug.logExecution('Agent 执行完成', msg.payload);
-      }
-      if (msg.type === 'tool_execute') {
-        const payload = msg.payload as { toolName?: string; requestId?: string } | undefined;
-        debug.startTimeline(`工具调用: ${payload?.toolName ?? 'unknown'}`, payload?.requestId);
-      }
-      if (msg.type === 'skill_progress') {
-        const payload = msg.payload as { skillName?: string; description?: string } | undefined;
-        debug.logExecution(`Skill 进度: ${payload?.skillName ?? 'unknown'}`, payload?.description);
-      }
-
       // tool_execute 由 useWebSocket 内的 tool-bridge 处理，tool_result 由 VSCode 侧处理
       // 这里只处理聊天相关消息
       if (msg.type === 'tool_execute' || msg.type === 'tool_result') {
@@ -369,9 +387,10 @@ function AppContent({ errorLog }: AppContentProps) {
     // 仅在状态从非 connected 转换为 connected 时发送 list_models（防止死循环）
     if (prevState !== 'connected' && connectionState === 'connected') {
       setModelsLoading(true);
-      sendMessage('list_models', null);
-      // Debug：记录出站消息
-      debug.logOutbound('list_models', null);
+      sendMessage('list_models', null, createRootMeta({
+        source: 'chrome-ui',
+        event: 'models.list.request',
+      }));
       showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
     if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
@@ -406,14 +425,15 @@ function AppContent({ errorLog }: AppContentProps) {
 
   const handleModelSelect = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
-    sendMessage('select_model', { modelId });
-    debugLogRef.current.logOutbound('select_model', { modelId });
+    sendMessage('select_model', { modelId }, createRootMeta({
+      source: 'chrome-ui',
+      event: 'models.select',
+      requestId: modelId,
+    }));
   }, [sendMessage]);
 
   const handleSendMessage = useCallback((content: string) => {
     chatSend(content, pageContext);
-    // Debug：记录出站 chat 消息（通过 ref 读取，避免 debugLog 对象引用进入依赖数组）
-    debugLogRef.current.logOutbound('chat', { text: content, hasContext: !!pageContext.url });
   }, [chatSend, pageContext]);
 
   const handleQuickAction = useCallback((action: string) => {

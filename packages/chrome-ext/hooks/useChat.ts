@@ -5,6 +5,7 @@
 // 支持消息发送状态跟踪（sending/sent/failed）+ 失败消息一键重试
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { BridgeMessage } from '../src/ws-client';
+import { createRootMeta, type BridgeMeta } from '../src/observability';
 import { createMessage, type Message } from '../utils/message-factory';
 import type { AgentStep } from '../components/AgentStepView';
 import { useChatStorage, type Conversation, type ConversationMeta } from './useChatStorage';
@@ -29,7 +30,7 @@ export interface ChatToastCallback {
 /** useChat Hook 配置项 */
 interface UseChatOptions {
   /** WebSocket 消息发送函数（来自 useWebSocket） */
-  sendMessage: (type: string, payload: unknown) => boolean;
+  sendMessage: (type: string, payload: unknown, meta?: Partial<BridgeMeta>) => boolean;
   /** Toast 通知回调（可选，用于非阻塞错误提示） */
   onToast?: ChatToastCallback;
 }
@@ -392,7 +393,12 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
                 selectedText: context.selectedText,
               }
             : undefined,
-        });
+        }, createRootMeta({
+          source: 'chrome-ui',
+          event: 'chat.send',
+          requestId: userMsg.id,
+          conversationId: conversationIdRef.current,
+        }));
 
         if (sent) {
           // 发送成功：更新消息状态为 sent
@@ -466,7 +472,11 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
   const handleCancel = useCallback(() => {
     try {
       if (isStreaming) {
-        sendMessage('cancel_chat', null);
+        sendMessage('cancel_chat', null, createRootMeta({
+          source: 'chrome-ui',
+          event: 'chat.cancel',
+          conversationId: conversationIdRef.current,
+        }));
         console.log('[useChat] 已发送 cancel_chat');
       }
     } catch (err) {

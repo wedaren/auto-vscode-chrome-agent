@@ -28,13 +28,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { captureMessage } from './message-tree';
+import { type BridgeMessage, type BridgeMeta, buildObservedEvent, createChildMeta, formatEventLine, normalizeMeta, sanitizeForLogging, summarizePayload } from './observability';
+import type { ObservabilityStore } from './observability-store';
 
-/** Chrome ↔ VSCode 桥接消息协议 */
-export interface BridgeMessage {
-  type: string;
-  payload: unknown;
-  sessionId: string;
-}
+export type { BridgeMessage, BridgeMeta } from './observability';
 
 /** tool_result 消息的 payload 结构 */
 export interface ToolResultPayload {
@@ -87,10 +84,47 @@ export class WsServer {
   /** 状态变更事件，当 listening / clientCount 变化时触发 */
   private readonly _onDidChangeState = new vscode.EventEmitter<void>();
   readonly onDidChangeState = this._onDidChangeState.event;
+  private observabilityStore: ObservabilityStore | null = null;
+
+  private shouldRecordObservedMessage(msgType: string): boolean {
+    // observability 控制面消息是“读/管 observability 仓库”的元流量，
+    // 不能再回写进仓库，否则会把查询结果嵌套进后续查询结果里。
+    return !msgType.startsWith('observability_');
+  }
 
   constructor(outputChannel: vscode.OutputChannel, port: number = 7777) {
     this.outputChannel = outputChannel;
     this._port = port;
+  }
+
+  setObservabilityStore(store: ObservabilityStore): void {
+    this.observabilityStore = store;
+  }
+
+  /**
+   * 统一记录服务端结构化事件。
+   * 除了 OutputChannel 单行输出外，还会把事件异步灌入权威 observability 仓库。
+   */
+  private logObserved(
+    level: 'debug' | 'info' | 'warn' | 'error',
+    source: string,
+    event: string,
+    summary: string,
+    meta?: Partial<BridgeMeta>,
+    data?: unknown,
+  ): void {
+    const observedEvent = buildObservedEvent({
+      level,
+      source,
+      event,
+      summary,
+      meta,
+      data,
+      redaction: data === undefined ? 'none' : 'masked',
+    });
+    const line = formatEventLine(observedEvent);
+    this.outputChannel.appendLine(line);
+    void this.observabilityStore?.ingest({ events: [observedEvent] });
   }
 
   /** 当前监听端口 */
@@ -171,10 +205,28 @@ export class WsServer {
 
         ws.on('message', (data: Buffer) => {
           try {
-            const msg = JSON.parse(data.toString()) as BridgeMessage;
-            this.outputChannel.appendLine(
-              `[WsServer] 收到消息: type=${msg.type}, sessionId=${msg.sessionId}`,
-            );
+            const rawMsg = JSON.parse(data.toString()) as Partial<BridgeMessage>;
+            const msg: BridgeMessage = {
+              type: rawMsg.type ?? 'unknown',
+              payload: rawMsg.payload,
+              sessionId: rawMsg.sessionId ?? this.activeSessionId ?? '',
+              meta: normalizeMeta(rawMsg.meta, {
+                sessionId: rawMsg.sessionId ?? this.activeSessionId ?? '',
+                source: 'chrome-ws',
+                event: `bridge.${rawMsg.type ?? 'unknown'}`,
+              }),
+            };
+            const sanitizedPayload = sanitizeForLogging(msg.payload);
+            if (this.shouldRecordObservedMessage(msg.type)) {
+              this.logObserved(
+                'debug',
+                msg.meta?.source ?? 'chrome-ws',
+                'bridge.receive',
+                `${msg.type} · ${summarizePayload(sanitizedPayload)}`,
+                msg.meta,
+                { payload: sanitizedPayload },
+              );
+            }
 
             // 记录客户端 sessionId（首次消息时记录，后续变更时更新）
             if (msg.sessionId && msg.sessionId !== this.activeSessionId) {
@@ -244,15 +296,40 @@ export class WsServer {
   private handleMessage(ws: WebSocket, msg: BridgeMessage): void {
     switch (msg.type) {
       case 'ping':
-        this.send(ws, { type: 'pong', payload: null, sessionId: msg.sessionId });
+        this.send(ws, {
+          type: 'pong',
+          payload: null,
+          sessionId: msg.sessionId,
+          meta: createChildMeta(msg.meta, {
+            source: 'vscode-ws',
+            event: 'heartbeat.pong',
+            sessionId: msg.sessionId,
+          }),
+        });
         break;
       case 'heartbeat_ping':
-        this.send(ws, { type: 'heartbeat_pong', payload: msg.payload, sessionId: msg.sessionId });
+        this.send(ws, {
+          type: 'heartbeat_pong',
+          payload: msg.payload,
+          sessionId: msg.sessionId,
+          meta: createChildMeta(msg.meta, {
+            source: 'vscode-ws',
+            event: 'heartbeat.pong',
+            sessionId: msg.sessionId,
+          }),
+        });
         break;
       case 'chat': {
         // 收到 Chrome 侧的用户聊天消息
         const text = (msg.payload as { text?: string })?.text ?? '';
-        this.outputChannel.appendLine(`[WsServer] 收到聊天消息: ${text}`);
+        this.logObserved(
+          'info',
+          'vscode-ws',
+          'chat.receive',
+          `chat 收到消息（长度 ${text.length}）`,
+          msg.meta,
+          { text: sanitizeForLogging(text) },
+        );
 
         // 如果有外部处理器，委托处理；否则 echo 回去
         if (this.externalHandler) {
@@ -309,8 +386,27 @@ export class WsServer {
    */
   send(ws: WebSocket, msg: BridgeMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
-      captureMessage('send', msg);
+      // 所有出站消息都在这里补齐/标准化 meta，确保 trace 在服务端响应链路中不中断。
+      const normalizedMsg: BridgeMessage = {
+        ...msg,
+        meta: normalizeMeta(msg.meta, {
+          sessionId: msg.sessionId,
+          source: 'vscode-ws',
+          event: `bridge.${msg.type}`,
+        }),
+      };
+      ws.send(JSON.stringify(normalizedMsg));
+      captureMessage('send', normalizedMsg);
+      if (this.shouldRecordObservedMessage(normalizedMsg.type)) {
+        this.logObserved(
+          'debug',
+          normalizedMsg.meta?.source ?? 'vscode-ws',
+          'bridge.send',
+          `${normalizedMsg.type} · ${summarizePayload(sanitizeForLogging(normalizedMsg.payload))}`,
+          normalizedMsg.meta,
+          { payload: sanitizeForLogging(normalizedMsg.payload) },
+        );
+      }
     }
   }
 
@@ -319,8 +415,27 @@ export class WsServer {
    */
   broadcast(msg: BridgeMessage): void {
     if (this.activeClient && this.activeClient.readyState === WebSocket.OPEN) {
-      this.activeClient.send(JSON.stringify(msg));
-      captureMessage('send', msg);
+      // broadcast 与 send 走同一套 observability 记录逻辑，避免出现“只记录点对点发送”的盲区。
+      const normalizedMsg: BridgeMessage = {
+        ...msg,
+        meta: normalizeMeta(msg.meta, {
+          sessionId: msg.sessionId,
+          source: 'vscode-ws',
+          event: `bridge.${msg.type}`,
+        }),
+      };
+      this.activeClient.send(JSON.stringify(normalizedMsg));
+      captureMessage('send', normalizedMsg);
+      if (this.shouldRecordObservedMessage(normalizedMsg.type)) {
+        this.logObserved(
+          'debug',
+          normalizedMsg.meta?.source ?? 'vscode-ws',
+          'bridge.send',
+          `${normalizedMsg.type} · ${summarizePayload(sanitizeForLogging(normalizedMsg.payload))}`,
+          normalizedMsg.meta,
+          { payload: sanitizeForLogging(normalizedMsg.payload) },
+        );
+      }
     }
   }
 
@@ -350,13 +465,16 @@ export class WsServer {
     const payload = msg.payload as Record<string, unknown>;
     const requestId = (payload?.requestId as string) || crypto.randomUUID();
 
-    // 如果 payload 中没有 requestId，补充上
-    if (!payload?.requestId) {
-      msg = {
-        ...msg,
-        payload: { ...payload, requestId },
-      };
-    }
+    msg = {
+      ...msg,
+      payload: payload?.requestId ? payload : { ...payload, requestId },
+      meta: createChildMeta(msg.meta, {
+        source: 'vscode-ws',
+        event: 'tool.execute',
+        sessionId: msg.sessionId,
+        requestId,
+      }),
+    };
 
     // disposal guard：dispose 后拒绝新增 pendingRequests
     if (this._disposed) {

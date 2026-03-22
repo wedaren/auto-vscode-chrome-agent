@@ -1,109 +1,101 @@
-// useDebugLog.ts — Debug 日志管理 Hook
-// 职责：
-// - 捕获所有 WebSocket 消息（入站 + 出站标记）
-// - 跟踪连接状态变迁事件
-// - 记录执行时间线（Agent 步骤、工具调用、Skill 执行等）
-// - 提供开关控制（启用/禁用日志采集、自动滚动）
-// - 提供过滤、清空、导出功能
+// useDebugLog.ts — Chrome 侧本地调试事件流容器
+// 职责：把 bridge 收发、连接状态、执行事件和错误统一收敛成结构化日志，
+//       同时维护本地 timeline，供 DebugPanel 和离线补发队列复用。
 
 import { useState, useRef, useCallback, useMemo } from 'react';
+import type { BridgeMessage, BridgeMeta, ObservabilityEvent, ObservabilitySource } from '../src/observability';
+import { buildObservedEvent, sanitizeForLogging, summarizePayload } from '../src/observability';
 
-/** Debug 日志条目类型 */
 export type DebugLogType = 'message_in' | 'message_out' | 'connection' | 'execution' | 'error';
 
-/** Debug 日志条目 */
-export interface DebugLogEntry {
-  /** 唯一 ID */
-  id: string;
-  /** 时间戳 */
-  timestamp: number;
-  /** 日志类型 */
+export interface DebugLogEntry extends ObservabilityEvent {
   type: DebugLogType;
-  /** 标签（消息 type / 状态名 / 事件名） */
   label: string;
-  /** 详情数据（JSON 序列化后展示） */
   detail: unknown;
-  /** 耗时（仅执行事件，ms） */
+  timestamp: number;
   duration?: number;
 }
 
-/** 执行时间线条目 */
 export interface TimelineEntry {
-  /** 唯一 ID */
   id: string;
-  /** 开始时间 */
   startTime: number;
-  /** 结束时间（未完成时为 0） */
   endTime: number;
-  /** 事件类型标签 */
   label: string;
-  /** 状态 */
   status: 'running' | 'done' | 'error';
-  /** 详情 */
   detail?: string;
+  traceId?: string;
+  requestId?: string;
 }
 
-/** Debug 开关配置 */
 export interface DebugToggles {
-  /** 是否启用日志采集 */
   enabled: boolean;
-  /** 是否自动滚动到最新日志 */
   autoScroll: boolean;
-  /** 是否记录心跳消息 */
   showHeartbeat: boolean;
-  /** 是否记录 pong 消息 */
   showPong: boolean;
 }
 
-/** useDebugLog 返回值 */
 export interface UseDebugLogReturn {
-  /** 全部日志条目 */
   logs: DebugLogEntry[];
-  /** 执行时间线 */
   timeline: TimelineEntry[];
-  /** 开关配置 */
   toggles: DebugToggles;
-  /** 添加入站消息日志 */
-  logInbound: (msgType: string, payload: unknown) => void;
-  /** 添加出站消息日志 */
-  logOutbound: (msgType: string, payload: unknown) => void;
-  /** 添加连接状态变迁日志 */
-  logConnection: (state: string, detail?: unknown) => void;
-  /** 添加执行事件日志 */
-  logExecution: (label: string, detail?: unknown, duration?: number) => void;
-  /** 添加错误日志 */
-  logError: (label: string, detail?: unknown) => void;
-  /** 开始一个时间线事件（返回 id，后续通过 endTimeline 结束） */
-  startTimeline: (label: string, detail?: string) => string;
-  /** 结束一个时间线事件 */
-  endTimeline: (id: string, status?: 'done' | 'error') => void;
-  /** 清空所有日志 */
+  logBridge: (direction: 'send' | 'receive', msg: BridgeMessage) => void;
+  logConnection: (state: string, detail?: unknown, meta?: Partial<BridgeMeta>) => void;
+  logExecution: (
+    label: string,
+    detail?: unknown,
+    options?: { duration?: number; meta?: Partial<BridgeMeta>; source?: ObservabilitySource | string },
+  ) => void;
+  logError: (label: string, detail?: unknown, meta?: Partial<BridgeMeta>) => void;
+  startTimeline: (label: string, options?: { detail?: string; meta?: Partial<BridgeMeta> }) => string;
+  endTimeline: (id: string, status?: 'done' | 'error', detail?: string) => void;
+  endTimelineByRequestId: (requestId: string, status?: 'done' | 'error', detail?: string) => void;
   clearLogs: () => void;
-  /** 清空时间线 */
   clearTimeline: () => void;
-  /** 更新开关配置 */
   setToggles: (updater: Partial<DebugToggles> | ((prev: DebugToggles) => DebugToggles)) => void;
-  /** 导出日志为 JSON 字符串 */
   exportLogs: () => string;
-  /** 按类型过滤的日志 */
-  getFilteredLogs: (filter: DebugLogType | 'all') => DebugLogEntry[];
-  /** 日志总计数 */
   stats: { total: number; inbound: number; outbound: number; connection: number; execution: number; error: number };
 }
 
-/** 日志最大条目数 */
-const MAX_LOG_ENTRIES = 500;
-
-/** 时间线最大条目数 */
-const MAX_TIMELINE_ENTRIES = 100;
-
-/** 心跳消息类型集合 */
+const MAX_LOG_ENTRIES = 800;
+const MAX_TIMELINE_ENTRIES = 200;
 const HEARTBEAT_TYPES = new Set(['heartbeat_ping', 'heartbeat_pong']);
 const PONG_TYPES = new Set(['pong']);
 
 let idCounter = 0;
 function nextId(): string {
   return `dbg_${Date.now()}_${++idCounter}`;
+}
+
+function toLogEntry(input: {
+  type: DebugLogType;
+  label: string;
+  detail: unknown;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  source: ObservabilitySource | string;
+  event: string;
+  durationMs?: number;
+  meta?: Partial<BridgeMeta>;
+  redaction?: 'none' | 'masked' | 'omitted';
+}): DebugLogEntry {
+  const event = buildObservedEvent({
+    level: input.level,
+    source: input.source,
+    event: input.event,
+    summary: input.label,
+    data: input.detail,
+    meta: input.meta,
+    durationMs: input.durationMs,
+    redaction: input.redaction,
+  });
+
+  return {
+    ...event,
+    type: input.type,
+    label: input.label,
+    detail: input.detail,
+    timestamp: event.ts,
+    duration: input.durationMs,
+  };
 }
 
 export function useDebugLog(): UseDebugLogReturn {
@@ -116,11 +108,12 @@ export function useDebugLog(): UseDebugLogReturn {
     showPong: false,
   });
 
-  // useRef 存储最新 toggles 以便在回调中无闭包陈旧问题
   const togglesRef = useRef(toggles);
   togglesRef.current = toggles;
 
-  /** 添加日志条目（内部） */
+  const requestTimelineRef = useRef<Map<string, string>>(new Map());
+
+  /** 追加结构化日志，维持固定大小的 ring buffer。 */
   const addLog = useCallback((entry: DebugLogEntry) => {
     setLogs((prev) => {
       const next = [...prev, entry];
@@ -128,177 +121,174 @@ export function useDebugLog(): UseDebugLogReturn {
     });
   }, []);
 
-  /** 添加入站消息日志 */
-  const logInbound = useCallback((msgType: string, payload: unknown) => {
+  const logBridge = useCallback((direction: 'send' | 'receive', msg: BridgeMessage) => {
     if (!togglesRef.current.enabled) return;
-    if (!togglesRef.current.showHeartbeat && HEARTBEAT_TYPES.has(msgType)) return;
-    if (!togglesRef.current.showPong && PONG_TYPES.has(msgType)) return;
+    if (!togglesRef.current.showHeartbeat && HEARTBEAT_TYPES.has(msg.type)) return;
+    if (!togglesRef.current.showPong && PONG_TYPES.has(msg.type)) return;
 
-    addLog({
-      id: nextId(),
-      timestamp: Date.now(),
-      type: 'message_in',
-      label: msgType,
-      detail: payload,
-    });
+    const sanitizedPayload = sanitizeForLogging(msg.payload);
+    addLog(toLogEntry({
+      type: direction === 'receive' ? 'message_in' : 'message_out',
+      label: `${msg.type} · ${summarizePayload(sanitizedPayload)}`,
+      detail: { payload: sanitizedPayload, meta: msg.meta },
+      level: 'debug',
+      source: msg.meta?.source ?? (direction === 'receive' ? 'vscode-ws' : 'chrome-ws'),
+      event: direction === 'receive' ? 'bridge.receive' : 'bridge.send',
+      meta: msg.meta,
+      redaction: 'masked',
+    }));
   }, [addLog]);
 
-  /** 添加出站消息日志 */
-  const logOutbound = useCallback((msgType: string, payload: unknown) => {
+  /** 记录连接状态变迁，供 DebugPanel 仪表盘和离线诊断复用。 */
+  const logConnection = useCallback((state: string, detail?: unknown, meta?: Partial<BridgeMeta>) => {
     if (!togglesRef.current.enabled) return;
-    if (!togglesRef.current.showHeartbeat && HEARTBEAT_TYPES.has(msgType)) return;
-
-    addLog({
-      id: nextId(),
-      timestamp: Date.now(),
-      type: 'message_out',
-      label: msgType,
-      detail: payload,
-    });
-  }, [addLog]);
-
-  /** 添加连接状态变迁日志 */
-  const logConnection = useCallback((state: string, detail?: unknown) => {
-    if (!togglesRef.current.enabled) return;
-
-    addLog({
-      id: nextId(),
-      timestamp: Date.now(),
+    addLog(toLogEntry({
       type: 'connection',
       label: state,
-      detail: detail ?? null,
-    });
+      detail: sanitizeForLogging(detail),
+      level: state === 'failed' ? 'error' : 'info',
+      source: 'chrome-ws',
+      event: 'connection.state',
+      meta,
+      redaction: 'masked',
+    }));
   }, [addLog]);
 
-  /** 添加执行事件日志 */
-  const logExecution = useCallback((label: string, detail?: unknown, duration?: number) => {
+  /** 记录执行类事件，如 Agent 步骤、Skill 进度、工具完成等。 */
+  const logExecution = useCallback((
+    label: string,
+    detail?: unknown,
+    options?: { duration?: number; meta?: Partial<BridgeMeta>; source?: ObservabilitySource | string },
+  ) => {
     if (!togglesRef.current.enabled) return;
-
-    addLog({
-      id: nextId(),
-      timestamp: Date.now(),
+    addLog(toLogEntry({
       type: 'execution',
       label,
-      detail: detail ?? null,
-      duration,
-    });
+      detail: sanitizeForLogging(detail),
+      level: 'info',
+      source: options?.source ?? 'chrome-ui',
+      event: 'execution.event',
+      durationMs: options?.duration,
+      meta: options?.meta,
+      redaction: 'masked',
+    }));
   }, [addLog]);
 
-  /** 添加错误日志 */
-  const logError = useCallback((label: string, detail?: unknown) => {
+  /** 统一错误入口，保证 UI 异常和链路异常都能落到同一事件流。 */
+  const logError = useCallback((label: string, detail?: unknown, meta?: Partial<BridgeMeta>) => {
     if (!togglesRef.current.enabled) return;
-
-    addLog({
-      id: nextId(),
-      timestamp: Date.now(),
+    addLog(toLogEntry({
       type: 'error',
       label,
-      detail: detail ?? null,
-    });
+      detail: sanitizeForLogging(detail),
+      level: 'error',
+      source: 'chrome-ui',
+      event: 'error.event',
+      meta,
+      redaction: 'masked',
+    }));
   }, [addLog]);
 
-  /** 开始时间线事件 */
-  const startTimeline = useCallback((label: string, detail?: string): string => {
+  /** 启动一个本地 timeline span，并按 requestId 建索引以便后续闭环。 */
+  const startTimeline = useCallback((label: string, options?: { detail?: string; meta?: Partial<BridgeMeta> }): string => {
     const id = nextId();
     setTimeline((prev) => {
-      const entry: TimelineEntry = {
+      const next = [...prev, {
         id,
         startTime: Date.now(),
         endTime: 0,
         label,
-        status: 'running',
-        detail,
-      };
-      const next = [...prev, entry];
+        status: 'running' as const,
+        detail: options?.detail,
+        traceId: options?.meta?.traceId,
+        requestId: options?.meta?.requestId,
+      }];
       return next.length > MAX_TIMELINE_ENTRIES ? next.slice(next.length - MAX_TIMELINE_ENTRIES) : next;
     });
+    if (options?.meta?.requestId) {
+      requestTimelineRef.current.set(options.meta.requestId, id);
+    }
     return id;
   }, []);
 
-  /** 结束时间线事件 */
-  const endTimeline = useCallback((id: string, status: 'done' | 'error' = 'done') => {
+  /** 结束指定 timeline span，同时清理 requestId -> spanId 映射。 */
+  const endTimeline = useCallback((id: string, status: 'done' | 'error' = 'done', detail?: string) => {
     setTimeline((prev) =>
-      prev.map((entry) =>
+      prev.map((entry) => (
         entry.id === id
-          ? { ...entry, endTime: Date.now(), status }
-          : entry,
-      ),
+          ? { ...entry, endTime: Date.now(), status, detail: detail ?? entry.detail }
+          : entry
+      )),
     );
+    for (const [requestId, timelineId] of requestTimelineRef.current.entries()) {
+      if (timelineId === id) requestTimelineRef.current.delete(requestId);
+    }
   }, []);
 
-  /** 清空日志 */
-  const clearLogs = useCallback(() => {
-    setLogs([]);
-  }, []);
+  /** 按 requestId 闭环 timeline，用于 tool_execute -> tool_result 的自然匹配。 */
+  const endTimelineByRequestId = useCallback((requestId: string, status: 'done' | 'error' = 'done', detail?: string) => {
+    const id = requestTimelineRef.current.get(requestId);
+    if (!id) return;
+    endTimeline(id, status, detail);
+  }, [endTimeline]);
 
-  /** 清空时间线 */
+  const clearLogs = useCallback(() => setLogs([]), []);
+
   const clearTimeline = useCallback(() => {
+    requestTimelineRef.current.clear();
     setTimeline([]);
   }, []);
 
-  /** 更新开关配置 */
   const setToggles = useCallback((updater: Partial<DebugToggles> | ((prev: DebugToggles) => DebugToggles)) => {
-    setTogglesState((prev) => {
-      if (typeof updater === 'function') return updater(prev);
-      return { ...prev, ...updater };
-    });
+    setTogglesState((prev) => (typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }));
   }, []);
 
-  /** 导出日志 */
-  const exportLogs = useCallback((): string => {
-    return JSON.stringify({ logs, timeline, exportedAt: new Date().toISOString() }, null, 2);
-  }, [logs, timeline]);
+  const exportLogs = useCallback(() => JSON.stringify({
+    logs,
+    timeline,
+    exportedAt: new Date().toISOString(),
+  }, null, 2), [logs, timeline]);
 
-  /** 按类型过滤 */
-  const getFilteredLogs = useCallback((filter: DebugLogType | 'all'): DebugLogEntry[] => {
-    if (filter === 'all') return logs;
-    return logs.filter((l) => l.type === filter);
-  }, [logs]);
-
-  /** 统计信息 */
   const stats = useMemo(() => ({
     total: logs.length,
-    inbound: logs.filter((l) => l.type === 'message_in').length,
-    outbound: logs.filter((l) => l.type === 'message_out').length,
-    connection: logs.filter((l) => l.type === 'connection').length,
-    execution: logs.filter((l) => l.type === 'execution').length,
-    error: logs.filter((l) => l.type === 'error').length,
+    inbound: logs.filter((log) => log.type === 'message_in').length,
+    outbound: logs.filter((log) => log.type === 'message_out').length,
+    connection: logs.filter((log) => log.type === 'connection').length,
+    execution: logs.filter((log) => log.type === 'execution').length,
+    error: logs.filter((log) => log.type === 'error').length,
   }), [logs]);
 
-  // useMemo 稳定化返回对象引用，避免每次渲染创建新对象触发消费者不必要的重渲染
-  return useMemo<UseDebugLogReturn>(() => ({
+  return useMemo(() => ({
     logs,
     timeline,
     toggles,
-    logInbound,
-    logOutbound,
+    logBridge,
     logConnection,
     logExecution,
     logError,
     startTimeline,
     endTimeline,
+    endTimelineByRequestId,
     clearLogs,
     clearTimeline,
     setToggles,
     exportLogs,
-    getFilteredLogs,
     stats,
   }), [
     logs,
     timeline,
     toggles,
-    logInbound,
-    logOutbound,
+    logBridge,
     logConnection,
     logExecution,
     logError,
     startTimeline,
     endTimeline,
+    endTimelineByRequestId,
     clearLogs,
     clearTimeline,
     setToggles,
     exportLogs,
-    getFilteredLogs,
     stats,
   ]);
 }

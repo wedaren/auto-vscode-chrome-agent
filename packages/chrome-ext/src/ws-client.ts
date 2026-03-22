@@ -29,12 +29,9 @@
 // 握手类：welcome（Server → Client，新连接建立时发送，payload: { replacedPrevious }）
 // 心跳类：heartbeat_ping / heartbeat_pong（内部使用，区别于业务 ping/pong）
 
-/** Chrome ↔ VSCode 桥接消息协议（与 VSCode 侧 BridgeMessage 保持一致） */
-export interface BridgeMessage {
-  type: string;
-  payload: unknown;
-  sessionId: string;
-}
+import { type BridgeMessage, type BridgeMeta, normalizeMeta } from './observability';
+
+export type { BridgeMessage, BridgeMeta } from './observability';
 
 /** 完整连接状态机：disconnected → connecting → connected ⇄ reconnecting → failed */
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
@@ -69,6 +66,8 @@ export interface WsClientOptions {
   maxReconnectAttempts?: number;
   /** 心跳发送间隔（毫秒），默认 15000 */
   heartbeatInterval?: number;
+  /** 收发消息观察器（供 Debug / observability 使用） */
+  observeMessage?: (direction: 'send' | 'receive', msg: BridgeMessage) => void;
 }
 
 type MessageHandler = (msg: BridgeMessage) => void;
@@ -106,6 +105,7 @@ export class WsClient {
   private messageHandlers: Set<MessageHandler> = new Set();
   private stateHandlers: Set<StateHandler> = new Set();
   private currentState: ConnectionState = 'disconnected';
+  private readonly observeMessage?: (direction: 'send' | 'receive', msg: BridgeMessage) => void;
 
   constructor(options: WsClientOptions = {}) {
     this.url = options.url ?? 'ws://localhost:7777';
@@ -113,6 +113,7 @@ export class WsClient {
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.heartbeatInterval = options.heartbeatInterval ?? 15000;
     this.sessionId = crypto.randomUUID();
+    this.observeMessage = options.observeMessage;
 
     // 可见性感知重连：Side Panel 隐藏时暂停重连，可见时立即恢复
     this.boundVisibilityHandler = this.handleVisibilityChange.bind(this);
@@ -209,7 +210,18 @@ export class WsClient {
           return;
         }
 
-        const bridgeMsg = msg as BridgeMessage;
+        const rawMsg = msg as Partial<BridgeMessage>;
+        const bridgeMsg: BridgeMessage = {
+          type: rawMsg.type ?? 'unknown',
+          payload: rawMsg.payload,
+          sessionId: rawMsg.sessionId ?? this.sessionId,
+          meta: normalizeMeta(rawMsg.meta, {
+            sessionId: rawMsg.sessionId ?? this.sessionId,
+            source: 'vscode-ws',
+            event: `bridge.${rawMsg.type ?? 'unknown'}`,
+          }),
+        };
+        this.observeMessage?.('receive', bridgeMsg);
 
         // 更新最后活跃时间
         this._lastActiveTime = Date.now();
@@ -287,13 +299,36 @@ export class WsClient {
       console.warn('[WsClient] 未连接，无法发送消息');
       return false;
     }
-    this.ws.send(JSON.stringify(msg));
+    const normalizedMsg: BridgeMessage = {
+      ...msg,
+      sessionId: msg.sessionId || this.sessionId,
+      meta: normalizeMeta(msg.meta, {
+        sessionId: msg.sessionId || this.sessionId,
+        source: 'chrome-ws',
+        event: `bridge.${msg.type}`,
+      }),
+    };
+    this.ws.send(JSON.stringify(normalizedMsg));
+    this.observeMessage?.('send', normalizedMsg);
     return true;
   }
 
-  /** 发送便捷方法：自动填充 sessionId */
-  sendMessage(type: string, payload: unknown): boolean {
-    return this.send({ type, payload, sessionId: this.sessionId });
+  /**
+   * 发送便捷方法：自动填充 sessionId / meta。
+   * 新的 observability 链路要求所有出站消息都尽量带 trace 元数据，
+   * 因此这里统一补齐而不是交给各个调用方零散处理。
+   */
+  sendMessage(type: string, payload: unknown, meta?: Partial<BridgeMeta>): boolean {
+    return this.send({
+      type,
+      payload,
+      sessionId: this.sessionId,
+      meta: normalizeMeta(meta, {
+        sessionId: this.sessionId,
+        source: 'chrome-ui',
+        event: `bridge.${type}`,
+      }),
+    });
   }
 
   /** 断开连接并释放资源 */
@@ -336,6 +371,7 @@ export class WsClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     this.lastPingSentAt = Date.now();
+    // 心跳也走统一 envelope，便于在 Debug/observability 中按同一协议观察收发。
     this.send({ type: 'heartbeat_ping', payload: { timestamp: this.lastPingSentAt }, sessionId: this.sessionId });
   }
 

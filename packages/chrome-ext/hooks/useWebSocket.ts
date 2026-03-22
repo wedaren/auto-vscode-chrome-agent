@@ -3,23 +3,24 @@
 // 同时支持 skill_list / skill_list_result / skill_execute / skill_progress / skill_complete 消息
 // （Skill 相关消息通过 onMessage 分发到 SkillPanel 组件处理）
 // 暴露手动重连方法和连接详情（重连次数、延迟、最后活跃时间）供 UI 展示
-// 优化：connectionDetails 使用浅比较，仅在 state/reconnectCount/latency 实际变化时才触发 setState，
-//       避免每条消息都产生不必要的 React 重渲染
+// 优化：connectionDetails 使用浅比较，仅在关键展示字段变化时才触发 setState，
+//       lastActiveTime 按秒比较，避免每条消息都产生不必要的 React 重渲染
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WsClient, type BridgeMessage, type ConnectionState, type ConnectionDetails } from '../src/ws-client';
+import type { BridgeMeta } from '../src/observability';
 import { createToolBridgeHandler } from '../utils/tool-bridge';
 
 /**
- * ConnectionDetails 浅比较：仅比较会影响 UI 渲染的关键字段
- * （state / reconnectCount / latency / url）
- * lastActiveTime 每条消息都变化但不影响 UI 渲染逻辑，跳过比较以减少无意义的 setState 调用
+ * ConnectionDetails 浅比较：仅比较会影响 UI 渲染的关键字段。
+ * lastActiveTime 按秒取整后比较，保证“最后活跃”能更新，同时避免高频流式消息导致每条都 setState。
  */
 function shallowEqualDetails(prev: ConnectionDetails, next: ConnectionDetails): boolean {
   return (
     prev.state === next.state &&
     prev.reconnectCount === next.reconnectCount &&
     prev.latency === next.latency &&
-    prev.url === next.url
+    prev.url === next.url &&
+    Math.floor(prev.lastActiveTime / 1000) === Math.floor(next.lastActiveTime / 1000)
   );
 }
 
@@ -32,11 +33,15 @@ export interface UseWebSocketReturn {
   /** 连接详情信息（重连次数、延迟、最后活跃时间） */
   connectionDetails: ConnectionDetails;
   /** 发送消息到 VSCode 侧，返回是否发送成功 */
-  sendMessage: (type: string, payload: unknown) => boolean;
+  sendMessage: (type: string, payload: unknown, meta?: Partial<BridgeMeta>) => boolean;
   /** 注册消息监听器，返回取消注册函数 */
   onMessage: (handler: (msg: BridgeMessage) => void) => () => void;
   /** 手动重连（重置重连计数并立即发起连接） */
   reconnect: () => void;
+}
+
+export interface UseWebSocketObserver {
+  onBridgeMessage?: (direction: 'send' | 'receive', msg: BridgeMessage) => void;
 }
 
 /**
@@ -51,7 +56,7 @@ export interface UseWebSocketReturn {
  *   通过 tool-bridge 调用 background EXECUTE_ACTION 并发回 tool_result（不阻塞聊天 UI）
  * - 连接详情暴露：重连次数、心跳延迟、最后活跃时间
  */
-export function useWebSocket(url: string): UseWebSocketReturn {
+export function useWebSocket(url: string, observer?: UseWebSocketObserver): UseWebSocketReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails>({
     state: 'disconnected',
@@ -68,9 +73,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   const isConnected = connectionState === 'connected';
 
   /** 发送消息到 VSCode 侧（try-catch 防护，防止序列化或发送异常导致调用方崩溃） */
-  const sendMessage = useCallback((type: string, payload: unknown): boolean => {
+  const observerRef = useRef(observer);
+  observerRef.current = observer;
+
+  const sendMessage = useCallback((type: string, payload: unknown, meta?: Partial<BridgeMeta>): boolean => {
     try {
-      return wsClientRef.current?.sendMessage(type, payload) ?? false;
+      return wsClientRef.current?.sendMessage(type, payload, meta) ?? false;
     } catch (err) {
       console.error('[useWebSocket] sendMessage 发送失败:', err, '类型:', type);
       return false;
@@ -92,7 +100,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
   // 初始化 WsClient，管理连接生命周期
   useEffect(() => {
-    const client = new WsClient({ url });
+    const client = new WsClient({
+      url,
+      observeMessage: (direction, msg) => {
+        observerRef.current?.onBridgeMessage?.(direction, msg);
+      },
+    });
     wsClientRef.current = client;
 
     // 创建 tool_execute 消息处理器（自动处理工具调用，不阻塞聊天 UI）

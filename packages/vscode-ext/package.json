@@ -58,6 +58,16 @@
         "command": "browser-agent.revealUserDataDir",
         "title": "Browser Agent: 在 VSCode 中打开数据目录",
         "icon": "$(folder)"
+      },
+      {
+        "command": "browser-agent.refreshObservability",
+        "title": "Browser Agent: 刷新 Observability 仓库",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "browser-agent.revealObservabilityDir",
+        "title": "Browser Agent: 打开 Observability 仓库目录",
+        "icon": "$(folder-opened)"
       }
     ],
     "menus": {
@@ -71,6 +81,16 @@
           "command": "browser-agent.addCustomSkill",
           "when": "view == browser-agent-skills",
           "group": "navigation"
+        },
+        {
+          "command": "browser-agent.refreshObservability",
+          "when": "view == browser-agent-observability",
+          "group": "navigation"
+        },
+        {
+          "command": "browser-agent.revealObservabilityDir",
+          "when": "view == browser-agent-observability",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -118,6 +138,10 @@
         {
           "id": "browser-agent-agent-loop",
           "name": "Agent 循环"
+        },
+        {
+          "id": "browser-agent-observability",
+          "name": "Observability 仓库"
         },
         {
           "id": "browser-agent-skills",
