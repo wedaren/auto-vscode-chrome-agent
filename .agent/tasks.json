@@ -1516,7 +1516,7 @@
       "id": "evo_v22_002",
       "type": "coding",
       "title": "增强 injectBilingual 支持 string[] 平坦数组：自动按索引与 data-imt-id 元素配对",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v22_001"
       ],

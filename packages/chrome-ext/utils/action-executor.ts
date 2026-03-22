@@ -649,10 +649,17 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       let items: Array<{ id: string; translated: string }>;
       try {
-        const parsed = JSON.parse(action.translations);
+        let parsed = JSON.parse(action.translations);
+
+        // 防御性自动解包：当 translations 为 {translations:[...]} 包装对象时自动提取数组
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          // 检测 .translations 属性是否为 Array，是则自动解包
+          const inner = (parsed as Record<string, unknown>).translations;
+          if (inner && Array.isArray(inner)) { parsed = inner; }
+        }
 
         if (!Array.isArray(parsed)) {
-          return { success: false, error: 'translations 必须是数组' };
+          return { success: false, error: 'translations 必须是数组或 {translations:[...]} 包装对象' };
         }
 
         // 支持 string[] 平坦数组：自动按索引与 data-imt-id 元素配对
