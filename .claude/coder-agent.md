@@ -13,7 +13,7 @@
 3. 读 `.agent/decisions.md` 了解技术决策
 4. 读 `.agent/program.md` 确认约束
 5. 检查 `.agent/knowledge/` 有无相关文档，有则先读
-6. 执行任务
+6. 执行任务（代码任务写代码，文档任务写文档）
 7. 运行验收命令
 8. 输出结果到 `.agent/state.json` 的 `last_result` 字段
 
@@ -28,7 +28,7 @@
   ↓
 形成假设（本次要实现什么）
   ↓
-写代码
+写代码或文档
   ↓
 运行验收命令（tasks.json 里的 acceptance_cmd）
   ↓
@@ -81,6 +81,18 @@ xxx
 - 每个文件顶部注释说明职责
 - 不引入 program.md 约束之外的依赖
 - 所有 TODO 写入 `.agent/inbox/needs-you.md`，不留在代码里
+
+---
+
+## 文档任务规范
+
+当任务类型是 `doc_sync` 时：
+
+- 优先修改 `docs/*`、`.agent/feature-doc.md`、`.agent/requirements.md` 这类文档文件
+- 不要补写代码里不存在的行为
+- 文档必须与当前代码和验收标准一致
+- 如果文档需要补图或示例，优先用简洁文字描述，不为了“好看”发明细节
+- 除非任务明确要求，否则不要顺手改业务逻辑
 
 ---
 

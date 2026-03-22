@@ -358,7 +358,7 @@ evolution_loop() {
           fi
 
           case "$ttype" in
-            coding)
+            coding|doc_sync)
               coder_out=$(run_coder_agent "$current_task" "$retry" 2>&1) || true
               score_line=$(echo "$coder_out" | grep "^CODER_RESULT:" | tail -1)
               score=$(echo "$score_line" | grep -o 'score=[0-9]*' | cut -d= -f2)
@@ -526,7 +526,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
         ;;
 
       # ── Coding ───────────────────────────────────────────
-      coding)
+      coding|doc_sync)
         # 启动 Coder Agent
         coder_out=$(run_coder_agent "$current_task" "$retry" 2>&1) || true
 
