@@ -1,5 +1,5 @@
 // SkillPanel.tsx — Skill 面板组件
-// 职责：展示可用 Skill 卡片列表、一键触发执行、参数输入弹窗、执行进度实时显示
+// 职责：展示可用 Skill 卡片列表、一键体验场景卡片（零参数执行）、参数输入弹窗、执行进度实时显示
 // 通过 WebSocket skill_list / skill_execute / skill_progress / skill_complete 协议与 VSCode 通信
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import TranslateControl, { isImmersiveTranslateSkill } from './TranslateControl';
@@ -51,6 +51,17 @@ interface SkillExecution {
   summary?: string;
 }
 
+/** 预设场景信息（与 VSCode 侧 PresetScenario 保持一致，从 skill_list_result 中接收） */
+interface ScenarioInfo {
+  id: string;
+  skillName: string;
+  displayName: string;
+  description: string;
+  icon: string;
+  targetUrl: string;
+  prefilledParams: Record<string, string>;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Props
 // ────────────────────────────────────────────────────────────────
@@ -69,8 +80,9 @@ interface SkillPanelProps {
 // ────────────────────────────────────────────────────────────────
 
 export default function SkillPanel({ sendMessage, onMessage, isConnected }: SkillPanelProps) {
-  // Skill 列表
+  // Skill 列表 + 预设场景
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
   // 参数输入弹窗
@@ -111,8 +123,9 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
     const unsub = onMessage((msg) => {
       switch (msg.type) {
         case 'skill_list_result': {
-          const payload = msg.payload as { skills: SkillInfo[] };
+          const payload = msg.payload as { skills: SkillInfo[]; scenarios?: ScenarioInfo[] };
           setSkills(payload.skills ?? []);
+          setScenarios(payload.scenarios ?? []);
           setLoading(false);
           break;
         }
@@ -190,7 +203,7 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
     }
   }, []);
 
-  const executeSkill = useCallback(async (skillName: string, params: Record<string, string>) => {
+  const executeSkill = useCallback(async (skillName: string, params: Record<string, string>, targetUrl?: string) => {
     // 获取当前活动 tab 的 ID，用于 Skill 执行期间锁定目标 tab，防止多步骤执行时 tab 漂移
     let targetTabId: number | undefined;
     try {
@@ -213,8 +226,18 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
       totalSteps: skill?.steps.length ?? 0,
     });
     setParamModalSkill(null);
-    sendMessageRef.current('skill_execute', { skillName, params, targetTabId });
+    sendMessageRef.current('skill_execute', {
+      skillName,
+      params,
+      targetTabId,
+      ...(targetUrl ? { targetUrl } : {}),
+    });
   }, [skills]);
+
+  /** 一键执行预设场景：直接调用 executeSkill 携带 prefilledParams 和 targetUrl，不弹参数弹窗 */
+  const executeScenario = useCallback((scenario: ScenarioInfo) => {
+    executeSkill(scenario.skillName, scenario.prefilledParams, scenario.targetUrl);
+  }, [executeSkill]);
 
   const handleParamSubmit = useCallback(() => {
     if (!paramModalSkill) return;
@@ -225,7 +248,7 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
     if (missing.length > 0) {
       return; // 保持弹窗，让用户填写
     }
-    executeSkill(paramModalSkill.name, paramValues);
+    executeSkill(paramModalSkill.name, paramValues, undefined);
   }, [paramModalSkill, paramValues, executeSkill]);
 
   const handleDismissExecution = useCallback(() => {
@@ -309,6 +332,29 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
                   isConnected={isConnected}
                   lastCompletion={translateCompletion}
                 />
+              </div>
+            )}
+
+            {/* 一键体验：预设场景展示区 */}
+            {scenarios.length > 0 && (
+              <div>
+                <h3 className="text-xs font-medium text-purple-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  一键体验 ({scenarios.length})
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {scenarios.map((scenario) => (
+                    <ScenarioCard
+                      key={scenario.id}
+                      scenario={scenario}
+                      onRun={() => executeScenario(scenario)}
+                      disabled={execution?.isRunning === true}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -428,6 +474,43 @@ function SkillCard({
         </button>
       </div>
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────
+// 子组件：场景卡片（一键体验，零参数执行）
+// ────────────────────────────────────────────────────────────────
+
+function ScenarioCard({
+  scenario,
+  onRun,
+  disabled,
+}: {
+  scenario: ScenarioInfo;
+  onRun: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onRun}
+      disabled={disabled}
+      className="group relative flex flex-col items-start gap-1.5 p-3 border border-purple-100 bg-gradient-to-br from-purple-50/60 to-white rounded-xl hover:border-purple-300 hover:shadow-md transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed"
+      title={scenario.targetUrl ? `打开 ${scenario.targetUrl} 并执行` : `执行 ${scenario.displayName}`}
+    >
+      {/* icon + 标题 */}
+      <div className="flex items-center gap-2 w-full">
+        <span className="text-lg flex-shrink-0 leading-none">{scenario.icon}</span>
+        <h4 className="text-xs font-semibold text-gray-800 truncate flex-1">{scenario.displayName}</h4>
+      </div>
+      {/* 描述 */}
+      <p className="text-[10px] text-gray-500 line-clamp-2 leading-relaxed">{scenario.description}</p>
+      {/* 播放按钮（hover 时高亮） */}
+      <div className="absolute top-2 right-2 p-1 rounded-full text-purple-300 group-hover:text-purple-500 group-hover:bg-purple-100 transition-colors">
+        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </div>
+    </button>
   );
 }
 

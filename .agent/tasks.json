@@ -1756,8 +1756,10 @@
       "id": "evo_v26_001",
       "type": "coding",
       "title": "PresetScenario 数据模型 + 内置演示场景 + skill_list 协议扩展",
-      "status": "pending",
-      "depends_on": ["evo_v25_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v25_005"
+      ],
       "acceptance": "skill-registry.ts 新增 PresetScenario 接口（id / skillName / displayName / description / icon / targetUrl / prefilledParams）；PRESET_SCENARIOS 常量包含至少 5 个内置演示场景（翻译 Hacker News、提取 GitHub Trending、阅读 MDN 文档、整理标签页、网页全文提取）；SkillRegistry 新增 getScenarios() 方法；message-handler.ts 在 skill_list_result 中包含 scenarios 字段；VSCode 编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'PresetScenario' src/skill-registry.ts && grep -q 'PRESET_SCENARIOS' src/skill-registry.ts && grep -q 'getScenarios' src/skill-registry.ts && grep -q 'scenarios' src/message-handler.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
@@ -1767,7 +1769,9 @@
       "type": "coding",
       "title": "Chrome SkillPanel 场景展示区 UI + 一键执行（零参数）",
       "status": "pending",
-      "depends_on": ["evo_v26_001"],
+      "depends_on": [
+        "evo_v26_001"
+      ],
       "acceptance": "SkillPanel.tsx 顶部新增「一键体验」展示区域；新增 ScenarioCard 子组件（icon + 标题 + 描述 + 播放按钮）；新增 ScenarioInfo 接口接收 skill_list_result 中的 scenarios 数据；点击场景卡片直接调用 executeScenario() 不弹参数弹窗；发送 skill_execute 时携带 prefilledParams 和 targetUrl；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'ScenarioCard\\|scenarioCard\\|scenario-card' components/SkillPanel.tsx && grep -q 'ScenarioInfo\\|scenarios' components/SkillPanel.tsx && grep -q 'executeScenario\\|targetUrl' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
@@ -1777,7 +1781,9 @@
       "type": "coding",
       "title": "VSCode SkillRunner 场景执行流 — 自动导航到预设 URL + 参数注入",
       "status": "pending",
-      "depends_on": ["evo_v26_001"],
+      "depends_on": [
+        "evo_v26_001"
+      ],
       "acceptance": "SkillRunner 或 MessageHandler 在收到 skill_execute 时识别 targetUrl 字段；执行 Skill 前先自动导航到 targetUrl（调用 browser_navigate + browser_wait）；prefilledParams 作为 Skill 参数传入 SkillRunner.execute()；导航失败时降级为直接执行 Skill 步骤；VSCode 编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'targetUrl' src/message-handler.ts && grep -q 'browser_navigate\\|navigate' src/skill-runner.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
@@ -1787,7 +1793,9 @@
       "type": "coding",
       "title": "ExecutionOverlay Debug 增强 — 可展开步骤详情 + 执行耗时 + 日志导出",
       "status": "pending",
-      "depends_on": ["evo_v26_002"],
+      "depends_on": [
+        "evo_v26_002"
+      ],
       "acceptance": "skill_progress 协议扩展可选字段 toolName / resolvedArgs / durationMs；SkillRunner onProgress 回调发送增强 debug 信息；StepItem 组件支持点击展开/收起详情面板（显示工具名称、解析参数 JSON、完整结果可滚动、执行耗时）；ExecutionOverlay 底部增加「导出执行日志」按钮生成 JSON 文件下载；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'toolName\\|resolvedArgs\\|durationMs' components/SkillPanel.tsx && grep -q '导出\\|export\\|download' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
@@ -1797,7 +1805,12 @@
       "type": "validation",
       "title": "预设场景一键执行 + Debug 体验全量验收",
       "status": "pending",
-      "depends_on": ["evo_v26_001", "evo_v26_002", "evo_v26_003", "evo_v26_004"],
+      "depends_on": [
+        "evo_v26_001",
+        "evo_v26_002",
+        "evo_v26_003",
+        "evo_v26_004"
+      ],
       "acceptance": "VSCode 编译通过 + Chrome 构建通过；PresetScenario 模型完整且有 ≥5 个内置场景；SkillPanel 展示场景卡片且点击不弹参数弹窗；场景执行自动导航到预设 URL 再执行 Skill；StepItem 可展开查看 debug 详情；导出日志按钮可用；skill_list_result 包含 scenarios 字段",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'PresetScenario' src/skill-registry.ts && grep -q 'PRESET_SCENARIOS' src/skill-registry.ts && grep -q 'scenarios' src/message-handler.ts && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && grep -q 'ScenarioCard\\|scenarioCard\\|scenario-card' components/SkillPanel.tsx && grep -q 'toolName\\|resolvedArgs' components/SkillPanel.tsx && grep -q '导出\\|export\\|download' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
