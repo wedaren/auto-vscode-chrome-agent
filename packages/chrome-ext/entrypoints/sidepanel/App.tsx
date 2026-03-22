@@ -28,8 +28,10 @@ import type { ConnectionState, ConnectionDetails } from '../../src/ws-client';
 /** 顶部 Tab 类型 */
 type ActiveTab = 'chat' | 'skills' | 'debug';
 
-/** WebSocket 服务端地址（VSCode 插件侧） */
-const WS_URL = 'ws://localhost:7777';
+/** WebSocket 服务端地址（VSCode 插件侧）：dev 模式用 7778，发布版用 7777 */
+const WS_URL = import.meta.env.MODE === 'development'
+  ? 'ws://localhost:7778'
+  : 'ws://localhost:7777';
 /** 错误日志最大条目数 */
 const MAX_ERROR_LOG_SIZE = 50;
 

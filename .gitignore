@@ -7,3 +7,6 @@ dist/
 packages/vscode-ext/out/
 
 packages/chrome-ext/.output/
+
+# Generated extension icons (rebuilt each dev/build run)
+packages/chrome-ext/public/icon-*.png

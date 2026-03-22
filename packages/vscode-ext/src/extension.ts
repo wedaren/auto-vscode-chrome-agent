@@ -99,9 +99,11 @@ export function activate(context: vscode.ExtensionContext): void {
   lmService = new LmService(outputChannel);
   mcpClient = new McpClient(outputChannel);
 
+  const isDev = context.extensionMode === vscode.ExtensionMode.Development;
+  const defaultPort = isDev ? 7778 : 7777;
   const port = vscode.workspace
     .getConfiguration('browserAgent')
-    .get<number>('port', 7777);
+    .get<number>('port', defaultPort);
   wsServer = new WsServer(outputChannel, port);
   wsServer.setObservabilityStore(observabilityStore);
 

@@ -1,3 +1,17 @@
+/// <reference types="vite/client" />
+
+// Ensure import.meta.env is typed when vite/client isn't resolved by tsc
+// (WXT/Vite replaces these at bundle time)
+declare interface ImportMeta {
+  readonly env: {
+    readonly MODE: string;
+    readonly DEV: boolean;
+    readonly PROD: boolean;
+    readonly SSR: boolean;
+    [key: string]: unknown;
+  };
+}
+
 type AnyCallback = (...args: any[]) => any;
 
 interface BrowserEvent<T extends AnyCallback> {
