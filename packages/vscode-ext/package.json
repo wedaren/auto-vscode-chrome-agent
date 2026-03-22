@@ -155,7 +155,7 @@
         "browserAgent.port": {
           "type": "number",
           "default": 7777,
-          "description": "WebSocket 服务端口号"
+          "description": "WebSocket 服务端口号（不设置时：开发模式默认 7778，发布模式默认 7777）"
         },
         "browserAgent.userDataDir": {
           "type": "string",
@@ -221,7 +221,9 @@
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
-    "dev": "tsc -watch -p ./tsconfig.json"
+    "dev": "tsc -watch -p ./tsconfig.json",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -231,6 +233,7 @@
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.96.0",
     "@types/ws": "^8.5.10",
+    "@vscode/vsce": "^3.0.0",
     "typescript": "^5.3.3"
   }
 }
