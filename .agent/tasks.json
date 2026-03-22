@@ -1591,7 +1591,7 @@
       "id": "evo_v23_003",
       "type": "coding",
       "title": "injectBilingual 自动重标记兜底：当 data-imt-id 元素全部缺失时自动重新提取段落并按索引注入翻译",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v23_001"
       ],

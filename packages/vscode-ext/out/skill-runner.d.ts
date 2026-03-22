@@ -149,6 +149,13 @@ export declare class SkillRunner {
      */
     private formatToolResult;
     /**
+     * evo_v23_004: 检测 injectBilingual 步骤返回 injected=0 的诊断信息并输出警告
+     *
+     * 当步骤结果中包含 injected: 0 且带有 diagnostic 字段时，
+     * 在 outputChannel 输出结构化的可能原因和建议操作。
+     */
+    private detectInjectZeroDiagnostic;
+    /**
      * 步骤失败诊断：输出插值后的实际参数和上一步 resultText 摘要，辅助排查问题
      *
      * @param stepIndex 当前步骤序号

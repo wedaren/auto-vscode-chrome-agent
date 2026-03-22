@@ -731,6 +731,39 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
         injected++;
       }
 
+      // ── evo_v23_004: 注入结果诊断增强 ──
+      // injected=0 且 skipped>0 时附加诊断信息，帮助用户/Agent 理解失败原因
+      let diagnostic: { possibleCauses: string[]; suggestedActions: string[] } | undefined;
+      if (injected === 0 && skipped > 0) {
+        const possibleCauses: string[] = [];
+        const suggestedActions: string[] = [];
+
+        if (autoRemarkDone) {
+          // 自动重标记已执行但仍然 injected=0 → 翻译数据与页面段落不匹配
+          possibleCauses.push(
+            '自动重标记已执行，但翻译数据与当前页面段落无法匹配（页面内容可能已发生变化）',
+          );
+          suggestedActions.push('重新执行完整翻译流程（extractParagraphs → translate → injectBilingual）');
+        } else {
+          // 未触发自动重标记 → data-imt-id 存在但 item.id / item.translated 可能为空
+          const markedCount = document.querySelectorAll('[data-imt-id]').length;
+          if (markedCount > 0) {
+            possibleCauses.push(
+              `页面存在 ${markedCount} 个已标记段落，但翻译数据中的 id/translated 字段可能缺失或格式不正确`,
+            );
+            suggestedActions.push('检查 translations 数据格式：每项需包含 { id: "imt-N", translated: "翻译文本" }');
+          } else {
+            possibleCauses.push('Tab 切换导致工具执行到了不同页面，目标页面无 data-imt-id 标记');
+            possibleCauses.push('SPA 页面重渲染导致之前标记的 DOM 节点被替换');
+            suggestedActions.push('确保翻译期间不要切换浏览器标签页');
+            suggestedActions.push('重新执行完整翻译流程（extractParagraphs → translate → injectBilingual）');
+          }
+        }
+
+        diagnostic = { possibleCauses, suggestedActions };
+        console.warn('[imt] 诊断：注入数为 0', diagnostic);
+      }
+
       return {
         success: true,
         data: {
@@ -739,6 +772,7 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           skipped,
           total: items.length,
           ...(autoRemarkDone ? { autoRemarkDone: true } : {}),
+          ...(diagnostic ? { diagnostic } : {}),
         },
       };
     }

@@ -100,6 +100,8 @@ class SkillRunner {
                     description: step.description,
                 });
                 this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 成功: ${step.description}`);
+                // ── evo_v23_004: 检测 injectBilingual injected=0 并输出诊断警告 ──
+                this.detectInjectZeroDiagnostic(stepResult);
             }
             else {
                 // ── 失败诊断增强：打印插值后实际 args + 上一步 resultText 摘要 ──
@@ -396,6 +398,48 @@ class SkillRunner {
             return JSON.stringify(item);
         })
             .join('\n');
+    }
+    /**
+     * evo_v23_004: 检测 injectBilingual 步骤返回 injected=0 的诊断信息并输出警告
+     *
+     * 当步骤结果中包含 injected: 0 且带有 diagnostic 字段时，
+     * 在 outputChannel 输出结构化的可能原因和建议操作。
+     */
+    detectInjectZeroDiagnostic(stepResult) {
+        if (!stepResult.resultText) {
+            return;
+        }
+        try {
+            const parsed = JSON.parse(stepResult.resultText);
+            // 检测 injected === 0（直接或嵌套在 data 中）
+            const data = parsed?.data ?? parsed;
+            if (typeof data !== 'object' || data === null) {
+                return;
+            }
+            if (data.injected !== 0) {
+                return;
+            }
+            const label = '[SkillRunner] ⚠️ injectBilingual 诊断';
+            this.outputChannel.appendLine(`${label}: injected=0, skipped=${data.skipped ?? '?'}, total=${data.total ?? '?'}`);
+            if (data.diagnostic) {
+                const diag = data.diagnostic;
+                if (diag.possibleCauses?.length) {
+                    this.outputChannel.appendLine(`${label} 可能原因:`);
+                    for (const cause of diag.possibleCauses) {
+                        this.outputChannel.appendLine(`${label}   - ${cause}`);
+                    }
+                }
+                if (diag.suggestedActions?.length) {
+                    this.outputChannel.appendLine(`${label} 建议操作:`);
+                    for (const action of diag.suggestedActions) {
+                        this.outputChannel.appendLine(`${label}   - ${action}`);
+                    }
+                }
+            }
+        }
+        catch {
+            // resultText 不是 JSON，忽略
+        }
     }
     /**
      * 步骤失败诊断：输出插值后的实际参数和上一步 resultText 摘要，辅助排查问题
