@@ -10,7 +10,7 @@
     "result": "pass",
     "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "✔ Finished in 2.108 s\nPASS"
   },
   "last_tick": "2026-03-22T00:00:00.000000Z",
   "pm_done": true

@@ -22,3 +22,9 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无。acceptance_cmd 通过；ModelSelector.tsx 含 maxVisibleModels prop 和 DEFAULT_MAX_VISIBLE 常量，展开更多逻辑完整；App.tsx 正确解析 defaultModelId 并按优先级选中；目标文件无 TypeScript 错误；未引入禁止的外部依赖；符合 program.md 约束（模型调用走 vscode.lm API，Chrome 不内置模型）。
