@@ -123,24 +123,30 @@ class SkillRunner {
             }
             const step = skill.steps[i];
             const isOptional = step.optional === true;
-            // 报告进度：running
+            // 报告进度：running（含工具名称预告）
             onProgress?.({
                 stepIndex: i,
                 totalSteps,
                 status: 'running',
                 description: step.description,
+                toolName: step.toolName,
             });
             // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
+            const stepStartTime = Date.now();
             const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token, targetTabId);
+            const stepDurationMs = Date.now() - stepStartTime;
             stepResults.push(stepResult);
             if (stepResult.success) {
-                // 报告进度：success
+                // 报告进度：success（含 debug 增强信息）
                 onProgress?.({
                     stepIndex: i,
                     totalSteps,
                     status: 'success',
                     result: stepResult.resultText,
                     description: step.description,
+                    toolName: stepResult.toolName,
+                    resolvedArgs: stepResult.resolvedArgs,
+                    durationMs: stepDurationMs,
                 });
                 this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 成功: ${step.description}`);
                 // ── evo_v23_004: 检测 injectBilingual injected=0 并输出诊断警告 ──
@@ -150,24 +156,30 @@ class SkillRunner {
                 // ── 失败诊断增强：打印插值后实际 args + 上一步 resultText 摘要 ──
                 this.logStepFailureDiagnostics(i, totalSteps, step, stepResult, stepResults);
                 if (isOptional) {
-                    // 可选步骤失败 → 跳过
+                    // 可选步骤失败 → 跳过（含 debug 增强信息）
                     onProgress?.({
                         stepIndex: i,
                         totalSteps,
                         status: 'skipped',
                         result: stepResult.error,
                         description: step.description,
+                        toolName: stepResult.toolName,
+                        resolvedArgs: stepResult.resolvedArgs,
+                        durationMs: stepDurationMs,
                     });
                     this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 失败（可选，跳过）: ${stepResult.error}`);
                 }
                 else {
-                    // 必需步骤失败 → 终止
+                    // 必需步骤失败 → 终止（含 debug 增强信息）
                     onProgress?.({
                         stepIndex: i,
                         totalSteps,
                         status: 'failed',
                         result: stepResult.error,
                         description: step.description,
+                        toolName: stepResult.toolName,
+                        resolvedArgs: stepResult.resolvedArgs,
+                        durationMs: stepDurationMs,
                     });
                     this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 失败（终止）: ${stepResult.error}`);
                     return {

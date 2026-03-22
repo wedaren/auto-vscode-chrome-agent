@@ -1780,7 +1780,7 @@
       "id": "evo_v26_003",
       "type": "coding",
       "title": "VSCode SkillRunner 场景执行流 — 自动导航到预设 URL + 参数注入",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v26_001"
       ],

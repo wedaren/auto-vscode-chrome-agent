@@ -43,6 +43,12 @@ export interface SkillProgress {
     result?: string;
     /** 当前步骤描述 */
     description: string;
+    /** 调用的工具名称（完成后填充） */
+    toolName?: string;
+    /** 插值后的实际参数（完成后填充） */
+    resolvedArgs?: Record<string, unknown>;
+    /** 步骤执行耗时（毫秒，完成后填充） */
+    durationMs?: number;
 }
 /**
  * SkillRunner — Skill 执行引擎

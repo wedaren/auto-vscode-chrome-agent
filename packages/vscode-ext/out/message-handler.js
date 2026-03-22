@@ -497,7 +497,7 @@ class MessageHandler {
                     }
                 }
                 const result = await this.skillRunner.execute(skill, params, (progress) => {
-                    // 每步进度推送 skill_progress 消息 → Chrome UI
+                    // 每步进度推送 skill_progress 消息 → Chrome UI（含 debug 增强字段）
                     this.wsServer.send(ws, {
                         type: 'skill_progress',
                         payload: {
@@ -508,6 +508,10 @@ class MessageHandler {
                             status: progress.status,
                             description: progress.description,
                             result: progress.result,
+                            // debug 增强字段（可选）
+                            ...(progress.toolName !== undefined ? { toolName: progress.toolName } : {}),
+                            ...(progress.resolvedArgs !== undefined ? { resolvedArgs: progress.resolvedArgs } : {}),
+                            ...(progress.durationMs !== undefined ? { durationMs: progress.durationMs } : {}),
                         },
                         sessionId: msg.sessionId,
                     });
