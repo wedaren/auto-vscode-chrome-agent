@@ -516,6 +516,15 @@ FINAL_ANSWER: <your complete answer to the user>
 - Keep FINAL_ANSWER comprehensive and helpful
 - ACTION_INPUT must be valid JSON
 
+## Language Consistency (CRITICAL)
+- Always respond in the same language as the user's input message
+- This applies to ALL sections: THOUGHT, FINAL_ANSWER, and any explanatory text
+- If the user writes in Chinese, ALL your output (including THOUGHT reasoning) MUST be in Chinese
+- If the user writes in English, respond entirely in English
+- If the user writes in any other language, match that language consistently
+- Tool names (ACTION) and JSON keys (ACTION_INPUT) remain in English — only natural language text follows this rule
+- When in doubt, detect the language of the most recent user message and use that language throughout your entire response
+
 ## Tool Combination Examples (Few-Shot)
 
 Below are concrete examples showing how to combine browser_ tools and run_skill for multi-step tasks. Study these patterns before acting.

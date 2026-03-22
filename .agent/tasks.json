@@ -1903,7 +1903,7 @@
       "id": "evo_v28_003",
       "type": "coding",
       "title": "新增截图合成下载能力 — Canvas 拼接多张 base64 截图 + Blob 触发浏览器下载",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_002"
       ],
