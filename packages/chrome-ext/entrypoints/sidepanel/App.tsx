@@ -287,8 +287,11 @@ function AppContent({ errorLog }: AppContentProps) {
 
       // 执行时间线：跟踪 agent_step / agent_complete / tool_execute / tool_result / skill 事件
       if (msg.type === 'agent_step') {
-        const payload = msg.payload as { step?: string; description?: string } | undefined;
-        debug.logExecution(`Agent 步骤: ${payload?.step ?? 'unknown'}`, payload?.description);
+        const payload = msg.payload as { step?: string; type?: string; description?: string; imageData?: string } | undefined;
+        debug.logExecution(
+          `Agent 步骤: ${payload?.step ?? 'unknown'}${payload?.imageData ? ' [含图片]' : ''}`,
+          payload?.description,
+        );
       }
       if (msg.type === 'agent_complete') {
         debug.logExecution('Agent 执行完成', msg.payload);

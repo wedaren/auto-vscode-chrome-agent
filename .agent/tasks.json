@@ -1705,7 +1705,7 @@
       "id": "evo_v25_002",
       "type": "coding",
       "title": "Chrome 侧 ImagePreview 组件：base64 缩略图渲染 + 点击 Lightbox 全屏查看",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v25_001"
       ],

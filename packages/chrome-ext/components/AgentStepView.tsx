@@ -1,7 +1,9 @@
 // AgentStepView.tsx — Agent 步骤展示组件，渲染 ReAct 循环的 think/act/observe 步骤
 // 职责：接收 steps 数组，按类型分色展示（think=灰色斜体🧠, act=蓝色⚡+工具徽章, observe=绿色📋可折叠）
 // 支持整体折叠/展开（默认展开最近3步）和 isRunning 加载动画
+// observe 步骤支持 imageData 图片渲染（通过 ImagePreview 组件展示截图缩略图 + Lightbox）
 import React, { useState, useMemo } from 'react';
+import ImagePreview from './ImagePreview';
 
 /** Agent 单步执行记录（与 VSCode 侧 AgentStep 类型对齐） */
 export interface AgentStep {
@@ -15,6 +17,8 @@ export interface AgentStep {
   toolName?: string;
   /** act 步骤的工具参数 */
   toolArgs?: Record<string, unknown>;
+  /** observe 步骤的图片数据（data:image/... base64 URL），用于渲染截图而非纯文本 */
+  imageData?: string;
 }
 
 /** AgentStepView 组件 Props */
@@ -31,28 +35,46 @@ const OBSERVE_COLLAPSE_THRESHOLD = 200;
 /** 默认展开的最近步数 */
 const DEFAULT_VISIBLE_STEPS = 3;
 
+/** 检测字符串是否包含 data:image base64 模式 */
+const DATA_IMAGE_PATTERN = /data:image\/[a-zA-Z+]+;base64,[A-Za-z0-9+/=]{20,}/;
+
 /**
  * 单个 observe 步骤的折叠内容组件
+ * 支持 imageData 直接渲染图片，也能检测 content 中内嵌的 data:image 模式
  */
-function ObserveContent({ content }: { content: string }) {
+function ObserveContent({ content, imageData }: { content: string; imageData?: string }) {
   const shouldCollapse = content.length > OBSERVE_COLLAPSE_THRESHOLD;
   const [expanded, setExpanded] = useState(!shouldCollapse);
 
-  if (!shouldCollapse) {
-    return <span className="whitespace-pre-wrap break-words">{content}</span>;
-  }
+  // 优先使用 imageData 字段渲染图片
+  const imageSource = imageData || (DATA_IMAGE_PATTERN.test(content) ? content.match(DATA_IMAGE_PATTERN)?.[0] : undefined);
 
   return (
     <span>
-      <span className="whitespace-pre-wrap break-words">
-        {expanded ? content : `${content.substring(0, OBSERVE_COLLAPSE_THRESHOLD)}…`}
-      </span>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="ml-1 text-xs text-green-600 hover:text-green-800 underline cursor-pointer"
-      >
-        {expanded ? '收起' : '展开全部'}
-      </button>
+      {/* 图片渲染：imageData 优先，或从 content 中检测 data:image 模式 */}
+      {imageSource && (
+        <div className="my-1">
+          <ImagePreview src={imageSource} alt="观察结果截图" />
+        </div>
+      )}
+      {/* 文本内容（有图片时仍展示文字摘要） */}
+      {content && (
+        shouldCollapse ? (
+          <span>
+            <span className="whitespace-pre-wrap break-words">
+              {expanded ? content : `${content.substring(0, OBSERVE_COLLAPSE_THRESHOLD)}…`}
+            </span>
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="ml-1 text-xs text-green-600 hover:text-green-800 underline cursor-pointer"
+            >
+              {expanded ? '收起' : '展开全部'}
+            </button>
+          </span>
+        ) : (
+          <span className="whitespace-pre-wrap break-words">{content}</span>
+        )
+      )}
     </span>
   );
 }
@@ -112,7 +134,7 @@ function StepItem({ step, isLast, isRunning }: { step: AgentStep; isLast: boolea
         <div className="flex items-start gap-2 py-1.5">
           <span className="flex-shrink-0 text-sm" title="观察">📋</span>
           <div className="text-green-700 text-xs leading-relaxed">
-            <ObserveContent content={step.content} />
+            <ObserveContent content={step.content} imageData={step.imageData} />
             {showLoading && <StepLoadingIndicator />}
           </div>
         </div>
