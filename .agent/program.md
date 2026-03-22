@@ -68,3 +68,5 @@
 - [~] 内置 MCP https://github.com/ChromeDevTools/chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill（已拆解为 evo_v20_001, evo_v20_002, evo_v20_003, evo_v20_004, evo_v20_005 — DevTools MCP 深度集成：可配置启动参数 + 完整工具 Schema + 子进程健壮性 + AgentLoop Schema 增强 + 5 个 DevTools 预设 Skill）
 - [x] [text](～/Downloads/debug-log-2026-03-22T01-04-28-123Z.json) 不考虑时间，使用最优解，优化体验（已拆解为 evo_v21_001, evo_v21_002, evo_v21_003, evo_v21_004, evo_v21_005 — Debug-log 驱动优化：immersive_translate 参数名修复 + llm_translate 多格式兼容 + SkillRunner 路径表达式插值 + SkillPanel 请求去重）
 - [x] /Users/wedaren/Downloads/debug-log-2026-03-22T02-16-57-430Z.json, 不考虑时间，使用最优解，优化体验（已拆解为 evo_v22_001, evo_v22_002, evo_v22_003, evo_v22_004, evo_v22_005 — immersive_translate inject 失败修复：Skill 路径表达式修正 + injectBilingual 多格式兼容 + 防御性自动解包 + 步骤失败诊断增强）
+- [~] /Users/wedaren/Downloads/debug-log-2026-03-22T03-12-19-971Z.json,不考虑时间，使用最优解，优化体验,当前页面内容没有沉浸式翻译的效果（已拆解为 evo_v23_001, evo_v23_002, evo_v23_003, evo_v23_004, evo_v23_005 — Tab 锁定防止 Skill 多步骤执行期间目标页漂移 + injectBilingual 自动重标记兜底 + 注入诊断增强）
+- [ ] 不考虑时间，使用最优解，vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选；

@@ -354,9 +354,10 @@ class BrowserToolProvider {
      *
      * @param toolName 工具名称（如 browser_click）
      * @param args 工具参数（如 { selector: '#btn' }）
+     * @param targetTabId 可选的目标 Tab ID，Skill 执行期间锁定目标页，防止 tab 切换导致操作漂移
      * @returns McpToolResult 格式的结果
      */
-    async callTool(toolName, args = {}) {
+    async callTool(toolName, args = {}, targetTabId) {
         const mapping = TOOL_MAPPINGS[toolName];
         if (!mapping) {
             this.outputChannel.appendLine(`[BrowserToolProvider] 未知工具: ${toolName}`);
@@ -376,15 +377,20 @@ class BrowserToolProvider {
         }
         // 映射参数名（browser tool args → BrowserAction fields）
         const mappedArgs = this.mapArgs(args, mapping.argMapping);
-        this.outputChannel.appendLine(`[BrowserToolProvider] 调用工具: ${toolName} → ${mapping.actionType}, 参数: ${JSON.stringify(mappedArgs)}`);
+        this.outputChannel.appendLine(`[BrowserToolProvider] 调用工具: ${toolName} → ${mapping.actionType}, 参数: ${JSON.stringify(mappedArgs)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}`);
         try {
             // 通过 WebSocket sendAndWait 发送 tool_execute 并等待 tool_result
+            // 当 targetTabId 存在时，附在 payload 中供 Chrome 侧 background 路由到指定 tab
+            const toolPayload = {
+                toolName: mapping.actionType,
+                toolArgs: mappedArgs,
+            };
+            if (targetTabId !== undefined) {
+                toolPayload.targetTabId = targetTabId;
+            }
             const result = await this.wsServer.sendAndWait(ws, {
                 type: 'tool_execute',
-                payload: {
-                    toolName: mapping.actionType,
-                    toolArgs: mappedArgs,
-                },
+                payload: toolPayload,
                 sessionId: 'browser-tools',
             }, this.toolTimeoutMs);
             this.outputChannel.appendLine(`[BrowserToolProvider] 工具 ${toolName} 结果: success=${result.success}`);

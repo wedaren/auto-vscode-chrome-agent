@@ -40,10 +40,11 @@ class SkillRunner {
      * @param params 用户提供的参数值（key → value）
      * @param onProgress 每步进度回调（可选）
      * @param token 取消令牌（可选）
+     * @param targetTabId Chrome 侧锁定的目标 Tab ID（可选），Skill 多步骤执行期间确保所有工具调用都路由到此 tab
      * @returns SkillRunResult 执行结果
      */
-    async execute(skill, params, onProgress, token) {
-        this.outputChannel.appendLine(`[SkillRunner] 开始执行 Skill: ${skill.name}, 参数: ${JSON.stringify(params)}`);
+    async execute(skill, params, onProgress, token, targetTabId) {
+        this.outputChannel.appendLine(`[SkillRunner] 开始执行 Skill: ${skill.name}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}`);
         // 1. 校验 Skill 是否启用
         if (!skill.enabled) {
             const msg = `Skill "${skill.displayName}" 已禁用，无法执行`;
@@ -87,7 +88,7 @@ class SkillRunner {
                 description: step.description,
             });
             // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
-            const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token);
+            const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token, targetTabId);
             stepResults.push(stepResult);
             if (stepResult.success) {
                 // 报告进度：success
@@ -148,11 +149,12 @@ class SkillRunner {
      * @param params 用户参数
      * @param previousResults 之前已完成步骤的结果列表（供 {{$prev}} / {{$step_N}} 插值）
      * @param token 取消令牌（传递给 llm_* 工具）
+     * @param targetTabId Chrome 侧锁定的目标 Tab ID（透传给浏览器工具调用）
      */
-    async executeStep(step, stepIndex, params, previousResults, token) {
+    async executeStep(step, stepIndex, params, previousResults, token, targetTabId) {
         const resolvedArgs = this.interpolateArgs(step.argsTemplate, params, previousResults);
         try {
-            const result = await this.callTool(step.toolName, resolvedArgs, token);
+            const result = await this.callTool(step.toolName, resolvedArgs, token, targetTabId);
             const resultText = this.formatToolResult(result);
             return {
                 stepIndex,
@@ -351,11 +353,11 @@ class SkillRunner {
     }
     /**
      * 路由工具调用：
-     * - browser_* 前缀 → BrowserToolProvider（浏览器操作）
+     * - browser_* 前缀 → BrowserToolProvider（浏览器操作），附带 targetTabId 锁定目标 tab
      * - llm_* 前缀     → LLM 工具（本地 vscode.lm API）
      * - 其余           → McpClient
      */
-    async callTool(toolName, args, token) {
+    async callTool(toolName, args, token, targetTabId) {
         // 1. llm_* 前缀 → LLM 工具（本地，通过 LmService 调用语言模型）
         if ((0, llm_tools_1.isLlmTool)(toolName)) {
             this.outputChannel.appendLine(`[SkillRunner] 调用工具: ${toolName} (via LlmTools), 参数: ${JSON.stringify(args)}`);
@@ -373,7 +375,7 @@ class SkillRunner {
         const source = useBrowserChannel ? 'BrowserToolProvider' : 'McpClient';
         this.outputChannel.appendLine(`[SkillRunner] 调用工具: ${toolName} (via ${source}), 参数: ${JSON.stringify(args)}`);
         if (useBrowserChannel) {
-            return this.browserToolProvider.callTool(toolName, args);
+            return this.browserToolProvider.callTool(toolName, args, targetTabId);
         }
         // 3. 其余 → McpClient
         return this.mcpClient.callTool(toolName, args);

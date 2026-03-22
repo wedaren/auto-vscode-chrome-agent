@@ -77,9 +77,10 @@ export declare class BrowserToolProvider {
      *
      * @param toolName 工具名称（如 browser_click）
      * @param args 工具参数（如 { selector: '#btn' }）
+     * @param targetTabId 可选的目标 Tab ID，Skill 执行期间锁定目标页，防止 tab 切换导致操作漂移
      * @returns McpToolResult 格式的结果
      */
-    callTool(toolName: string, args?: Record<string, unknown>): Promise<McpToolResult>;
+    callTool(toolName: string, args?: Record<string, unknown>, targetTabId?: number): Promise<McpToolResult>;
     /**
      * 释放资源
      */

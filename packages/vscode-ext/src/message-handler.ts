@@ -546,9 +546,11 @@ export class MessageHandler {
     const payload = msg.payload as {
       skillName?: string;
       params?: Record<string, string>;
+      targetTabId?: number;
     };
     const skillName = payload?.skillName ?? '';
     const params = payload?.params ?? {};
+    const targetTabId = payload?.targetTabId;
 
     if (!this.skillRegistry || !this.skillRunner) {
       this.wsServer.send(ws, {
@@ -584,7 +586,7 @@ export class MessageHandler {
     }
 
     this.outputChannel.appendLine(
-      `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}`,
+      `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}`,
     );
 
     // 异步执行，通过 skill_progress 实时推送进度
@@ -609,6 +611,8 @@ export class MessageHandler {
               sessionId: msg.sessionId,
             });
           },
+          undefined, // token
+          targetTabId,
         );
 
         // 执行完成，发送 skill_complete

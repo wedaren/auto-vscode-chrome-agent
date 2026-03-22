@@ -190,7 +190,19 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
     }
   }, []);
 
-  const executeSkill = useCallback((skillName: string, params: Record<string, string>) => {
+  const executeSkill = useCallback(async (skillName: string, params: Record<string, string>) => {
+    // 获取当前活动 tab 的 ID，用于 Skill 执行期间锁定目标 tab，防止多步骤执行时 tab 漂移
+    let targetTabId: number | undefined;
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]?.id) {
+        targetTabId = tabs[0].id;
+      }
+    } catch (e) {
+      // 获取 tab ID 失败时继续执行（不阻塞 Skill 流程）
+      console.warn('[SkillPanel] 获取 activeTabId 失败:', e);
+    }
+
     // 重置执行状态
     const skill = skills.find((s) => s.name === skillName);
     setExecution({
@@ -201,7 +213,7 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
       totalSteps: skill?.steps.length ?? 0,
     });
     setParamModalSkill(null);
-    sendMessageRef.current('skill_execute', { skillName, params });
+    sendMessageRef.current('skill_execute', { skillName, params, targetTabId });
   }, [skills]);
 
   const handleParamSubmit = useCallback(() => {
