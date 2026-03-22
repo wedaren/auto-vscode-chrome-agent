@@ -41,4 +41,29 @@ export declare function listLlmTools(): {
  * @returns McpToolResult 标准工具结果
  */
 export declare function callLlmTool(toolName: string, args: Record<string, unknown>, lmService: LmService, outputChannel: vscode.OutputChannel, token?: vscode.CancellationToken): Promise<McpToolResult>;
+/**
+ * 从 args 的多个 alias key 中解析出文本数组。
+ *
+ * 查找顺序（fallback 链）：texts → paragraphs → input
+ * 对于每个候选值，支持以下格式：
+ *   1. string[]（直接数组）
+ *   2. JSON 字符串 → 解析后递归处理
+ *   3. 结构化对象：{ paragraphs: [{text:"..."}] } / { texts: [...] } / 顶层数组
+ *   4. 单个非空字符串 → 包装为单元素数组
+ *
+ * @returns 解析后的文本数组，解析失败返回 null
+ */
+export declare function resolveTextsFromArgs(args: Record<string, unknown>): string[] | null;
+/**
+ * 从单个值中提取文本数组。
+ *
+ * 支持 5 种输入格式：
+ *   格式 A — string[]：直接返回
+ *   格式 B — JSON 字符串 "[\"a\",\"b\"]"：解析为数组
+ *   格式 C — JSON 字符串 "{\"paragraphs\":[{\"text\":\"...\"}]}"：提取 .paragraphs[].text
+ *   格式 D — JSON 字符串 "{\"texts\":[\"a\",\"b\"]}"：提取 .texts
+ *   格式 E — 非空纯字符串：包装为 [str]
+ *   格式 F — 对象 { paragraphs: [...] } 或 { texts: [...] }：直接提取
+ */
+export declare function extractTextsFromValue(value: unknown): string[] | null;
 //# sourceMappingURL=llm-tools.d.ts.map

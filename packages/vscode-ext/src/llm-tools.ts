@@ -20,6 +20,9 @@ export interface LlmTranslateArgs {
   sourceLanguage?: string;
 }
 
+/** 参数名别名优先级：texts > paragraphs > input（fallback 链） */
+const TEXT_ARG_ALIASES = ['texts', 'paragraphs', 'input'] as const;
+
 /** llm_translate 工具输出结构（嵌入在 resultText JSON 中） */
 export interface LlmTranslateResult {
   /** 翻译后的文本数组，与 texts 一一对应 */
@@ -101,6 +104,120 @@ export async function callLlmTool(
 /** 单批最大段落数，避免 prompt 过长超出模型上下文 */
 const TRANSLATE_BATCH_SIZE = 20;
 
+// ────────────────────────────────────────────────────────────────
+// 参数解析：多参数名兼容 + 结构化结果自动提取
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * 从 args 的多个 alias key 中解析出文本数组。
+ *
+ * 查找顺序（fallback 链）：texts → paragraphs → input
+ * 对于每个候选值，支持以下格式：
+ *   1. string[]（直接数组）
+ *   2. JSON 字符串 → 解析后递归处理
+ *   3. 结构化对象：{ paragraphs: [{text:"..."}] } / { texts: [...] } / 顶层数组
+ *   4. 单个非空字符串 → 包装为单元素数组
+ *
+ * @returns 解析后的文本数组，解析失败返回 null
+ */
+export function resolveTextsFromArgs(args: Record<string, unknown>): string[] | null {
+  // 按优先级显式检查每个 alias key，支持多参数名 fallback
+  // 优先级 1：args.texts（标准参数名）
+  const fromTexts = extractTextsFromValue(args.texts);
+  if (fromTexts && fromTexts.length > 0) { return fromTexts; }
+
+  // 优先级 2：args.paragraphs（browser_extract_paragraphs 输出兼容）
+  const fromParagraphs = extractTextsFromValue(args.paragraphs);
+  if (fromParagraphs && fromParagraphs.length > 0) { return fromParagraphs; }
+
+  // 优先级 3：args.input（通用 fallback alias）
+  const fromInput = extractTextsFromValue(args.input);
+  if (fromInput && fromInput.length > 0) { return fromInput; }
+
+  return null;
+}
+
+/**
+ * 从单个值中提取文本数组。
+ *
+ * 支持 5 种输入格式：
+ *   格式 A — string[]：直接返回
+ *   格式 B — JSON 字符串 "[\"a\",\"b\"]"：解析为数组
+ *   格式 C — JSON 字符串 "{\"paragraphs\":[{\"text\":\"...\"}]}"：提取 .paragraphs[].text
+ *   格式 D — JSON 字符串 "{\"texts\":[\"a\",\"b\"]}"：提取 .texts
+ *   格式 E — 非空纯字符串：包装为 [str]
+ *   格式 F — 对象 { paragraphs: [...] } 或 { texts: [...] }：直接提取
+ */
+export function extractTextsFromValue(value: unknown): string[] | null {
+  // ── 格式 A：直接数组 ──
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      typeof item === 'string' ? item : (item && typeof item === 'object' && 'text' in item)
+        ? String((item as { text: unknown }).text)
+        : JSON.stringify(item),
+    );
+  }
+
+  // ── 字符串类型：可能是 JSON 或纯文本 ──
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) { return null; }
+
+    // 尝试 JSON 解析
+    try {
+      const parsed = JSON.parse(trimmed);
+      return extractTextsFromParsed(parsed);
+    } catch {
+      // 格式 E：普通字符串 → 单元素数组
+      return [value];
+    }
+  }
+
+  // ── 格式 F：已经是对象（非字符串、非数组） ──
+  if (value && typeof value === 'object') {
+    return extractTextsFromParsed(value);
+  }
+
+  return null;
+}
+
+/**
+ * 从已解析的 JSON 值中提取文本数组（内部工具函数）
+ *
+ * 支持：
+ *   - 顶层数组 ["a","b"] 或 [{text:"a"},{text:"b"}]
+ *   - { paragraphs: [{text:"a"}, ...] }
+ *   - { texts: ["a","b"] }
+ */
+function extractTextsFromParsed(parsed: unknown): string[] | null {
+  // 顶层数组
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) =>
+      typeof item === 'string' ? item : (item && typeof item === 'object' && 'text' in item)
+        ? String((item as { text: unknown }).text)
+        : JSON.stringify(item),
+    );
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+
+    // { paragraphs: [...] } — browser_extract_paragraphs 标准输出
+    if (Array.isArray(obj.paragraphs)) {
+      return (obj.paragraphs as Array<{ text?: string } | string>).map(
+        (p) => (typeof p === 'string' ? p : (p && typeof p === 'object' && 'text' in p) ? String(p.text) : JSON.stringify(p)),
+      );
+    }
+
+    // { texts: [...] }
+    if (Array.isArray(obj.texts)) {
+      return (obj.texts as unknown[]).map(String);
+    }
+  }
+
+  return null;
+}
+
 /**
  * llm_translate 工具处理函数
  *
@@ -120,32 +237,11 @@ async function handleLlmTranslate(
   outputChannel: vscode.OutputChannel,
   token?: vscode.CancellationToken,
 ): Promise<McpToolResult> {
-  // ── 参数解析 ──
-  let texts: string[];
-  const rawTexts = args.texts;
-  if (typeof rawTexts === 'string') {
-    // 兼容：上一步结果可能是 JSON 字符串
-    try {
-      const parsed = JSON.parse(rawTexts);
-      if (Array.isArray(parsed)) {
-        // 直接是数组
-        texts = parsed.map(String);
-      } else if (parsed && Array.isArray(parsed.paragraphs)) {
-        // browser_extract_paragraphs 返回 { paragraphs: [...] } 格式
-        texts = (parsed.paragraphs as Array<{ text?: string }>).map(
-          (p) => (typeof p === 'string' ? p : p.text ?? JSON.stringify(p)),
-        );
-      } else {
-        texts = [rawTexts];
-      }
-    } catch {
-      texts = [rawTexts];
-    }
-  } else if (Array.isArray(rawTexts)) {
-    texts = rawTexts.map(String);
-  } else {
+  // ── 参数解析（多参数名兼容 + 结构化结果自动提取） ──
+  const texts = resolveTextsFromArgs(args);
+  if (!texts) {
     return {
-      content: [{ type: 'text', text: 'llm_translate: 缺少 texts 参数或格式不正确（需要字符串数组）' }],
+      content: [{ type: 'text', text: 'llm_translate: 缺少 texts 参数或格式不正确（需要字符串数组）。支持的参数名: texts / paragraphs / input' }],
       isError: true,
     };
   }
