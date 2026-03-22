@@ -1,7 +1,7 @@
 // SkillPanel.tsx — Skill 面板组件
 // 职责：展示可用 Skill 卡片列表、一键触发执行、参数输入弹窗、执行进度实时显示
 // 通过 WebSocket skill_list / skill_execute / skill_progress / skill_complete 协议与 VSCode 通信
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import TranslateControl, { isImmersiveTranslateSkill } from './TranslateControl';
 
 // ────────────────────────────────────────────────────────────────
@@ -83,17 +83,26 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
   // 沉浸式翻译完成信号（传给 TranslateControl 组件同步状态）
   const [translateCompletion, setTranslateCompletion] = useState<{ success: boolean; timestamp: number } | null>(null);
 
-  // ── 请求 Skill 列表 ──
+  // ── 请求去重：使用 ref 追踪 sendMessage 引用和请求状态 ──
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+  const requestedRef = useRef(false);
+
+  // ── 请求 Skill 列表（引用稳定，不依赖 sendMessage） ──
   const requestSkillList = useCallback(() => {
     if (!isConnected) return;
     setLoading(true);
-    sendMessage('skill_list', {});
-  }, [isConnected, sendMessage]);
+    sendMessageRef.current('skill_list', {});
+  }, [isConnected]);
 
-  // 连接后自动请求 Skill 列表
+  // 连接后自动请求 Skill 列表（仅一次，断开后重置）
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && !requestedRef.current) {
+      requestedRef.current = true;
       requestSkillList();
+    }
+    if (!isConnected) {
+      requestedRef.current = false;
     }
   }, [isConnected, requestSkillList]);
 
@@ -192,8 +201,8 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
       totalSteps: skill?.steps.length ?? 0,
     });
     setParamModalSkill(null);
-    sendMessage('skill_execute', { skillName, params });
-  }, [sendMessage, skills]);
+    sendMessageRef.current('skill_execute', { skillName, params });
+  }, [skills]);
 
   const handleParamSubmit = useCallback(() => {
     if (!paramModalSkill) return;
