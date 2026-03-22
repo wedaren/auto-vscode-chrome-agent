@@ -220,11 +220,11 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./tsconfig.json",
-    "watch": "tsc -watch -p ./tsconfig.json",
-    "dev": "tsc -watch -p ./tsconfig.json",
-    "package": "vsce package --no-dependencies",
-    "publish": "vsce publish --no-dependencies"
+    "compile": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "dev": "node esbuild.js --watch",
+    "package": "node esbuild.js --production && vsce package --no-dependencies",
+    "publish": "node esbuild.js --production && vsce publish --no-dependencies"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -235,6 +235,7 @@
     "@types/vscode": "^1.96.0",
     "@types/ws": "^8.5.10",
     "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.3.3"
   }
 }

@@ -1,0 +1,11 @@
+src/
+node_modules/
+tsconfig.json
+esbuild.js
+.gitignore
+*.map
+out/**/*.d.ts
+out/**/*.d.ts.map
+out/**/*.js.map
+# 保留 out/extension.js（esbuild 打包产物）
+!out/extension.js
