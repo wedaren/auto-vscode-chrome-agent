@@ -700,7 +700,8 @@ const IMT_CSS = `
 .imt-translation.imt-inline {
   display: block;
 }
-.imt-translation.imt-hidden {
+.imt-translation.imt-hidden,
+.imt-translation.imt-inline.imt-hidden {
   display: none;
 }
 `;
@@ -816,9 +817,11 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       ensureImtStyle();
 
-      // ── evo_v23_003: 自动重标记兜底 ──
+      // ── evo_v23_003 + evo_v27_004: 自动重标记兜底（兼容叶节点提取策略）──
       // 当 data-imt-id 元素全部缺失时（SPA 重渲染 / tab 切换导致 DOM 重建），
-      // 自动重新调用 extractParagraphs 标记段落，再按索引配对注入翻译
+      // 自动重新调用 extractParagraphs 标记段落，再按索引配对注入翻译。
+      // evo_v27_004: 重标记后按索引重映射 items[].id → 新提取的段落 ID，
+      // 确保 <a> 叶节点的 data-imt-id 与翻译结果正确配对。
       let autoRemarkDone = false;
       const existingMarked = document.querySelectorAll('[data-imt-id]').length;
       if (existingMarked === 0 && items.length > 0) {
@@ -828,6 +831,20 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           const reData = reExtractResult.data as { totalExtracted: number; paragraphs: Array<{ id: string; tag: string; text: string }> };
           console.log(`[imt] 自动重标记完成：重新标记了 ${reData.totalExtracted} 个段落`);
           autoRemarkDone = true;
+
+          // ── evo_v27_004: ID 重映射 ──
+          // 重标记后，items 中的旧 ID 可能与新提取的 ID 不一致。
+          // 按索引将 items[i].id 重映射为 reData.paragraphs[i].id，
+          // 保证 <a>/<span> 等叶节点的 data-imt-id 与翻译正确配对。
+          const newParagraphs = reData.paragraphs;
+          for (let i = 0; i < items.length && i < newParagraphs.length; i++) {
+            const oldId = items[i].id;
+            const newId = newParagraphs[i].id;
+            if (oldId !== newId) {
+              items[i].id = newId;
+            }
+          }
+          console.log(`[imt] ID 重映射完成：${Math.min(items.length, newParagraphs.length)} 项已对齐`);
         } else {
           console.warn('[imt] 自动重标记失败：', reExtractResult.error);
         }
@@ -914,6 +931,11 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
     }
 
     case 'toggle': {
+      // ── evo_v27_004: 兼容新 DOM 结构（in-cell / inline / block）──
+      // 查询所有翻译元素，涵盖：
+      //   - Case 1: <div class="imt-translation"> inside <td>（表格行内注入）
+      //   - Case 2: <span class="imt-translation imt-inline"> after <a>（叶节点注入）
+      //   - Case 3: <div class="imt-translation"> after <p>（普通块级注入）
       const translations = document.querySelectorAll('.imt-translation');
       if (translations.length === 0) {
         return { success: true, data: { mode: 'toggle', message: '没有已注入的翻译', toggled: 0 } };
@@ -921,12 +943,20 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       // 检查当前状态（根据第一个翻译段落判断）
       const isHidden = translations[0].classList.contains('imt-hidden');
+      let inlineCount = 0;
+      let blockCount = 0;
 
       translations.forEach((el) => {
         if (isHidden) {
           el.classList.remove('imt-hidden');
         } else {
           el.classList.add('imt-hidden');
+        }
+        // 统计不同 DOM 结构类型
+        if (el.classList.contains('imt-inline')) {
+          inlineCount++;
+        } else {
+          blockCount++;
         }
       });
 
@@ -936,17 +966,35 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           mode: 'toggle',
           newState: isHidden ? 'visible' : 'hidden',
           toggled: translations.length,
+          inlineCount,
+          blockCount,
         },
       };
     }
 
     case 'clear': {
+      // ── evo_v27_004: 兼容新 DOM 结构的清除逻辑 ──
+      // 移除所有翻译元素，涵盖：
+      //   - <div class="imt-translation"> inside <td>（表格 in-cell 注入）
+      //   - <span class="imt-translation imt-inline"> after <a>（叶节点 inline 注入）
+      //   - <div class="imt-translation"> after <p>（普通 block 注入）
       const translations = document.querySelectorAll('.imt-translation');
       const count = translations.length;
-      translations.forEach((el) => el.remove());
+      let inlineRemoved = 0;
+      let blockRemoved = 0;
 
-      // 同时移除 data-imt-id 属性
+      translations.forEach((el) => {
+        if (el.classList.contains('imt-inline')) {
+          inlineRemoved++;
+        } else {
+          blockRemoved++;
+        }
+        el.remove();
+      });
+
+      // 移除 data-imt-id 属性（覆盖所有元素类型：<p>/<td>/<a>/<span> 等叶节点）
       const tagged = document.querySelectorAll('[data-imt-id]');
+      const untaggedCount = tagged.length;
       tagged.forEach((el) => el.removeAttribute('data-imt-id'));
 
       // 移除样式
@@ -955,7 +1003,13 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       return {
         success: true,
-        data: { mode: 'clear', removed: count },
+        data: {
+          mode: 'clear',
+          removed: count,
+          inlineRemoved,
+          blockRemoved,
+          untagged: untaggedCount,
+        },
       };
     }
 

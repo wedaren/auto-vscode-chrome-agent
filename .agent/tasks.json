@@ -1843,7 +1843,7 @@
       "id": "evo_v27_003",
       "type": "coding",
       "title": "注入 DOM 策略重构 — 表格布局兼容注入（不在 <tr> 内插 <div>）+ 行内元素适配",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v27_002"
       ],
