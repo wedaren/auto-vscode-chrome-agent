@@ -10,12 +10,18 @@
       "preLaunchTask": "compile-vscode-ext"
     },
     {
-      "name": "Run Extension + Chrome Dev",
-      "type": "extensionHost",
+      "name": "Chrome Dev Server",
+      "type": "node-terminal",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-ext"],
-      "outFiles": ["${workspaceFolder}/packages/vscode-ext/out/**/*.js"],
-      "preLaunchTask": "build-all"
+      "command": "pnpm --filter chrome-ext dev",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Run Extension + Chrome Dev",
+      "configurations": ["Run Extension", "Chrome Dev Server"],
+      "stopAll": true
     }
   ]
 }

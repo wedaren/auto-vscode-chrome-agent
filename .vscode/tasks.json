@@ -28,16 +28,10 @@
         "background": {
           "activeOnStart": true,
           "beginsPattern": ".",
-          "endsPattern": "built in"
+          "endsPattern": "built in|ready in|Local:"
         }
       },
       "presentation": { "reveal": "silent" }
-    },
-    {
-      "label": "build-all",
-      "dependsOn": ["compile-vscode-ext", "dev-chrome-ext"],
-      "dependsOrder": "parallel",
-      "problemMatcher": []
     }
   ]
 }

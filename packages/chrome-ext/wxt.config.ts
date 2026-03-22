@@ -3,6 +3,11 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  dev: {
+    server: {
+      hostname: '127.0.0.1',
+    },
+  },
   manifest: {
     name: 'Browser Agent',
     description: '浏览器上下文感知 + 深度报告生成',
