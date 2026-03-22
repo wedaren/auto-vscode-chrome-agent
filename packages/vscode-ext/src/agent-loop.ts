@@ -244,6 +244,7 @@ export class AgentLoop {
           const toolResult = await this.executeTool(
             parsed.toolName!,
             parsed.toolArgs ?? {},
+            effectiveToken,
           );
 
           // 截断观察结果，防止单次工具返回过大文本撑爆上下文
@@ -724,10 +725,13 @@ If a tool call fails or returns unexpected results:
   private async executeTool(
     toolName: string,
     toolArgs: Record<string, unknown>,
+    token?: vscode.CancellationToken,
   ): Promise<ToolResultFormatted> {
+    this.throwIfCancelled(token, `执行工具 ${toolName} 前`);
+
     // run_skill 路由到 SkillRunner
     if (toolName === 'run_skill') {
-      return { text: await this.executeRunSkill(toolArgs) };
+      return { text: await this.executeRunSkill(toolArgs, token) };
     }
 
     const useBrowserChannel =
@@ -742,12 +746,21 @@ If a tool call fails or returns unexpected results:
     try {
       let result: McpToolResult;
       if (useBrowserChannel) {
-        result = await this.browserToolProvider!.callTool(toolName, toolArgs);
+        result = await this.awaitWithCancellation(
+          this.browserToolProvider!.callTool(toolName, toolArgs),
+          token,
+          `工具 ${toolName}`,
+        );
       } else {
-        result = await this.mcpClient.callTool(toolName, toolArgs);
+        result = await this.awaitWithCancellation(
+          this.mcpClient.callTool(toolName, toolArgs),
+          token,
+          `工具 ${toolName}`,
+        );
       }
       return this.formatToolResult(result);
     } catch (err) {
+      this.throwIfCancelled(token, `执行工具 ${toolName} 时`);
       const errMsg = `工具调用失败 (${toolName} via ${source}): ${err instanceof Error ? err.message : String(err)}`;
       this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
       return { text: errMsg };
@@ -759,6 +772,7 @@ If a tool call fails or returns unexpected results:
    */
   private async executeRunSkill(
     toolArgs: Record<string, unknown>,
+    token?: vscode.CancellationToken,
   ): Promise<string> {
     const skillName = toolArgs.skill_name as string | undefined;
     const params = (toolArgs.params as Record<string, string>) ?? {};
@@ -786,9 +800,14 @@ If a tool call fails or returns unexpected results:
     }
 
     try {
-      const result = await this.skillRunner.execute(skill, params);
+      const result = await this.awaitWithCancellation(
+        this.skillRunner.execute(skill, params, undefined, token),
+        token,
+        `Skill ${skill.name}`,
+      );
       return result.summary;
     } catch (err) {
+      this.throwIfCancelled(token, `执行 Skill ${skill.name} 时`);
       const errMsg = `run_skill 执行失败: ${err instanceof Error ? err.message : String(err)}`;
       this.outputChannel.appendLine(`[AgentLoop] ${errMsg}`);
       return errMsg;
@@ -939,5 +958,43 @@ If a tool call fails or returns unexpected results:
     }
 
     return parts.join('\n\n');
+  }
+
+  private throwIfCancelled(token?: vscode.CancellationToken, context?: string): void {
+    if (!token?.isCancellationRequested) return;
+    this.outputChannel.appendLine(
+      `[AgentLoop] ${context ?? '执行'}检测到取消信号`,
+    );
+    throw new Error('Agent execution cancelled');
+  }
+
+  private async awaitWithCancellation<T>(
+    promise: Promise<T>,
+    token: vscode.CancellationToken | undefined,
+    label: string,
+  ): Promise<T> {
+    if (!token) {
+      return promise;
+    }
+    if (token.isCancellationRequested) {
+      this.throwIfCancelled(token, label);
+    }
+    return await new Promise<T>((resolve, reject) => {
+      const disposable = token.onCancellationRequested(() => {
+        disposable.dispose();
+        reject(new Error(`${label} cancelled`));
+      });
+
+      promise.then(
+        (value) => {
+          disposable.dispose();
+          resolve(value);
+        },
+        (err) => {
+          disposable.dispose();
+          reject(err);
+        },
+      );
+    });
   }
 }

@@ -283,6 +283,7 @@ function AppContent({ errorLog }: AppContentProps) {
   const {
     messages,
     isStreaming,
+    isCancelling,
     conversationId,
     conversations,
     handleSendMessage: chatSend,
@@ -660,27 +661,21 @@ function AppContent({ errorLog }: AppContentProps) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick action buttons / Stop button */}
-          <div className="flex gap-2 px-4 py-2 border-t border-gray-100">
-            {isStreaming ? (
-              <button onClick={handleCancel} className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" stroke="none" />
-                </svg>
-                停止生成
-              </button>
-            ) : (
-              <>
-                <button onClick={() => handleQuickAction('探索此页')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">探索此页</button>
-                <button onClick={() => handleQuickAction('生成报告')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">生成报告</button>
-              </>
-            )}
-          </div>
+          {/* Quick action buttons */}
+          {!isStreaming && (
+            <div className="flex gap-2 px-4 py-2 border-t border-gray-100">
+              <button onClick={() => handleQuickAction('探索此页')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">探索此页</button>
+              <button onClick={() => handleQuickAction('生成报告')} className="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">生成报告</button>
+            </div>
+          )}
 
           {/* Chat input — 斜杠命令 + 快捷键 + 输入历史 */}
           <ChatInput
             onSend={handleSendMessage}
+            onCancel={handleCancel}
             disabled={isStreaming}
+            isStreaming={isStreaming}
+            isCancelling={isCancelling}
             onNewConversation={createNewConversation}
             onClearConversation={handleClearConversation}
             onToggleModels={handleToggleModels}

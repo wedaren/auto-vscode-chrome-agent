@@ -41,6 +41,8 @@ export interface UseChatReturn {
   messages: Message[];
   /** 是否正在流式接收 */
   isStreaming: boolean;
+  /** 是否已发出停止请求，等待执行层收尾 */
+  isCancelling: boolean;
   /** 当前会话 ID（持久化标识） */
   conversationId: string;
   /** 会话列表元数据（用于侧栏展示） */
@@ -81,6 +83,7 @@ export interface UseChatReturn {
 export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const streamingMsgIdRef = useRef<string | null>(null);
 
@@ -251,7 +254,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
                 if (m.id !== targetId) return m;
                 const update: Partial<Message> = {};
                 // 用服务端的完整文本校正最终内容（防止丢片段，兼容空字符串场景）
-                if (typeof endPayload?.fullText === 'string') {
+                if (typeof endPayload?.fullText === 'string' && (!endPayload?.cancelled || endPayload.fullText.length > 0)) {
                   update.content = endPayload.fullText;
                 }
                 // 关联 LLM 请求细节数据（供下载按钮使用）
@@ -265,6 +268,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
 
           streamingMsgIdRef.current = null;
           setIsStreaming(false);
+          setIsCancelling(false);
           console.log(
             '[useChat] 流式响应结束',
             endPayload?.cancelled ? '(已取消)' : '',
@@ -351,6 +355,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
 
           streamingMsgIdRef.current = null;
           setIsStreaming(false);
+          setIsCancelling(false);
           console.log(
             '[useChat] Agent 循环结束',
             completePayload?.cancelled ? '(已取消)' : '',
@@ -382,6 +387,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
 
         // 进入等待状态（TypingIndicator 立即显示）
         setIsStreaming(true);
+        setIsCancelling(false);
 
         // 通过 WebSocket 发送到 VSCode 侧，附加页面上下文
         const sent = sendMessage('chat', {
@@ -472,20 +478,29 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
   const handleCancel = useCallback(() => {
     try {
       if (isStreaming) {
-        sendMessage('cancel_chat', null, createRootMeta({
+        const sent = sendMessage('cancel_chat', null, createRootMeta({
           source: 'chrome-ui',
           event: 'chat.cancel',
           conversationId: conversationIdRef.current,
         }));
-        console.log('[useChat] 已发送 cancel_chat');
+        if (sent) {
+          setIsCancelling(true);
+          console.log('[useChat] 已发送 cancel_chat');
+        } else {
+          onToast?.({
+            type: 'error',
+            message: '停止请求发送失败，请检查连接状态',
+          });
+        }
       }
     } catch (err) {
       console.error('[useChat] handleCancel 取消生成时出错:', err);
       // 即使发送 cancel 失败，也确保 UI 状态恢复
+      setIsCancelling(false);
       streamingMsgIdRef.current = null;
       setIsStreaming(false);
     }
-  }, [isStreaming, sendMessage]);
+  }, [isStreaming, sendMessage, onToast]);
 
   /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死）
    *  如果正在流式接收中断连，保留已接收的部分内容并追加中断提示
@@ -503,12 +518,14 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
       );
       streamingMsgIdRef.current = null;
       setIsStreaming(false);
+      setIsCancelling(false);
     }
   }, []);
 
   return {
     messages,
     isStreaming,
+    isCancelling,
     conversationId: conversationIdRef.current,
     conversations,
     streamingMsgIdRef,

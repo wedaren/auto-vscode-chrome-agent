@@ -20,8 +20,14 @@ interface SlashCommand {
 interface ChatInputProps {
   /** 发送消息回调 */
   onSend: (message: string) => void;
+  /** 停止当前生成 */
+  onCancel?: () => void;
   /** 是否禁用输入（流式生成中） */
   disabled?: boolean;
+  /** 是否正在流式生成 */
+  isStreaming?: boolean;
+  /** 是否正在停止 */
+  isCancelling?: boolean;
   /** 新建会话回调（斜杠命令 /new + 快捷键 Cmd+Shift+O） */
   onNewConversation?: () => void;
   /** 清空当前会话回调（斜杠命令 /clear + 快捷键 Cmd+L） */
@@ -89,7 +95,10 @@ function SlashCommandMenu({
 
 export default function ChatInput({
   onSend,
+  onCancel,
   disabled = false,
+  isStreaming = false,
+  isCancelling = false,
   onNewConversation,
   onClearConversation,
   onToggleModels,
@@ -99,6 +108,8 @@ export default function ChatInput({
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandMenuIndex, setCommandMenuIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isComposingRef = useRef(false);
+  const recentCompositionEndAtRef = useRef(0);
 
   // --- 斜杠命令定义 ---
   const slashCommands: SlashCommand[] = useMemo(
@@ -168,9 +179,30 @@ export default function ChatInput({
     [],
   );
 
+  const shouldIgnoreEnterForIme = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key !== 'Enter') return false;
+      const nativeEvent = e.nativeEvent as KeyboardEvent & {
+        isComposing?: boolean;
+        keyCode?: number;
+      };
+      return (
+        nativeEvent.isComposing === true ||
+        isComposingRef.current ||
+        nativeEvent.keyCode === 229 ||
+        Date.now() - recentCompositionEndAtRef.current < 120
+      );
+    },
+    [],
+  );
+
   // --- 键盘事件处理 ---
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (shouldIgnoreEnterForIme(e)) {
+        return;
+      }
+
       // --- 斜杠命令菜单导航 ---
       if (showCommandMenu && filteredCommands.length > 0) {
         if (e.key === 'ArrowDown') {
@@ -259,6 +291,7 @@ export default function ChatInput({
       showCommandMenu,
       filteredCommands,
       commandMenuIndex,
+      shouldIgnoreEnterForIme,
       value,
       userMessages,
       handleSubmit,
@@ -286,6 +319,17 @@ export default function ChatInput({
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, []);
 
+  const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true;
+  }, []);
+
+  const handleCompositionEnd = useCallback(() => {
+    isComposingRef.current = false;
+    recentCompositionEndAtRef.current = Date.now();
+  }, []);
+
+  const canSend = value.trim().length > 0 && !disabled;
+
   // --- 全局键盘快捷键 ---
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -311,7 +355,7 @@ export default function ChatInput({
   }, [onNewConversation, onClearConversation]);
 
   return (
-    <div className="relative flex items-end gap-2 px-4 py-3 border-t border-gray-200 bg-white">
+    <div className="relative border-t border-gray-200 bg-white px-4 py-3">
       {/* 斜杠命令菜单 */}
       {showCommandMenu && (
         <SlashCommandMenu
@@ -322,24 +366,49 @@ export default function ChatInput({
         />
       )}
 
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={handleInput}
-        onKeyDown={handleKeyDown}
-        placeholder="输入消息... 输入 / 查看命令"
-        disabled={disabled}
-        rows={1}
-        className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-[height] duration-150 ease-in-out"
-        style={{ maxHeight: '200px' }}
-      />
-      <button
-        onClick={handleSubmit}
-        disabled={disabled || !value.trim()}
-        className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        发送
-      </button>
+      <div className="rounded-[22px] border border-gray-200 bg-white px-4 py-3 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            placeholder="输入消息... 输入 / 查看命令"
+            disabled={disabled}
+            rows={1}
+            className="block w-full resize-none bg-transparent py-1 pr-12 text-[14px] leading-5 text-gray-800 placeholder:text-[13px] placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:text-gray-400 transition-[height] duration-150 ease-in-out"
+            style={{ minHeight: '72px', maxHeight: '200px' }}
+          />
+          <button
+            type="button"
+            onClick={isStreaming ? onCancel : handleSubmit}
+            disabled={isStreaming ? isCancelling : !canSend}
+            title={isStreaming ? (isCancelling ? '停止中' : '停止生成') : '发送'}
+            aria-label={isStreaming ? (isCancelling ? '停止中' : '停止生成') : '发送'}
+            className={`absolute bottom-1 right-0 flex h-[22px] w-[22px] items-center justify-center rounded-full border shadow-sm transition-all ${
+              isStreaming
+                ? isCancelling
+                  ? 'cursor-wait border-gray-200 bg-gray-200 text-gray-500'
+                  : 'border-red-500 bg-red-500 text-white hover:bg-red-600'
+                : canSend
+                  ? 'border-blue-500 bg-blue-500 text-white hover:bg-blue-600'
+                  : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+            }`}
+          >
+            {isStreaming ? (
+              <svg className="h-[12px] w-[12px]" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18V6m0 0l-4.5 4.5M12 6l4.5 4.5" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

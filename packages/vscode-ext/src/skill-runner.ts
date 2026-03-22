@@ -654,11 +654,19 @@ export class SkillRunner {
     );
 
     if (useBrowserChannel) {
-      return this.browserToolProvider.callTool(toolName, args, targetTabId);
+      return this.awaitWithCancellation(
+        this.browserToolProvider.callTool(toolName, args, targetTabId),
+        token,
+        `Skill 工具 ${toolName}`,
+      );
     }
 
     // 3. 其余 → McpClient
-    return this.mcpClient.callTool(toolName, args);
+    return this.awaitWithCancellation(
+      this.mcpClient.callTool(toolName, args),
+      token,
+      `Skill 工具 ${toolName}`,
+    );
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -806,6 +814,36 @@ export class SkillRunner {
       `[SkillRunner] 重复组执行完毕`,
     );
     return { aborted: false };
+  }
+
+  private async awaitWithCancellation<T>(
+    promise: Promise<T>,
+    token: vscode.CancellationToken | undefined,
+    label: string,
+  ): Promise<T> {
+    if (!token) {
+      return promise;
+    }
+    if (token.isCancellationRequested) {
+      throw new Error(`${label} cancelled`);
+    }
+    return await new Promise<T>((resolve, reject) => {
+      const disposable = token.onCancellationRequested(() => {
+        disposable.dispose();
+        reject(new Error(`${label} cancelled`));
+      });
+
+      promise.then(
+        (value) => {
+          disposable.dispose();
+          resolve(value);
+        },
+        (err) => {
+          disposable.dispose();
+          reject(err);
+        },
+      );
+    });
   }
 
   /**
