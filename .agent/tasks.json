@@ -1504,7 +1504,7 @@
       "id": "evo_v22_001",
       "type": "coding",
       "title": "修复 immersive_translate Skill step3 路径表达式：translations 从 {{$prev}} 改为 {{$prev.translations}}",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v21_005"
       ],

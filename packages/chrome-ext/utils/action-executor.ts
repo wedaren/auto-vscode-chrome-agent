@@ -649,13 +649,24 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       let items: Array<{ id: string; translated: string }>;
       try {
-        items = JSON.parse(action.translations);
+        const parsed = JSON.parse(action.translations);
+
+        if (!Array.isArray(parsed)) {
+          return { success: false, error: 'translations 必须是数组' };
+        }
+
+        // 支持 string[] 平坦数组：自动按索引与 data-imt-id 元素配对
+        // 例如 ["str1","str2"] → [{id:"imt-0",translated:"str1"},{id:"imt-1",translated:"str2"}]
+        if (parsed.length > 0 && typeof parsed[0] === 'string') {
+          items = (parsed as string[]).map((text, idx) => ({
+            id: `imt-${idx}`,
+            translated: text,
+          }));
+        } else {
+          items = parsed;
+        }
       } catch {
         return { success: false, error: 'translations 参数 JSON 解析失败' };
-      }
-
-      if (!Array.isArray(items)) {
-        return { success: false, error: 'translations 必须是数组' };
       }
 
       ensureImtStyle();
