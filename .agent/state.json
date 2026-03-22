@@ -9,7 +9,9 @@
     "task_id": "evo_v27_002",
     "result": "pass",
     "score": 95,
-    "issues": [],
+    "issues": [
+      "预存 TS 错误（browser/chrome 全局变量类型，非本任务引入）"
+    ],
     "acceptance_cmd_output": "PASS"
   },
   "last_tick": "2026-03-22T00:00:00.000000Z",

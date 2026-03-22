@@ -17,3 +17,13 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 预存 TS 错误（browser/chrome 全局变量类型，WXT 项目特性，非本任务引入，扣 5 分）
+- CSS 已正确移除 border-left/background/padding/border-radius 卡片样式
+- 新样式 color:#888 + font-size:0.88em 符合沉浸式纯文本风格要求
+- imt-translation 类出现 8 处，覆盖样式定义、注入、toggle、clear
+- 无新增外部依赖，符合 program.md 约束

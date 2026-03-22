@@ -1819,7 +1819,7 @@
       "id": "evo_v27_001",
       "type": "coding",
       "title": "提取算法升级 — detectMainContent 表格布局支持 + 智能叶节点提取（<a>/<span> 等行内文本元素）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v26_005"
       ],
