@@ -5,3 +5,5 @@ dist/
 .env
 
 packages/vscode-ext/out/
+
+packages/chrome-ext/.output/
