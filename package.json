@@ -1,6 +1,6 @@
 {
   "name": "browser-agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Chrome 插件 + VSCode 插件的 agent 系统",
   "scripts": {
