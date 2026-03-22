@@ -1717,7 +1717,7 @@
       "id": "evo_v25_003",
       "type": "coding",
       "title": "AgentStepView observe 步骤图片渲染：AgentStep 接口增加 imageData + ObserveContent 识别并渲染图片",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v25_002"
       ],

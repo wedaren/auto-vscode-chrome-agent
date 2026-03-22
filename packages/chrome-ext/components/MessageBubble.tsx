@@ -39,6 +39,11 @@ function createMarkedInstance(): Marked {
 
   marked.use({
     renderer: {
+      image({ href, title, text }: { href: string; title?: string | null; text: string }) {
+        const altAttr = text ? ` alt="${escapeAttr(text)}"` : ' alt="图片"';
+        const titleAttr = title ? ` title="${escapeAttr(title)}"` : '';
+        return `<img src="${escapeAttr(href)}" ${altAttr}${titleAttr} loading="lazy" class="markdown-inline-image" />`;
+      },
       code({ text, lang }: { text: string; lang?: string }) {
         const language = lang && hljs.getLanguage(lang) ? lang : undefined;
         const highlighted = language
@@ -115,6 +120,8 @@ export default function MessageBubble({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  /** Lightbox 状态：当前全屏查看的图片 src，null 表示关闭 */
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   /** 将 Markdown 转为 HTML（仅 assistant 消息） */
   const renderedHtml = useMemo(() => {
@@ -146,6 +153,33 @@ export default function MessageBubble({
     }, 60_000);
     return () => clearInterval(timer);
   }, [timestamp]);
+
+  // Markdown 内联图片点击 → 打开 Lightbox（事件委托）
+  useEffect(() => {
+    if (role !== 'assistant' || !containerRef.current) return;
+
+    const handleImgClick = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'IMG' && target.classList.contains('markdown-inline-image')) {
+        const src = (target as HTMLImageElement).src;
+        if (src) setLightboxSrc(src);
+      }
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('click', handleImgClick);
+    return () => container.removeEventListener('click', handleImgClick);
+  }, [role, renderedHtml]);
+
+  // ESC 键关闭 Lightbox
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxSrc]);
 
   // 为代码块复制按钮绑定点击事件
   useEffect(() => {
@@ -350,6 +384,28 @@ export default function MessageBubble({
           </button>
         )}
       </div>
+
+      {/* Lightbox overlay — Markdown 内联图片全屏预览 */}
+      {lightboxSrc && (
+        <div
+          className="image-lightbox-overlay"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            className="image-lightbox-close"
+            onClick={() => setLightboxSrc(null)}
+            title="关闭 (ESC)"
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="全屏预览"
+            onClick={(e) => e.stopPropagation()}
+            className="image-lightbox-img"
+          />
+        </div>
+      )}
     </div>
   );
 }
