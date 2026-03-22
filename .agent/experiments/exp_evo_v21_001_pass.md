@@ -17,3 +17,14 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收明细：
+- acceptance_cmd：PASS（60/60）— `texts: '{{$prev}}'` 存在，`paragraphs.*$prev` 已不存在，`npm run compile` 零错误
+- TypeScript 编译：零错误（20/20）— `tsc -p ./tsconfig.json` 无输出
+- program.md 约束：全部满足（20/20）— 改动仅涉及 skill-registry.ts 参数名修正，不引入外部依赖，不涉及模型调用路径变更
