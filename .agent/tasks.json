@@ -1915,7 +1915,7 @@
       "id": "evo_v28_004",
       "type": "coding",
       "title": "Agent 系统 prompt 语言一致性指令 — 强制 Agent 使用用户输入语言回复（含 think 步骤）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_001"
       ],
@@ -1927,7 +1927,7 @@
       "id": "evo_v28_005",
       "type": "validation",
       "title": "CSP 安全工具 + 长截图 + 语言一致性全量验收",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_001",
         "evo_v28_002",

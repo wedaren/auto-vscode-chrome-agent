@@ -211,6 +211,12 @@ auto-vscode-chrome-agent/
 
 ---
 
+## 架构设计
+
+- [浏览器智能层最优架构设计](/Users/wedaren/repositoryDestinationOfGithub/auto-vscode-chrome-agent/docs/browser-intelligence-architecture.md)：面向长期演进的页面语义建模、结构化 patch、验证与回滚架构
+
+---
+
 ## License
 
 MIT
