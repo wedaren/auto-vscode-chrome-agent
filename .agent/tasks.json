@@ -1654,7 +1654,7 @@
       "id": "evo_v24_003",
       "type": "coding",
       "title": "MessageHandler 传递模型配置到 Chrome：models_list payload 扩展 defaultModelId + maxVisibleModels 字段",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v24_002"
       ],

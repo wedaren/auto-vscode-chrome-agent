@@ -256,6 +256,8 @@ function AppContent({ errorLog }: AppContentProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
   const [modelsLoading, setModelsLoading] = useState(false);
+  /** 服务端配置的下拉列表最大可见模型数量 */
+  const [maxVisibleModels, setMaxVisibleModels] = useState<number | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // --- Ref 追踪：避免 effect 依赖对象引用导致无限循环 ---
@@ -312,11 +314,34 @@ function AppContent({ errorLog }: AppContentProps) {
           console.log('[App] 收到 pong，连接确认');
           break;
         case 'models_list': {
-          const modelsList = (msg.payload as { models: ModelInfo[] })?.models ?? [];
+          const payload = msg.payload as {
+            models: ModelInfo[];
+            defaultModelId?: string;
+            maxVisibleModels?: number;
+          };
+          const modelsList = payload?.models ?? [];
+          const serverDefaultId = payload?.defaultModelId;
+          const serverMaxVisible = payload?.maxVisibleModels;
           setModels(modelsList);
           setModelsLoading(false);
+          // 应用服务端配置的最大可见数
+          if (typeof serverMaxVisible === 'number' && serverMaxVisible > 0) {
+            setMaxVisibleModels(serverMaxVisible);
+          }
+          // 自动选中模型：优先服务端 defaultModelId，其次保持已选，最后 fallback 第一个
           if (modelsList.length > 0) {
-            setSelectedModelId((prev) => prev ?? modelsList[0].id);
+            setSelectedModelId((prev) => {
+              // 服务端指定了默认模型且在列表中，使用它
+              if (serverDefaultId && modelsList.some((m) => m.id === serverDefaultId)) {
+                return serverDefaultId;
+              }
+              // 保持之前选中的模型（如果仍在列表中）
+              if (prev && modelsList.some((m) => m.id === prev)) {
+                return prev;
+              }
+              // fallback 到第一个
+              return modelsList[0].id;
+            });
           }
           break;
         }
@@ -562,7 +587,7 @@ function AppContent({ errorLog }: AppContentProps) {
       {activeTab === 'chat' && (
         <>
           {/* Model selector */}
-          <ModelSelector models={models} selectedModelId={selectedModelId} onSelect={handleModelSelect} disabled={!isConnected} loading={modelsLoading} />
+          <ModelSelector models={models} selectedModelId={selectedModelId} onSelect={handleModelSelect} disabled={!isConnected} loading={modelsLoading} maxVisibleModels={maxVisibleModels} />
 
           {/* Page context bar */}
           {pageContext.url && (
