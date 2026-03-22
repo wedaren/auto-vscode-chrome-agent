@@ -20,7 +20,8 @@ export type ActionType =
   | 'selectOption'
   | 'getLinks'
   | 'extractParagraphs'
-  | 'injectBilingual';
+  | 'injectBilingual'
+  | 'getPageInfo';
 
 /** 滚动模式 */
 export type ScrollMode = 'to-top' | 'to-bottom' | 'by-pixels' | 'to-element';
@@ -1024,6 +1025,32 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
  * 注意：screenshot 操作需要在 background script 中使用 chrome.tabs.captureVisibleTab，
  * content script 无法执行此操作，返回特殊标记由 background 处理。
  */
+/**
+ * 执行 getPageInfo 操作 — CSP 安全的页面度量工具
+ * 直接读取 DOM 属性获取页面尺寸、滚动位置、URL、标题等信息，
+ * 不依赖 eval / new Function，在 CSP 严格页面上可正常调用。
+ */
+function executeGetPageInfo(): ActionResult {
+  const docEl = document.documentElement;
+  return {
+    success: true,
+    data: {
+      url: window.location.href,
+      title: document.title,
+      scrollHeight: docEl.scrollHeight,
+      scrollWidth: docEl.scrollWidth,
+      clientHeight: docEl.clientHeight,
+      clientWidth: docEl.clientWidth,
+      scrollTop: window.scrollY || window.pageYOffset || 0,
+      scrollLeft: window.scrollX || window.pageXOffset || 0,
+      // 计算总屏数（向上取整），方便 batch_screenshot 等 Skill 使用
+      totalScreens: Math.ceil(docEl.scrollHeight / (docEl.clientHeight || 1)),
+      // 文档就绪状态
+      readyState: document.readyState,
+    },
+  };
+}
+
 export async function executeAction(action: BrowserAction): Promise<ActionResult> {
   try {
     switch (action.type) {
@@ -1084,6 +1111,10 @@ export async function executeAction(action: BrowserAction): Promise<ActionResult
 
       case 'injectBilingual':
         return executeInjectBilingual(action);
+
+      // ── evo_v28_001: CSP 安全的页面度量工具 ──
+      case 'getPageInfo':
+        return executeGetPageInfo();
 
       default:
         return { success: false, error: `不支持的操作类型: ${(action as BrowserAction).type}` };

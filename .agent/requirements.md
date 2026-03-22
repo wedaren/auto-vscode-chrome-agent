@@ -22,6 +22,7 @@
 | R-12 | 正式使用文档 | P1 | ✅ 已实现 | README、Chrome 指南、VSCode 指南、使用案例持续同步 |
 | R-13 | 一键预设场景执行 | P2 | 🔄 进行中 | 预设场景无需额外输入即可自动导航并执行完整 Skill 流程 |
 | R-14 | 沉浸式翻译体验升级 | P0 | 🔄 进行中 | 提取/注入/样式全链路升级，支持表格布局，达到专业沉浸式翻译效果 |
+| R-15 | CSP 安全工具 + 长截图合成下载 + 语言一致性 | P0 | 🔄 进行中 | CSP 安全的页面度量工具 + batch_screenshot 升级 + 长图拼接下载 + Agent 语言一致性 |
 
 ---
 
@@ -208,6 +209,19 @@
 | 验收 | ① HN 页面每个标题下方出现对应中文翻译且布局不破坏；② 翻译样式为无边框纯文本、字号略小、颜色柔和；③ 文章页面（`<article>/<p>` 结构）翻译效果不退化；④ toggle/clear 功能正常 |
 | 影响范围 | chrome-ext（action-executor.ts 提取+注入逻辑 + CSS） |
 | 备注 | R-06 的升级迭代，不新增工具或 Skill，仅优化现有链路的质量 |
+
+### R-15 CSP 安全工具 + 长截图合成下载 + 语言一致性
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + debug-log-2026-03-22T06-26-33-177Z.json 分析 |
+| 优先级 | P0 |
+| 状态 | 🔄 进行中 |
+| 描述 | `browser_evaluate` 在 CSP 严格页面被完全阻断（`new Function()` 触发 `unsafe-eval` 违规），导致依赖它的 `batch_screenshot` 技能失败、手动截图时无法获取页面尺寸。同时系统缺少截图拼接和下载能力，Agent 回复语言中英文混杂。需要：① 新增 CSP 安全的 `browser_get_page_info` 工具；② 升级 batch_screenshot 技能使用新工具；③ 新增截图合成下载能力；④ 系统 prompt 加语言一致性指令。 |
+| 用户价值 | 在 HN 等 CSP 严格页面也能正常使用截图相关功能；可一键获得长截图文件；Agent 回复语言与用户一致 |
+| 验收 | ① 在 CSP 严格页面调用 `browser_get_page_info` 正常返回页面尺寸；② batch_screenshot 技能在 HN 上不因 CSP 终止；③ 多张截图可合成一张长图并触发浏览器下载；④ 用户用中文提问时 Agent 全程中文回复（含 think 步骤） |
+| 影响范围 | chrome-ext（action-executor.ts 新 action + background.ts 截图合成）/ vscode-ext（browser-tools.ts 工具注册 + skill-registry.ts 技能升级 + agent-loop.ts prompt 修改） |
+| 备注 | 不修改 `browser_evaluate` 本身，保持其在非 CSP 页面的完整能力；新工具专注页面度量场景 |
 
 ---
 

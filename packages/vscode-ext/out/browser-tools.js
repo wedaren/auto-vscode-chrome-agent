@@ -62,6 +62,8 @@ const TOOL_MAPPINGS = {
     // ── evo_v19_001: 沉浸式翻译工具 ──
     browser_extract_paragraphs: { actionType: 'extractParagraphs', argMapping: { scope: 'scopeSelector', limit: 'maxCount' } },
     browser_inject_bilingual: { actionType: 'injectBilingual', argMapping: { mode: 'injectMode' } },
+    // ── evo_v28_001: CSP 安全的页面度量工具 ──
+    browser_get_page_info: { actionType: 'getPageInfo' },
 };
 /** 完整的工具定义列表 */
 const BROWSER_TOOLS = [
@@ -283,6 +285,16 @@ const BROWSER_TOOLS = [
                 },
             },
             required: ['mode'],
+        },
+    },
+    // ── evo_v28_001: CSP 安全的页面度量工具 ──
+    {
+        name: 'browser_get_page_info',
+        description: 'Get page dimensions, scroll position, URL, and title by reading DOM properties directly. CSP-safe — does not use eval or new Function. Returns: url, title, scrollHeight, scrollWidth, clientHeight, clientWidth, scrollTop, scrollLeft, totalScreens (ceil(scrollHeight/clientHeight)), readyState.',
+        inputSchema: {
+            type: 'object',
+            properties: {},
+            required: [],
         },
     },
 ];

@@ -112,6 +112,7 @@
 | DevTools MCP | 进行中 | 已完成基础接入，后续继续补强可用性 |
 | 调试与稳定性 | 已实现 | 已有错误兜底、日志、调试面板和请求详情下载 |
 | 正式使用文档 | 已实现 | `docs/` 已覆盖项目总览、双端指南和用例 |
+| CSP 安全工具 + 长截图体验 | 进行中 | evaluate 在 CSP 严格页面失败，需新增安全工具 + 图片拼接下载 |
 
 ---
 
@@ -173,6 +174,71 @@
 - 基础翻译流程可工作（提取 → 翻译 → 注入）
 - 在文章页面（`<article>/<p>` 结构）效果尚可
 - 在表格/列表布局页面（HN）效果严重不达标
+
+---
+
+## Debug-Log 驱动体验优化 — CSP 安全工具 + 长截图合成下载 + Agent 语言一致性（evo_v28）
+
+### 文档目标
+
+基于真实用户会话日志（debug-log-2026-03-22T06-26-33-177Z.json）分析出的体验痛点，逐一消除核心阻断问题，使截图、长页面归档、下载等高频场景在 CSP 严格页面上也能正常完成。
+
+### 当前结论
+
+#### 已确定
+
+- `browser_evaluate` 工具使用 `new Function()`（等价 `eval()`），在 CSP 包含 `script-src 'self'` 且不允许 `unsafe-eval` 的页面上被完全阻断。Hacker News 是典型代表。
+- `batch_screenshot` 技能的第 2 步依赖 `browser_evaluate` 获取页面尺寸，CSP 阻断后整个技能提前终止，退化为 Agent 手动滚动截图。
+- Agent 手动滚动截图时无法获取页面总高度，不知何时停止，导致重复截取底部区域或遗漏内容。
+- 用户明确要求"合成一张长图下载"，但系统不具备图片拼接能力，也没有截图下载工具。
+- Agent 回复的 think/act 步骤中英文混杂，系统 prompt 全英文导致模型有时用英文思考，体验不一致。
+
+#### 合理假设
+
+- 新增一个 CSP 安全的 `browser_get_page_info` 工具（在 content script 上下文直接读取 DOM 属性，不依赖 eval），可以替代 `evaluate` 在页面度量场景的使用。
+- 图片拼接可通过 Chrome 侧 OffscreenCanvas / Canvas API 实现，在 content script 或 background service worker 中合成后触发下载。
+- 系统 prompt 加入明确的语言一致性指令（"始终使用用户输入的语言回复"），可有效统一 Agent 输出语言。
+
+#### 待确认
+
+- `browser_evaluate` 是否应增加 CSP 检测 + 自动降级逻辑（当前方案是新增独立工具，不修改 evaluate 本身）。
+- 长图拼接的最大截图数量限制（内存考虑）。
+
+### 用户与场景
+
+- 用户在 Hacker News 等 CSP 严格页面使用"截取整页"功能
+- 用户希望一键获得完整长截图并下载到本地
+- 用户对 Agent 回复语言有一致性预期（全中文对话应全中文回复）
+
+### 功能范围
+
+#### 本次要做
+
+- 新增 `browser_get_page_info` CSP 安全工具，返回页面尺寸、滚动位置、URL、标题
+- 升级 `batch_screenshot` 技能，用 `browser_get_page_info` 替代 `browser_evaluate`
+- 新增截图合成下载能力（Canvas 拼接 + Blob 下载）
+- 系统 prompt 加入语言一致性指令
+
+#### 本次不做
+
+- 修改 `browser_evaluate` 工具本身（保持原有能力，不退化）
+- 跨页面截图（仅当前 tab 可见区域逐屏拼接）
+
+### 关键体验
+
+1. 用户在 HN 等 CSP 严格页面说"截取整页"
+2. batch_screenshot 技能正常执行（不因 CSP 失败）
+3. Agent 获得页面尺寸后精确计算需要滚动的屏数
+4. 用户说"合成一张长图下载"
+5. 系统将多张截图拼接为一张长图并触发浏览器下载
+6. 全程 Agent 回复语言与用户一致
+
+### 当前状态
+
+- `browser_evaluate` 在 CSP 严格页面失败，无降级方案
+- `batch_screenshot` 依赖 evaluate 获取页面度量，CSP 下完全不可用
+- 无图片拼接和截图下载能力
+- Agent 语言混杂无明确约束
 
 ---
 

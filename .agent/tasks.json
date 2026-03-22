@@ -1855,7 +1855,7 @@
       "id": "evo_v27_004",
       "type": "coding",
       "title": "提取-翻译-注入全链路适配 — ID 映射验证 + toggle/clear 兼容新 DOM 结构",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v27_003"
       ],
@@ -1867,13 +1867,63 @@
       "id": "evo_v27_005",
       "type": "validation",
       "title": "沉浸式翻译体验升级全量验收 — 双端构建 + HN 效果达标 + 文章页不退化",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v27_004"
       ],
       "acceptance": "双端编译通过；action-executor.ts 包含表格布局检测逻辑、行内元素提取逻辑、无边框纯文本 CSS、表格兼容注入策略；toggle/clear 逻辑完整",
       "acceptance_cmd": "cd packages/chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -3 && cd ../../packages/chrome-ext && grep -c \"imt-translation\" utils/action-executor.ts | xargs -I{} test {} -ge 3 && echo PASS || echo \"FAIL: 构建失败或翻译逻辑不完整\"",
       "evolution_goal": "沉浸式翻译体验升级 — 全量验收"
+    },
+    {
+      "id": "evo_v28_001",
+      "type": "coding",
+      "title": "新增 CSP 安全的 browser_get_page_info 工具 — content script 直接读取 DOM 属性，不依赖 eval",
+      "status": "pending",
+      "depends_on": ["evo_v27_005"],
+      "acceptance": "action-executor.ts 新增 getPageInfo action 类型，直接通过 document.documentElement.scrollHeight / clientHeight / scrollTop 等 DOM 属性返回页面尺寸、滚动位置、URL、标题；browser-tools.ts 注册 browser_get_page_info 工具并映射到 getPageInfo action；在 CSP 严格页面上可正常调用且返回完整数据",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'getPageInfo' utils/action-executor.ts && cd ../../packages/vscode-ext && grep -q 'browser_get_page_info' src/browser-tools.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: browser_get_page_info 工具未注册或编译失败'",
+      "evolution_goal": "Debug-log 驱动体验优化 — CSP 安全的页面度量工具"
+    },
+    {
+      "id": "evo_v28_002",
+      "type": "coding",
+      "title": "升级 batch_screenshot 技能 — 用 browser_get_page_info 替代 browser_evaluate + 智能滚动终止",
+      "status": "pending",
+      "depends_on": ["evo_v28_001"],
+      "acceptance": "skill-registry.ts 中 batch_screenshot 的 step 2 使用 browser_get_page_info 而非 browser_evaluate；技能包含根据 scrollHeight/clientHeight 动态计算总屏数的逻辑；在 CSP 严格页面执行不报错、不提前终止",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -A5 'batch_screenshot' src/skill-registry.ts | grep -q 'browser_get_page_info' && ! grep -A5 'batch_screenshot' src/skill-registry.ts | grep -q 'browser_evaluate' && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: batch_screenshot 仍依赖 browser_evaluate 或编译失败'",
+      "evolution_goal": "Debug-log 驱动体验优化 — batch_screenshot CSP 安全升级"
+    },
+    {
+      "id": "evo_v28_003",
+      "type": "coding",
+      "title": "新增截图合成下载能力 — Canvas 拼接多张 base64 截图 + Blob 触发浏览器下载",
+      "status": "pending",
+      "depends_on": ["evo_v28_002"],
+      "acceptance": "chrome-ext 新增 compositeScreenshots 工具函数（Canvas 拼接）或新 action 类型；接收 base64 截图数组，合成一张纵向长图；生成 Blob 并通过 <a> download 或 chrome.downloads API 触发下载；browser-tools.ts 注册 browser_composite_download 工具或等效调用入口",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -E '(compositeScreenshots|composite_download|canvas|Canvas|drawImage)' utils/action-executor.ts > /dev/null && cd ../../packages/vscode-ext && grep -E '(browser_composite_download|composite)' src/browser-tools.ts > /dev/null && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: 截图合成下载能力未实现或编译失败'",
+      "evolution_goal": "Debug-log 驱动体验优化 — 长截图合成下载"
+    },
+    {
+      "id": "evo_v28_004",
+      "type": "coding",
+      "title": "Agent 系统 prompt 语言一致性指令 — 强制 Agent 使用用户输入语言回复（含 think 步骤）",
+      "status": "pending",
+      "depends_on": ["evo_v28_001"],
+      "acceptance": "agent-loop.ts 的系统 prompt 中包含明确的语言一致性指令（如 'Always respond in the same language as the user input, including THOUGHT sections'）；用户用中文提问时 Agent 的 think/act/observe 全中文输出",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -iE '(language|语言|same language|用户.*语言)' src/agent-loop.ts > /dev/null && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: 系统 prompt 缺少语言一致性指令或编译失败'",
+      "evolution_goal": "Debug-log 驱动体验优化 — Agent 回复语言一致性"
+    },
+    {
+      "id": "evo_v28_005",
+      "type": "validation",
+      "title": "CSP 安全工具 + 长截图 + 语言一致性全量验收",
+      "status": "pending",
+      "depends_on": ["evo_v28_001", "evo_v28_002", "evo_v28_003", "evo_v28_004"],
+      "acceptance": "双端编译通过；browser_get_page_info 工具注册且 action-executor 有对应实现；batch_screenshot 不再依赖 browser_evaluate；截图合成下载逻辑存在；系统 prompt 包含语言指令",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && grep -q 'getPageInfo' utils/action-executor.ts && cd ../../packages/vscode-ext && grep -q 'browser_get_page_info' src/browser-tools.ts && grep -iE '(language|语言)' src/agent-loop.ts > /dev/null && echo PASS || echo 'FAIL: 全量验收未通过'",
+      "evolution_goal": "Debug-log 驱动体验优化 — 全量验收"
     }
   ]
 }
