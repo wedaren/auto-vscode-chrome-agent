@@ -686,19 +686,16 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
   };
 }
 
-/** 沉浸式翻译注入样式（只注入一次） */
+/** 沉浸式翻译注入样式（只注入一次）— 无边框纯文本沉浸式风格，参考沉浸式翻译扩展 */
 const IMT_STYLE_ID = 'imt-bilingual-style';
 const IMT_CSS = `
 .imt-translation {
-  margin: 4px 0 12px 0;
-  padding: 6px 12px;
-  border-left: 3px solid #4287f5;
-  background: rgba(66, 135, 245, 0.06);
-  color: #555;
-  font-size: 0.95em;
-  line-height: 1.6;
-  border-radius: 0 4px 4px 0;
+  margin: 0;
+  color: #888;
+  font-size: 0.88em;
+  line-height: 1.5;
   font-style: normal;
+  word-break: break-word;
 }
 .imt-translation.imt-hidden {
   display: none;
