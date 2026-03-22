@@ -133,6 +133,7 @@ function writeIcons(variant: 'dev' | 'prod', publicDir: string): void {
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  outDir: process.env.WXT_OUT_DIR ?? '.output/dev',
   dev: {
     server: { hostname: '127.0.0.1' },
   },
