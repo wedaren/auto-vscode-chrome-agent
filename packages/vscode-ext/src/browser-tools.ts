@@ -66,6 +66,8 @@ const TOOL_MAPPINGS: Record<string, ToolMapping> = {
   browser_inject_bilingual: { actionType: 'injectBilingual', argMapping: { mode: 'injectMode' } },
   // ── evo_v28_001: CSP 安全的页面度量工具 ──
   browser_get_page_info: { actionType: 'getPageInfo' },
+  // ── evo_v28_003: 截图合成下载 ──
+  browser_composite_download: { actionType: 'compositeDownload', argMapping: { screenshots: 'screenshots', file_name: 'fileName' } },
 };
 
 /** 完整的工具定义列表 */
@@ -298,6 +300,25 @@ const BROWSER_TOOLS: BrowserToolDef[] = [
       type: 'object',
       properties: {},
       required: [],
+    },
+  },
+  // ── evo_v28_003: 截图合成下载 ──
+  {
+    name: 'browser_composite_download',
+    description: 'Composite multiple base64 screenshots into a single vertical long image and trigger a browser download. Uses Canvas to stitch images top-to-bottom (max width aligned, white background fill). The result is a PNG file downloaded to the user\'s default download folder. Typically used after batch_screenshot to merge all viewport captures into one full-page image.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        screenshots: {
+          type: 'string',
+          description: 'JSON-encoded array of base64 data URL strings (e.g. ["data:image/png;base64,...", ...]). Each element is a full data URL from browser_screenshot.',
+        },
+        file_name: {
+          type: 'string',
+          description: 'Download file name (default: "composite-screenshot.png")',
+        },
+      },
+      required: ['screenshots'],
     },
   },
 ];

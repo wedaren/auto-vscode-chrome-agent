@@ -1891,7 +1891,7 @@
       "id": "evo_v28_002",
       "type": "coding",
       "title": "升级 batch_screenshot 技能 — 用 browser_get_page_info 替代 browser_evaluate + 智能滚动终止",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_001"
       ],

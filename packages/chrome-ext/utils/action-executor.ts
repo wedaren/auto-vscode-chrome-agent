@@ -21,7 +21,8 @@ export type ActionType =
   | 'getLinks'
   | 'extractParagraphs'
   | 'injectBilingual'
-  | 'getPageInfo';
+  | 'getPageInfo'
+  | 'compositeDownload';
 
 /** 滚动模式 */
 export type ScrollMode = 'to-top' | 'to-bottom' | 'by-pixels' | 'to-element';
@@ -64,6 +65,10 @@ export interface BrowserAction {
   injectMode?: 'inject' | 'toggle' | 'clear';
   /** injectBilingual inject 模式的翻译数据（JSON 字符串） */
   translations?: string;
+  /** compositeDownload: base64 截图数组的 JSON 字符串（每项为 data:image/png;base64,... 格式） */
+  screenshots?: string;
+  /** compositeDownload: 下载文件名（默认 composite-screenshot.png） */
+  fileName?: string;
 }
 
 /** 操作执行结果 */
@@ -1019,6 +1024,122 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
   }
 }
 
+// ── evo_v28_003: 截图合成下载 — Canvas 纵向拼接 + Blob 下载 ──
+
+/**
+ * compositeScreenshots — 将多张 base64 截图纵向拼接成一张长图并触发浏览器下载
+ *
+ * 实现思路：
+ * 1. 将每张 base64 data URL 加载为 Image 对象
+ * 2. 计算合成画布尺寸：宽度取最大值，高度为所有图片高度之和
+ * 3. 使用 OffscreenCanvas（降级 Canvas）纵向绘制所有图片
+ * 4. 导出为 Blob → 创建 Object URL → <a download> 触发浏览器下载
+ * 5. 下载后清理临时 URL
+ */
+async function executeCompositeDownload(action: BrowserAction): Promise<ActionResult> {
+  const raw = action.screenshots;
+  if (!raw) {
+    return { success: false, error: 'compositeDownload 需要 screenshots 参数（base64 data URL 数组的 JSON 字符串）' };
+  }
+
+  // 支持 JSON 字符串或已解析的数组（防御性处理）
+  let screenshots: string[];
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { success: false, error: 'screenshots 必须是非空数组' };
+    }
+    screenshots = parsed as string[];
+  } catch {
+    return { success: false, error: 'screenshots 参数 JSON 解析失败' };
+  }
+
+  const fileName = action.fileName || 'composite-screenshot.png';
+
+  try {
+    // 1. 并行加载所有 base64 图片为 Image 对象
+    const images = await Promise.all(
+      screenshots.map((src) => {
+        return new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`图片加载失败: ${src.slice(0, 60)}...`));
+          img.src = src;
+        });
+      }),
+    );
+
+    // 2. 计算合成画布尺寸
+    const maxWidth = Math.max(...images.map((img) => img.naturalWidth));
+    const totalHeight = images.reduce((sum, img) => sum + img.naturalHeight, 0);
+
+    if (maxWidth <= 0 || totalHeight <= 0) {
+      return { success: false, error: '图片尺寸无效（宽或高为 0）' };
+    }
+
+    // 3. 创建 Canvas 并纵向绘制
+    const canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = totalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return { success: false, error: '无法创建 Canvas 2D 上下文' };
+    }
+
+    // 白色背景
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+    let yOffset = 0;
+    for (const img of images) {
+      // 每张图片左对齐绘制，宽度不足 maxWidth 的部分保持白色背景
+      ctx.drawImage(img, 0, yOffset, img.naturalWidth, img.naturalHeight);
+      yOffset += img.naturalHeight;
+    }
+
+    // 4. Canvas → Blob → 触发下载
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => {
+        if (b) {
+          resolve(b);
+        } else {
+          reject(new Error('Canvas toBlob 失败'));
+        }
+      }, 'image/png');
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    }, 1000);
+
+    return {
+      success: true,
+      data: {
+        fileName,
+        imageCount: images.length,
+        width: maxWidth,
+        height: totalHeight,
+        fileSizeBytes: blob.size,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `截图合成失败: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 /**
  * 主执行入口 — 根据 action.type 分发到对应执行函数
  *
@@ -1115,6 +1236,10 @@ export async function executeAction(action: BrowserAction): Promise<ActionResult
       // ── evo_v28_001: CSP 安全的页面度量工具 ──
       case 'getPageInfo':
         return executeGetPageInfo();
+
+      // ── evo_v28_003: 截图合成下载 ──
+      case 'compositeDownload':
+        return executeCompositeDownload(action);
 
       default:
         return { success: false, error: `不支持的操作类型: ${(action as BrowserAction).type}` };
