@@ -1579,7 +1579,7 @@
       "id": "evo_v23_002",
       "type": "coding",
       "title": "Background EXECUTE_ACTION targetTabId 路由：当 payload 包含 targetTabId 时直接 tabs.sendMessage 到指定 tab，回退到 active tab 查询",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v23_001"
       ],

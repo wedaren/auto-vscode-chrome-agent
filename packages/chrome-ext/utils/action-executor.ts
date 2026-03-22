@@ -678,6 +678,23 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       ensureImtStyle();
 
+      // ── evo_v23_003: 自动重标记兜底 ──
+      // 当 data-imt-id 元素全部缺失时（SPA 重渲染 / tab 切换导致 DOM 重建），
+      // 自动重新调用 extractParagraphs 标记段落，再按索引配对注入翻译
+      let autoRemarkDone = false;
+      const existingMarked = document.querySelectorAll('[data-imt-id]').length;
+      if (existingMarked === 0 && items.length > 0) {
+        console.log('[imt] 自动重标记：data-imt-id 元素全部缺失，重新提取段落并标记');
+        const reExtractResult = executeExtractParagraphs({ type: 'extractParagraphs' });
+        if (reExtractResult.success && reExtractResult.data) {
+          const reData = reExtractResult.data as { totalExtracted: number; paragraphs: Array<{ id: string; tag: string; text: string }> };
+          console.log(`[imt] 自动重标记完成：重新标记了 ${reData.totalExtracted} 个段落`);
+          autoRemarkDone = true;
+        } else {
+          console.warn('[imt] 自动重标记失败：', reExtractResult.error);
+        }
+      }
+
       let injected = 0;
       let skipped = 0;
 
@@ -716,7 +733,13 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       return {
         success: true,
-        data: { mode: 'inject', injected, skipped, total: items.length },
+        data: {
+          mode: 'inject',
+          injected,
+          skipped,
+          total: items.length,
+          ...(autoRemarkDone ? { autoRemarkDone: true } : {}),
+        },
       };
     }
 
