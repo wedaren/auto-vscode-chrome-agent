@@ -33,13 +33,81 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SkillRegistry = void 0;
+exports.SkillRegistry = exports.PRESET_SCENARIOS = void 0;
 // skill-registry.ts — Skill 数据模型与注册表
 // 职责：定义 MCP Tool Schema 风格的 Skill / SkillStep 接口，
 //       管理内置预设 Skill 和用户自定义 Skill 的注册、加载、持久化。
 //       SkillRegistry 是 Skill 系统的核心数据层，供 SkillRunner / SkillTreeView / Chrome 面板消费。
 //       持久化层使用 UserDataManager，数据存储在 ~/.browser-agent/skills/ 目录下。
 const vscode = __importStar(require("vscode"));
+// ────────────────────────────────────────────────────────────────
+// 内置预设演示场景（至少 5 个，用户点击即可一键体验 Skill 能力）
+// ────────────────────────────────────────────────────────────────
+exports.PRESET_SCENARIOS = [
+    {
+        id: 'scenario_translate_hackernews',
+        skillName: 'immersive_translate',
+        displayName: '翻译 Hacker News',
+        description: '沉浸式翻译 Hacker News 首页，双语对照阅读科技资讯',
+        icon: '🌐',
+        targetUrl: 'https://news.ycombinator.com/',
+        prefilledParams: { targetLanguage: '中文' },
+    },
+    {
+        id: 'scenario_github_trending',
+        skillName: 'extract_page_data',
+        displayName: '提取 GitHub Trending',
+        description: '提取 GitHub Trending 页面的热门项目列表和描述',
+        icon: '🔥',
+        targetUrl: 'https://github.com/trending',
+        prefilledParams: { dataTypes: 'title,links' },
+    },
+    {
+        id: 'scenario_read_mdn',
+        skillName: 'read_article',
+        displayName: '阅读 MDN 文档',
+        description: '打开 MDN Web API 文档，智能提取文章正文内容',
+        icon: '📖',
+        targetUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch',
+        prefilledParams: { selector: 'article, main, [role="main"], .content' },
+    },
+    {
+        id: 'scenario_organize_tabs',
+        skillName: 'organize_tabs',
+        displayName: '整理标签页',
+        description: '获取当前所有标签页信息，按域名分组整理',
+        icon: '📑',
+        targetUrl: '',
+        prefilledParams: {},
+    },
+    {
+        id: 'scenario_extract_fulltext',
+        skillName: 'multi_step_extract',
+        displayName: '网页全文提取',
+        description: '提取 Wikipedia 页面大纲结构与全文内容',
+        icon: '📝',
+        targetUrl: 'https://en.wikipedia.org/wiki/Artificial_intelligence',
+        prefilledParams: { outlineSelector: 'h1, h2, h3', contentSelector: '#mw-content-text' },
+    },
+    {
+        id: 'scenario_page_performance',
+        skillName: 'page_info',
+        displayName: '页面性能检测',
+        description: '一键检测当前页面的加载性能、元素统计和 Meta 信息',
+        icon: '⚡',
+        targetUrl: '',
+        prefilledParams: {},
+    },
+    {
+        id: 'scenario_capture_links',
+        skillName: 'capture_all_links',
+        displayName: '采集页面链接',
+        description: '采集 Product Hunt 首页所有产品链接',
+        icon: '🔗',
+        targetUrl: 'https://www.producthunt.com/',
+        prefilledParams: { scope: 'body', maxLinks: '100' },
+    },
+];
 // ────────────────────────────────────────────────────────────────
 // 内置 20 个预设 Skill（原 5 + evo_v18_003 新增 10 + evo_v20_004 新增 5 个 DevTools MCP 专属）
 // ────────────────────────────────────────────────────────────────
@@ -1087,6 +1155,19 @@ class SkillRegistry {
      */
     getAllPreset() {
         return this.getAll().filter((s) => s.category === 'preset');
+    }
+    /**
+     * 获取所有预设演示场景
+     *
+     * 返回 PRESET_SCENARIOS 中关联 Skill 存在且已启用的场景列表。
+     * 用于 Chrome「一键体验」展示区域。
+     */
+    getScenarios() {
+        return exports.PRESET_SCENARIOS.filter((scenario) => {
+            const skill = this.skills.get(scenario.skillName);
+            // 只返回关联 Skill 存在且已启用的场景
+            return skill !== undefined && skill.enabled;
+        });
     }
     /**
      * 按名称查找 Skill

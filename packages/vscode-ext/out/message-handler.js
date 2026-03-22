@@ -423,25 +423,26 @@ class MessageHandler {
         }
     }
     /**
-     * 处理 skill_list：返回所有可用 Skill 列表（供 Chrome Skill 面板展示）
+     * 处理 skill_list：返回所有可用 Skill 列表 + 预设演示场景（供 Chrome Skill 面板展示）
      */
     handleSkillList(ws, msg) {
         if (!this.skillRegistry) {
             this.wsServer.send(ws, {
                 type: 'skill_list_result',
-                payload: { skills: [] },
+                payload: { skills: [], scenarios: [] },
                 sessionId: msg.sessionId,
             });
             this.outputChannel.appendLine('[BrowserAgent] skill_list 请求但 SkillRegistry 未初始化');
             return;
         }
         const skills = this.skillRegistry.getAll();
+        const scenarios = this.skillRegistry.getScenarios();
         this.wsServer.send(ws, {
             type: 'skill_list_result',
-            payload: { skills },
+            payload: { skills, scenarios },
             sessionId: msg.sessionId,
         });
-        this.outputChannel.appendLine(`[BrowserAgent] 已返回 ${skills.length} 个 Skill`);
+        this.outputChannel.appendLine(`[BrowserAgent] 已返回 ${skills.length} 个 Skill, ${scenarios.length} 个预设场景`);
     }
     /**
      * 处理 skill_execute：执行指定 Skill，通过 skill_progress 实时推送进度，

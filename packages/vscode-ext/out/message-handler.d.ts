@@ -82,7 +82,7 @@ export declare class MessageHandler {
      */
     private handleCancelChat;
     /**
-     * 处理 skill_list：返回所有可用 Skill 列表（供 Chrome Skill 面板展示）
+     * 处理 skill_list：返回所有可用 Skill 列表 + 预设演示场景（供 Chrome Skill 面板展示）
      */
     private handleSkillList;
     /**

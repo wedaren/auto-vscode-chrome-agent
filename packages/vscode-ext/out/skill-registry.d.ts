@@ -62,6 +62,30 @@ export interface Skill {
     steps: SkillStep[];
 }
 /**
+ * PresetScenario — 预设演示场景
+ *
+ * 用户在 Chrome Skill 面板「一键体验」区域直接点击执行，无需填写任何参数。
+ * 每个场景关联一个已有的 Skill，并预填参数和目标 URL，
+ * 执行时自动导航到 targetUrl 再按 prefilledParams 运行 Skill。
+ */
+export interface PresetScenario {
+    /** 唯一标识 */
+    id: string;
+    /** 关联的 Skill name（必须在 SkillRegistry 中存在） */
+    skillName: string;
+    /** 展示名称（用于 Chrome 场景卡片标题） */
+    displayName: string;
+    /** 简短描述（用于场景卡片副标题） */
+    description: string;
+    /** 图标（emoji 或 icon 名称，用于场景卡片展示） */
+    icon: string;
+    /** 目标 URL：执行 Skill 前自动导航到此页面 */
+    targetUrl: string;
+    /** 预填参数：直接传给 SkillRunner，用户无需手动输入 */
+    prefilledParams: Record<string, string>;
+}
+export declare const PRESET_SCENARIOS: PresetScenario[];
+/**
  * SkillRegistry 管理所有 Skill（预设 + 自定义）的注册、查询、持久化。
  *
  * 数据来源：
@@ -116,6 +140,13 @@ export declare class SkillRegistry {
      * 获取所有预设 Skill
      */
     getAllPreset(): Skill[];
+    /**
+     * 获取所有预设演示场景
+     *
+     * 返回 PRESET_SCENARIOS 中关联 Skill 存在且已启用的场景列表。
+     * 用于 Chrome「一键体验」展示区域。
+     */
+    getScenarios(): PresetScenario[];
     /**
      * 按名称查找 Skill
      */
