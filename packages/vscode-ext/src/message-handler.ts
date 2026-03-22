@@ -560,10 +560,12 @@ export class MessageHandler {
       skillName?: string;
       params?: Record<string, string>;
       targetTabId?: number;
+      targetUrl?: string;
     };
     const skillName = payload?.skillName ?? '';
     const params = payload?.params ?? {};
     const targetTabId = payload?.targetTabId;
+    const targetUrl = payload?.targetUrl ?? '';
 
     if (!this.skillRegistry || !this.skillRunner) {
       this.wsServer.send(ws, {
@@ -599,12 +601,32 @@ export class MessageHandler {
     }
 
     this.outputChannel.appendLine(
-      `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}`,
+      `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}${targetUrl ? `, targetUrl: ${targetUrl}` : ''}`,
     );
 
     // 异步执行，通过 skill_progress 实时推送进度
     void (async () => {
       try {
+        // 预设场景：如果 targetUrl 不为空，先自动导航到目标页面
+        if (targetUrl && this.skillRunner) {
+          this.outputChannel.appendLine(
+            `[BrowserAgent] 场景执行：自动导航到 targetUrl=${targetUrl}`,
+          );
+          const navOk = await this.skillRunner.navigateToTargetUrl(
+            targetUrl,
+            targetTabId,
+          );
+          if (navOk) {
+            this.outputChannel.appendLine(
+              `[BrowserAgent] 自动导航成功: ${targetUrl}`,
+            );
+          } else {
+            this.outputChannel.appendLine(
+              `[BrowserAgent] 自动导航失败，降级为直接执行 Skill 步骤: ${targetUrl}`,
+            );
+          }
+        }
+
         const result = await this.skillRunner!.execute(
           skill,
           params,

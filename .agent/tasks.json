@@ -1768,7 +1768,7 @@
       "id": "evo_v26_002",
       "type": "coding",
       "title": "Chrome SkillPanel 场景展示区 UI + 一键执行（零参数）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v26_001"
       ],

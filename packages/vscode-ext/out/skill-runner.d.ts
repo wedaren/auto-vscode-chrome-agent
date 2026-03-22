@@ -68,6 +68,19 @@ export declare class SkillRunner {
     private readonly lmService;
     constructor(browserToolProvider: BrowserToolProvider, mcpClient: McpClient, outputChannel: vscode.OutputChannel, lmService?: LmService);
     /**
+     * 预设场景自动导航：在执行 Skill 步骤前先导航到目标 URL
+     *
+     * 流程：
+     * 1. 调用 browser_navigate 导航到 targetUrl
+     * 2. 调用 browser_wait 等待页面 body 加载完成（最长 8 秒）
+     * 3. 导航失败时返回 false，调用方降级为直接执行 Skill 步骤
+     *
+     * @param targetUrl 目标页面 URL
+     * @param targetTabId Chrome 侧锁定的目标 Tab ID（可选）
+     * @returns true=导航成功，false=导航失败（调用方应降级继续执行）
+     */
+    navigateToTargetUrl(targetUrl: string, targetTabId?: number): Promise<boolean>;
+    /**
      * 执行指定 Skill
      *
      * @param skill 要执行的 Skill 定义

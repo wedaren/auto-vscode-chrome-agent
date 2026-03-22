@@ -34,6 +34,49 @@ class SkillRunner {
         this.lmService = lmService;
     }
     /**
+     * 预设场景自动导航：在执行 Skill 步骤前先导航到目标 URL
+     *
+     * 流程：
+     * 1. 调用 browser_navigate 导航到 targetUrl
+     * 2. 调用 browser_wait 等待页面 body 加载完成（最长 8 秒）
+     * 3. 导航失败时返回 false，调用方降级为直接执行 Skill 步骤
+     *
+     * @param targetUrl 目标页面 URL
+     * @param targetTabId Chrome 侧锁定的目标 Tab ID（可选）
+     * @returns true=导航成功，false=导航失败（调用方应降级继续执行）
+     */
+    async navigateToTargetUrl(targetUrl, targetTabId) {
+        if (!targetUrl) {
+            return false;
+        }
+        this.outputChannel.appendLine(`[SkillRunner] 场景预导航: browser_navigate → ${targetUrl}`);
+        try {
+            // Step 1: 导航到目标 URL
+            const navResult = await this.callTool('browser_navigate', { url: targetUrl }, undefined, targetTabId);
+            if (navResult.isError) {
+                const errText = this.formatToolResult(navResult);
+                this.outputChannel.appendLine(`[SkillRunner] 场景预导航失败(browser_navigate): ${errText}`);
+                return false;
+            }
+            this.outputChannel.appendLine('[SkillRunner] 场景预导航: browser_navigate 成功，等待页面加载...');
+            // Step 2: 等待页面 body 加载（最长 8 秒）
+            const waitResult = await this.callTool('browser_wait', { selector: 'body', timeout: 8000 }, undefined, targetTabId);
+            if (waitResult.isError) {
+                const errText = this.formatToolResult(waitResult);
+                this.outputChannel.appendLine(`[SkillRunner] 场景预导航: browser_wait 超时/失败（降级继续）: ${errText}`);
+                // 等待超时不阻塞，仍然返回 true（导航已发出，页面可能在加载中）
+                return true;
+            }
+            this.outputChannel.appendLine(`[SkillRunner] 场景预导航完成: 已到达 ${targetUrl}`);
+            return true;
+        }
+        catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            this.outputChannel.appendLine(`[SkillRunner] 场景预导航异常（降级继续）: ${errMsg}`);
+            return false;
+        }
+    }
+    /**
      * 执行指定 Skill
      *
      * @param skill 要执行的 Skill 定义
