@@ -170,6 +170,26 @@
           },
           "default": [],
           "description": "传递给 chrome-devtools-mcp 的额外命令行参数（如 [\"--viewport\", \"1280x720\", \"--executablePath\", \"/path/to/chrome\"]）"
+        },
+        "browserAgent.models.defaultModelId": {
+          "type": "string",
+          "default": "",
+          "description": "默认选中的语言模型 ID（如 \"gpt-4o\"）。Chrome 连接后自动选中该模型而非列表第一个。留空则使用列表第一个模型"
+        },
+        "browserAgent.models.hiddenModelIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "需要隐藏的模型 ID 列表（如 [\"gpt-3.5-turbo\", \"old-model\"]）。匹配的模型不会出现在 Chrome 下拉列表中"
+        },
+        "browserAgent.models.maxVisibleModels": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Chrome 模型下拉列表默认显示的最大模型数量，超出部分需展开查看。默认 5 个"
         }
       }
     }
