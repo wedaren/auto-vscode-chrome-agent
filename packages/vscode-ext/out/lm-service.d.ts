@@ -10,8 +10,16 @@ export interface ModelInfo {
     maxInputTokens: number;
 }
 /**
+ * 模型偏好配置，从 VSCode settings 读取
+ */
+export interface ModelPreferences {
+    defaultModelId: string;
+    maxVisibleModels: number;
+}
+/**
  * LmService 负责与 vscode.lm API 交互，
  * 选择模型、发送请求、处理流式响应。
+ * 支持通过 VSCode 配置隐藏模型、设置默认模型。
  */
 export declare class LmService {
     private outputChannel;
@@ -25,9 +33,15 @@ export declare class LmService {
     /** 释放事件发射器 */
     dispose(): void;
     /**
+     * 读取 VSCode 配置中的模型偏好设置
+     * @returns 模型偏好配置 { defaultModelId, maxVisibleModels }
+     */
+    getModelPreferences(): ModelPreferences;
+    /**
      * 列出所有可用的语言模型信息
-     * 调用 vscode.lm.selectChatModels({}) 获取全量模型列表
-     * @returns 可用模型信息数组
+     * 调用 vscode.lm.selectChatModels({}) 获取全量模型列表，
+     * 并根据 browserAgent.models.hiddenModelIds 配置过滤掉隐藏模型
+     * @returns 过滤后的可用模型信息数组
      */
     listModels(): Promise<ModelInfo[]>;
     /**
@@ -38,8 +52,11 @@ export declare class LmService {
      */
     selectModelById(id: string): Promise<boolean>;
     /**
-     * 选择可用的语言模型（优先 gpt-4o）
-     * 如果已通过 selectModelById 指定模型，则直接返回缓存
+     * 选择可用的语言模型
+     * 优先级：1) 已通过 selectModelById 指定的模型
+     *         2) browserAgent.models.defaultModelId 配置的模型
+     *         3) gpt-4o 家族
+     *         4) 任意 copilot 模型
      * 需要用户已安装 GitHub Copilot Chat 并有订阅
      */
     selectModel(): Promise<vscode.LanguageModelChat | undefined>;

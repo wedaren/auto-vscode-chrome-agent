@@ -1630,8 +1630,10 @@
       "id": "evo_v24_001",
       "type": "coding",
       "title": "VSCode 配置 Schema 扩展：新增 defaultModelId / hiddenModelIds / maxVisibleModels 三项模型管理配置",
-      "status": "pending",
-      "depends_on": ["evo_v23_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v23_005"
+      ],
       "acceptance": "package.json contributes.configuration.properties 中新增 browserAgent.models.defaultModelId (string)、browserAgent.models.hiddenModelIds (string[])、browserAgent.models.maxVisibleModels (number, default:5) 三项配置项，均有清晰的 description 和合理的 default",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'browserAgent.models.defaultModelId' package.json && grep -q 'browserAgent.models.hiddenModelIds' package.json && grep -q 'browserAgent.models.maxVisibleModels' package.json && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选"
@@ -1641,7 +1643,9 @@
       "type": "coding",
       "title": "LmService 模型过滤 + 默认模型配置感知：listModels 过滤 hiddenModelIds，selectModel 优先使用 defaultModelId",
       "status": "pending",
-      "depends_on": ["evo_v24_001"],
+      "depends_on": [
+        "evo_v24_001"
+      ],
       "acceptance": "LmService.listModels() 读取 browserAgent.models.hiddenModelIds 配置并过滤掉命中的模型；新增 getModelPreferences() 方法返回 { defaultModelId, maxVisibleModels }；selectModel() 优先使用 browserAgent.models.defaultModelId 配置的模型而非硬编码 gpt-4o；VSCode 编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'hiddenModelIds' src/lm-service.ts && grep -q 'defaultModelId' src/lm-service.ts && grep -q 'getModelPreferences\\|modelPreferences' src/lm-service.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选"
@@ -1651,7 +1655,9 @@
       "type": "coding",
       "title": "MessageHandler 传递模型配置到 Chrome：models_list payload 扩展 defaultModelId + maxVisibleModels 字段",
       "status": "pending",
-      "depends_on": ["evo_v24_002"],
+      "depends_on": [
+        "evo_v24_002"
+      ],
       "acceptance": "handleListModels 的 models_list 响应 payload 从 { models } 扩展为 { models, defaultModelId?, maxVisibleModels }；从 LmService.getModelPreferences() 获取配置值；VSCode 编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'defaultModelId' src/message-handler.ts && grep -q 'maxVisibleModels\\|maxVisible' src/message-handler.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选"
@@ -1661,7 +1667,9 @@
       "type": "coding",
       "title": "Chrome ModelSelector 默认 5 个下拉限制 + 服务端默认模型自动选中 + 展开更多",
       "status": "pending",
-      "depends_on": ["evo_v24_003"],
+      "depends_on": [
+        "evo_v24_003"
+      ],
       "acceptance": "ModelSelector 组件接收 maxVisibleModels prop，默认只显示前 N 个模型；超出时显示「更多模型…」可展开查看全部；App.tsx 解析 models_list 中的 defaultModelId 字段，连接后自动选中而非默认第一个；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'maxVisibleModels\\|maxVisible' components/ModelSelector.tsx && grep -q 'defaultModelId' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选"
@@ -1671,7 +1679,12 @@
       "type": "validation",
       "title": "模型管理配置全量验收：VSCode 配置 Schema + 过滤逻辑 + Chrome 下拉限制 + 双端构建",
       "status": "pending",
-      "depends_on": ["evo_v24_001", "evo_v24_002", "evo_v24_003", "evo_v24_004"],
+      "depends_on": [
+        "evo_v24_001",
+        "evo_v24_002",
+        "evo_v24_003",
+        "evo_v24_004"
+      ],
       "acceptance": "VSCode 编译通过 + Chrome 构建通过；package.json 有 3 项新配置；LmService 支持 hiddenModelIds 过滤 + defaultModelId 优先选择；MessageHandler 传递 defaultModelId + maxVisibleModels；ModelSelector 支持下拉限制和展开更多",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'browserAgent.models.defaultModelId' package.json && grep -q 'browserAgent.models.hiddenModelIds' package.json && grep -q 'browserAgent.models.maxVisibleModels' package.json && grep -q 'hiddenModelIds' src/lm-service.ts && grep -q 'defaultModelId' src/message-handler.ts && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && grep -q 'maxVisibleModels\\|maxVisible' components/ModelSelector.tsx && grep -q 'defaultModelId' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "vsocde 插件可以配置默认模型，隐藏模型等，浏览器默认提供 5 个下拉选"
