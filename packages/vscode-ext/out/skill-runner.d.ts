@@ -147,6 +147,16 @@ export declare class SkillRunner {
      */
     private formatToolResult;
     /**
+     * 步骤失败诊断：输出插值后的实际参数和上一步 resultText 摘要，辅助排查问题
+     *
+     * @param stepIndex 当前步骤序号
+     * @param totalSteps 总步骤数
+     * @param step 当前步骤定义
+     * @param stepResult 当前步骤执行结果
+     * @param previousResults 之前已完成步骤的结果列表
+     */
+    private logStepFailureDiagnostics;
+    /**
      * 构建执行结果汇总文本
      */
     private buildSummary;

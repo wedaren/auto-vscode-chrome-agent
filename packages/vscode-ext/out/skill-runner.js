@@ -101,6 +101,8 @@ class SkillRunner {
                 this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 成功: ${step.description}`);
             }
             else {
+                // ── 失败诊断增强：打印插值后实际 args + 上一步 resultText 摘要 ──
+                this.logStepFailureDiagnostics(i, totalSteps, step, stepResult, stepResults);
                 if (isOptional) {
                     // 可选步骤失败 → 跳过
                     onProgress?.({
@@ -392,6 +394,42 @@ class SkillRunner {
             return JSON.stringify(item);
         })
             .join('\n');
+    }
+    /**
+     * 步骤失败诊断：输出插值后的实际参数和上一步 resultText 摘要，辅助排查问题
+     *
+     * @param stepIndex 当前步骤序号
+     * @param totalSteps 总步骤数
+     * @param step 当前步骤定义
+     * @param stepResult 当前步骤执行结果
+     * @param previousResults 之前已完成步骤的结果列表
+     */
+    logStepFailureDiagnostics(stepIndex, totalSteps, step, stepResult, previousResults) {
+        const label = `[SkillRunner] 🔍 步骤 ${stepIndex + 1}/${totalSteps} 失败诊断`;
+        this.outputChannel.appendLine(`${label} ── 工具: ${step.toolName}`);
+        // 1. 打印插值后的实际参数（toolArgs），截断前 300 字符
+        const interpolatedArgs = JSON.stringify(stepResult.resolvedArgs);
+        const truncatedArgs = interpolatedArgs.length > 300
+            ? interpolatedArgs.substring(0, 300) + '…(truncated)'
+            : interpolatedArgs;
+        this.outputChannel.appendLine(`${label} ── 实际参数(interpolated args): ${truncatedArgs}`);
+        // 2. 打印上一步 resultText 摘要（如果有）
+        if (previousResults.length > 0) {
+            const prevResult = previousResults[previousResults.length - 1];
+            const prevSummary = prevResult.resultText
+                ? prevResult.resultText.length > 300
+                    ? prevResult.resultText.substring(0, 300) + '…(truncated)'
+                    : prevResult.resultText
+                : '(空)';
+            this.outputChannel.appendLine(`${label} ── 上一步(${prevResult.toolName}) resultText 摘要: ${prevSummary}`);
+        }
+        else {
+            this.outputChannel.appendLine(`${label} ── 无上一步结果（当前是第一步）`);
+        }
+        // 3. 打印错误信息
+        if (stepResult.error) {
+            this.outputChannel.appendLine(`${label} ── 错误: ${stepResult.error}`);
+        }
     }
     /**
      * 构建执行结果汇总文本

@@ -1528,7 +1528,7 @@
       "id": "evo_v22_003",
       "type": "coding",
       "title": "增强 injectBilingual 防御性自动解包：当 translations 为 {translations:[...]} 包装对象时自动提取",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v22_002"
       ],
