@@ -21,3 +21,9 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 预存 TS 错误（browser/chrome 全局变量类型，WXT 项目特性，非本任务引入，20 个错误均在 content.ts / useChatStorage.ts / usePageContext.ts / tool-bridge.ts，不涉及 action-executor.ts）
