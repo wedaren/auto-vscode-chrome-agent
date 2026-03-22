@@ -1729,7 +1729,7 @@
       "id": "evo_v25_004",
       "type": "coding",
       "title": "MessageBubble Markdown 图片渲染 + 图片 CSS 样式体系（缩略图 + Lightbox overlay）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v25_002"
       ],
