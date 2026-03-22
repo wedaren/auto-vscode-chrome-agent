@@ -131,7 +131,7 @@ const PRESET_SKILLS = [
             {
                 toolName: 'llm_translate',
                 argsTemplate: {
-                    paragraphs: '{{$prev}}',
+                    texts: '{{$prev}}',
                     targetLanguage: '{{targetLanguage}}',
                 },
                 description: '调用 LLM 批量翻译提取到的段落',

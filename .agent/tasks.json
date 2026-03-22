@@ -1413,7 +1413,7 @@
       "id": "evo_v20_004",
       "type": "coding",
       "title": "5 个 DevTools MCP 专属预设 Skill：性能审计 / 网络分析 / Lighthouse / 多页面工作流 / DOM 快照",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v20_001",
         "evo_v20_003"
@@ -1426,7 +1426,7 @@
       "id": "evo_v20_005",
       "type": "validation",
       "title": "DevTools MCP 深度集成全量验收：配置 + Schema + 健壮性 + 5 个 Skill + 双端构建",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v20_001",
         "evo_v20_002",
@@ -1436,6 +1436,56 @@
       "acceptance": "VSCode 插件编译通过 + Chrome 插件构建通过；package.json 有 browserAgent.mcp.* 配置声明；McpClient 支持可配置启动参数 + 崩溃自动重启；AgentLoop 系统提示词含完整 MCP 工具参数签名；5 个 DevTools MCP Skill 均已注册且可被 run_skill 调用",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -q 'browserAgent.mcp' package.json && grep -q 'inputSchema' src/mcp-client.ts && grep -q 'restartOnCrash\\|autoRestart\\|reconnect' src/mcp-client.ts && grep -q 'inputSchema\\|parameterSchema' src/agent-loop.ts && grep -c 'devtools_' src/skill-registry.ts | xargs -I{} test {} -ge 5 && echo PASS || echo FAIL",
       "evolution_goal": "内置 MCP chrome-devtools-mcp；不考虑时间，使用最优解，提供用户使用 agent 的体验；结合 mcp 的工具再内置 skill"
+    },
+    {
+      "id": "evo_v21_001",
+      "type": "coding",
+      "title": "修复 immersive_translate 及所有预设 Skill 的 argsTemplate 参数名不匹配问题",
+      "status": "pending",
+      "depends_on": ["evo_v20_005"],
+      "acceptance": "skill-registry.ts 中 immersive_translate 步骤 2 的 argsTemplate 使用 texts 而非 paragraphs；审计全部 20 个预设 Skill 的 argsTemplate，确保每个步骤的参数名与目标工具的实际参数名一致；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -A5 'llm_translate' src/skill-registry.ts | grep -q 'texts' && ! grep -A5 'llm_translate' src/skill-registry.ts | grep -q 'paragraphs.*\\$prev' && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
+    },
+    {
+      "id": "evo_v21_002",
+      "type": "coding",
+      "title": "增强 llm_translate 参数解析健壮性：多参数名兼容 + 结构化结果自动提取",
+      "status": "pending",
+      "depends_on": ["evo_v21_001"],
+      "acceptance": "llm-tools.ts 中 handleLlmTranslate 支持从 args.texts / args.paragraphs / args.input 多个 key 中提取文本数组；当值为 JSON 对象字符串时自动从 .paragraphs[].text 或 .texts 或顶层数组提取；新增单元测试用例覆盖至少 5 种输入格式；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'args.paragraphs\\|args.input' src/llm-tools.ts && grep -c 'paragraphs\\|fallback\\|alias' src/llm-tools.ts | xargs -I{} test {} -ge 3 && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
+    },
+    {
+      "id": "evo_v21_003",
+      "type": "coding",
+      "title": "SkillRunner 插值增强：支持 {{$prev.key}} 路径表达式从结构化 JSON 中提取字段",
+      "status": "pending",
+      "depends_on": ["evo_v21_001"],
+      "acceptance": "skill-runner.ts 的 interpolateValue 支持路径表达式语法：{{$prev.key}} 提取 JSON 对象的 key 字段，{{$prev.arr[].field}} 提取数组中每项的 field 组成新数组并 JSON.stringify，{{$step_N.key}} 同理；原有 {{$prev}} / {{paramName}} 语法向后兼容不受影响；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q '\\$prev\\.' src/skill-runner.ts && grep -q 'parsePath\\|extractPath\\|resolvePath' src/skill-runner.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
+    },
+    {
+      "id": "evo_v21_004",
+      "type": "coding",
+      "title": "修复 Chrome SkillPanel skill_list 重复请求：useEffect 依赖稳定化 + 请求去重",
+      "status": "pending",
+      "depends_on": ["evo_v20_005"],
+      "acceptance": "SkillPanel.tsx 中 skill_list 请求逻辑使用 useRef 追踪请求状态或 sendMessage 引用稳定化，确保连接建立后只发送一次 skill_list 请求；Chrome 插件构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'useRef\\|requestedRef\\|hasFetched' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
+    },
+    {
+      "id": "evo_v21_005",
+      "type": "validation",
+      "title": "Debug-log 优化全量验收：immersive_translate 参数修复 + llm_translate 健壮性 + 路径插值 + 去重 + 双端构建",
+      "status": "pending",
+      "depends_on": ["evo_v21_001", "evo_v21_002", "evo_v21_003", "evo_v21_004"],
+      "acceptance": "VSCode 插件编译通过 + Chrome 插件构建通过；immersive_translate Skill 的 argsTemplate 参数名正确；llm_translate 支持多种输入格式；SkillRunner 支持路径表达式插值；SkillPanel 不重复请求 skill_list",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -A5 'llm_translate' src/skill-registry.ts | grep -q 'texts' && grep -q 'args.paragraphs' src/llm-tools.ts && grep -q '\\$prev\\.' src/skill-runner.ts && cd ../../packages/chrome-ext && grep -q 'useRef\\|requestedRef' components/SkillPanel.tsx && echo PASS || echo FAIL",
+      "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
     }
   ]
 }
