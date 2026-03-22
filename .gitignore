@@ -10,3 +10,6 @@ packages/chrome-ext/.output/
 
 # Generated extension icons (rebuilt each dev/build run)
 packages/chrome-ext/public/icon-*.png
+
+# WXT auto-generated types (rebuilt on every dev/build)
+packages/chrome-ext/.wxt/
