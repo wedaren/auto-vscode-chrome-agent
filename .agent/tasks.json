@@ -1567,8 +1567,10 @@
       "id": "evo_v23_001",
       "type": "coding",
       "title": "Skill 执行 Tab 锁定：SkillPanel 获取 activeTabId 并附在 skill_execute 消息中，VSCode 侧 SkillRunner 透传 targetTabId 到每个 tool_execute",
-      "status": "pending",
-      "depends_on": ["evo_v22_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v22_005"
+      ],
       "acceptance": "SkillPanel.tsx 在 executeSkill 前通过 chrome.tabs.query 获取 activeTabId 并附在 skill_execute payload 中；VSCode skill-runner.ts / browser-tools.ts 从 skill 上下文中提取 targetTabId 并包含在每个 tool_execute 消息的 payload 中；message-handler.ts 将 skill_execute 中的 targetTabId 传递给 SkillRunner；双端编译通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'activeTabId\\|targetTabId\\|tabId' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -q 'targetTabId' src/skill-runner.ts && grep -q 'targetTabId' src/browser-tools.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "debug-log-2026-03-22T03-12-19-971Z.json 驱动：沉浸式翻译 injected:0 skipped:200 — Skill 多步骤执行期间 tab 切换导致注入目标页错误"
@@ -1578,7 +1580,9 @@
       "type": "coding",
       "title": "Background EXECUTE_ACTION targetTabId 路由：当 payload 包含 targetTabId 时直接 tabs.sendMessage 到指定 tab，回退到 active tab 查询",
       "status": "pending",
-      "depends_on": ["evo_v23_001"],
+      "depends_on": [
+        "evo_v23_001"
+      ],
       "acceptance": "background.ts 的 EXECUTE_ACTION 处理逻辑中，当 action.targetTabId 存在且为有效数字时，直接使用 browser.tabs.sendMessage(targetTabId, ...) 而非查询 active tab；targetTabId 不存在时回退到原有 browser.tabs.query 逻辑；tool-bridge.ts 的 toAction 函数将 toolArgs 中的 targetTabId 提取并附在 EXECUTE_ACTION payload 中；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'targetTabId' entrypoints/background.ts && grep -q 'targetTabId' utils/tool-bridge.ts && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "debug-log-2026-03-22T03-12-19-971Z.json 驱动：沉浸式翻译 injected:0 skipped:200 — background 路由到 active tab 而非 skill 起始 tab"
@@ -1588,7 +1592,9 @@
       "type": "coding",
       "title": "injectBilingual 自动重标记兜底：当 data-imt-id 元素全部缺失时自动重新提取段落并按索引注入翻译",
       "status": "pending",
-      "depends_on": ["evo_v23_001"],
+      "depends_on": [
+        "evo_v23_001"
+      ],
       "acceptance": "action-executor.ts 的 executeInjectBilingual inject 模式中，在遍历 items 前先检查 document.querySelectorAll('[data-imt-id]').length；若为 0 则自动调用 executeExtractParagraphs 重新标记 DOM 元素；重标记后重新按 imt-N 索引查找并注入翻译；日志输出 '[imt] 自动重标记' 或类似提示；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'data-imt-id' utils/action-executor.ts && grep -q '重标记\\|re-mark\\|auto.*extract\\|autoRemark' utils/action-executor.ts && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "debug-log-2026-03-22T03-12-19-971Z.json 驱动：SPA 页面重渲染导致 data-imt-id 属性丢失的兜底方案"
@@ -1598,7 +1604,9 @@
       "type": "coding",
       "title": "injectBilingual 注入结果诊断增强：injected=0 时返回诊断信息（可能原因 + 建议操作）",
       "status": "pending",
-      "depends_on": ["evo_v23_003"],
+      "depends_on": [
+        "evo_v23_003"
+      ],
       "acceptance": "action-executor.ts 的 executeInjectBilingual 在 injected===0 且 skipped>0 时，data 中附加 diagnostic 字段，包含可能原因描述（tab 切换 / 页面重渲染）和建议操作（重新执行翻译）；SkillRunner 在步骤结果中检测到 injected=0 时在 outputChannel 输出警告；双端编译通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'diagnostic\\|诊断' utils/action-executor.ts && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
       "evolution_goal": "debug-log-2026-03-22T03-12-19-971Z.json 驱动：injectBilingual 全部跳过时用户无法理解原因"
@@ -1608,7 +1616,12 @@
       "type": "validation",
       "title": "沉浸式翻译注入修复全量验收：Tab 锁定 + 自动重标记 + 诊断增强 + 双端构建",
       "status": "pending",
-      "depends_on": ["evo_v23_001", "evo_v23_002", "evo_v23_003", "evo_v23_004"],
+      "depends_on": [
+        "evo_v23_001",
+        "evo_v23_002",
+        "evo_v23_003",
+        "evo_v23_004"
+      ],
       "acceptance": "VSCode 编译通过 + Chrome 构建通过；skill_execute 协议包含 targetTabId；background 支持 targetTabId 路由；injectBilingual 包含自动重标记逻辑；injected=0 时有诊断信息；tool_execute 协议透传 targetTabId",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && grep -q 'targetTabId' entrypoints/background.ts && grep -q 'targetTabId' utils/tool-bridge.ts && grep -q 'targetTabId' components/SkillPanel.tsx && grep -q '重标记\\|re-mark\\|autoRemark' utils/action-executor.ts && grep -q 'diagnostic\\|诊断' utils/action-executor.ts && cd ../../packages/vscode-ext && grep -q 'targetTabId' src/skill-runner.ts && grep -q 'targetTabId' src/browser-tools.ts && echo PASS || echo FAIL",
       "evolution_goal": "debug-log-2026-03-22T03-12-19-971Z.json 驱动：沉浸式翻译注入全部跳过的完整修复验收"

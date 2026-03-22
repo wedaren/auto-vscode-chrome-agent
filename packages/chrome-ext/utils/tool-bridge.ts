@@ -29,6 +29,8 @@ export interface ToolExecutePayload {
   toolName: string;
   /** 工具参数，对应 BrowserAction 的各字段 */
   toolArgs: Record<string, unknown>;
+  /** 可选的目标 Tab ID，Skill 执行期间锁定目标页，防止 tab 切换导致操作漂移 */
+  targetTabId?: number;
 }
 
 /** tool_result 消息的 payload 结构 */
@@ -50,8 +52,15 @@ export interface ToolResultPayload {
  * 兼容映射：LLM 常见参数误用自动修正
  * - type 操作：LLM 可能传 { text: "xxx" } 而非 { value: "xxx" }，自动映射 text→value
  */
-function toAction(toolName: string, toolArgs: Record<string, unknown>): BrowserAction {
+function toAction(toolName: string, toolArgs: Record<string, unknown>): { action: BrowserAction; targetTabId?: number } {
   const correctedArgs = { ...toolArgs };
+
+  // 提取 targetTabId（如果存在于 toolArgs 中），不传递给 BrowserAction
+  let targetTabId: number | undefined;
+  if ('targetTabId' in correctedArgs && typeof correctedArgs.targetTabId === 'number') {
+    targetTabId = correctedArgs.targetTabId;
+    delete correctedArgs.targetTabId;
+  }
 
   // 兼容映射：type 操作中 LLM 常把 value 误写为 text
   if (toolName === 'type' && correctedArgs.text && !correctedArgs.value) {
@@ -62,21 +71,30 @@ function toAction(toolName: string, toolArgs: Record<string, unknown>): BrowserA
     delete correctedArgs.text;
   }
 
-  return {
+  const action = {
     type: toolName as BrowserAction['type'],
     ...correctedArgs,
   } as BrowserAction;
+
+  return { action, targetTabId };
 }
 
 /**
  * 通过 chrome.runtime.sendMessage 将 BrowserAction 发送到 background script 执行
  * background 会根据 action.type 选择在 background 或 content script 中执行
+ * @param action 要执行的浏览器操作
+ * @param targetTabId 可选的目标 Tab ID，存在时 background 直接路由到该 tab
  */
-async function executeViaBackground(action: BrowserAction): Promise<ActionResult> {
+async function executeViaBackground(action: BrowserAction, targetTabId?: number): Promise<ActionResult> {
   return new Promise<ActionResult>((resolve) => {
     try {
+      // 当 targetTabId 存在时，附在 EXECUTE_ACTION payload 中供 background 路由到指定 tab
+      const payload: Record<string, unknown> = { ...action };
+      if (targetTabId !== undefined) {
+        payload.targetTabId = targetTabId;
+      }
       chrome.runtime.sendMessage(
-        { type: 'EXECUTE_ACTION', payload: action },
+        { type: 'EXECUTE_ACTION', payload },
         (response) => {
           if (chrome.runtime.lastError) {
             resolve({
@@ -115,16 +133,17 @@ export async function handleToolExecute(
   sendMessage: (type: string, payload: unknown) => boolean,
 ): Promise<void> {
   const payload = msg.payload as ToolExecutePayload;
-  const { requestId, toolName, toolArgs } = payload;
+  const { requestId, toolName, toolArgs, targetTabId: payloadTargetTabId } = payload;
 
-  console.log(`[ToolBridge] 收到 tool_execute: requestId=${requestId}, tool=${toolName}`);
+  console.log(`[ToolBridge] 收到 tool_execute: requestId=${requestId}, tool=${toolName}${payloadTargetTabId !== undefined ? `, targetTabId=${payloadTargetTabId}` : ''}`);
 
   let result: ToolResultPayload;
 
   try {
-    // 转换为 BrowserAction 并通过 background 执行
-    const action = toAction(toolName, toolArgs || {});
-    const actionResult = await executeViaBackground(action);
+    // 转换为 BrowserAction 并提取 targetTabId（优先使用 payload 级别的 targetTabId，其次从 toolArgs 中提取）
+    const { action, targetTabId: argsTargetTabId } = toAction(toolName, toolArgs || {});
+    const targetTabId = payloadTargetTabId ?? argsTargetTabId;
+    const actionResult = await executeViaBackground(action, targetTabId);
 
     result = {
       requestId,

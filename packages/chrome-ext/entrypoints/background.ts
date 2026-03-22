@@ -118,9 +118,32 @@ export default defineBackground(() => {
       }
 
       case 'EXECUTE_ACTION': {
-        // 浏览器操作执行：转发到活动 tab 的 content script
-        const action = message.payload as BrowserAction;
-        console.log('[background] 转发浏览器操作:', action.type);
+        // 浏览器操作执行：转发到目标 tab 或活动 tab 的 content script
+        const rawPayload = message.payload as BrowserAction & { targetTabId?: number };
+        // 提取 targetTabId 并从 action 中移除（不传递给 content script）
+        const { targetTabId: actionTargetTabId, ...actionFields } = rawPayload;
+        const action = actionFields as BrowserAction;
+        console.log(`[background] 转发浏览器操作: ${action.type}${actionTargetTabId !== undefined ? `, targetTabId=${actionTargetTabId}` : ''}`);
+
+        /**
+         * 解析目标 tab ID：优先使用 targetTabId（Skill 锁定），回退到 active tab 查询
+         * @returns 目标 tab ID，若无可用 tab 返回 undefined
+         */
+        async function resolveTargetTabId(): Promise<number | undefined> {
+          if (typeof actionTargetTabId === 'number' && actionTargetTabId > 0) {
+            // 验证 targetTabId 对应的 tab 是否存在
+            try {
+              await browser.tabs.get(actionTargetTabId);
+              console.log(`[background] 使用锁定 targetTabId: ${actionTargetTabId}`);
+              return actionTargetTabId;
+            } catch {
+              console.warn(`[background] targetTabId ${actionTargetTabId} 无效，回退到 active tab`);
+            }
+          }
+          // 回退：查询当前活动 tab
+          const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+          return tabs[0]?.id;
+        }
 
         // screenshot 操作直接在 background 执行（需要 chrome.tabs.captureVisibleTab）
         if (action.type === 'screenshot') {
@@ -135,8 +158,7 @@ export default defineBackground(() => {
           const NAVIGATE_TIMEOUT_MS = 15000; // 15s 超时保护
           const targetUrl = action.url;
 
-          browser.tabs.query({ active: true, currentWindow: true }).then(async (tabs) => {
-            const tabId = tabs[0]?.id;
+          resolveTargetTabId().then(async (tabId) => {
             if (!tabId) {
               sendResponse({
                 type: 'ACTION_RESULT',
@@ -147,7 +169,7 @@ export default defineBackground(() => {
 
             try {
               // 1. 发起导航
-              console.log(`[background] 导航到: ${targetUrl}`);
+              console.log(`[background] 导航到: ${targetUrl} (tabId=${tabId})`);
               await browser.tabs.update(tabId, { url: targetUrl });
 
               // 2. 等待页面加载完成（onUpdated status='complete'）
@@ -187,16 +209,15 @@ export default defineBackground(() => {
               type: 'ACTION_RESULT',
               payload: {
                 success: false,
-                error: `查询活动标签页失败: ${err instanceof Error ? err.message : String(err)}`,
+                error: `解析目标 tab 失败: ${err instanceof Error ? err.message : String(err)}`,
               } satisfies ActionResult,
             });
           });
           return true; // 异步响应
         }
 
-        // 其他操作：转发到 content script
-        browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-          const tabId = tabs[0]?.id;
+        // 其他操作：转发到目标 tab 的 content script
+        resolveTargetTabId().then((tabId) => {
           if (!tabId) {
             sendResponse({
               type: 'ACTION_RESULT',
@@ -220,7 +241,7 @@ export default defineBackground(() => {
             type: 'ACTION_RESULT',
             payload: {
               success: false,
-              error: `查询活动标签页失败: ${err instanceof Error ? err.message : String(err)}`,
+              error: `解析目标 tab 失败: ${err instanceof Error ? err.message : String(err)}`,
             } satisfies ActionResult,
           });
         });
