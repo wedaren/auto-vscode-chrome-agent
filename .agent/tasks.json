@@ -1831,7 +1831,7 @@
       "id": "evo_v27_002",
       "type": "coding",
       "title": "注入 CSS 重设计 — 无边框纯文本沉浸式风格，参考沉浸式翻译扩展",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v27_001"
       ],

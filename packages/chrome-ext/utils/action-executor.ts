@@ -697,6 +697,9 @@ const IMT_CSS = `
   font-style: normal;
   word-break: break-word;
 }
+.imt-translation.imt-inline {
+  display: block;
+}
 .imt-translation.imt-hidden {
   display: none;
 }
@@ -712,6 +715,61 @@ function ensureImtStyle(): void {
     styleEl.textContent = IMT_CSS;
     document.head.appendChild(styleEl);
   }
+}
+
+/**
+ * 表格布局兼容注入 — 根据原始元素的 DOM 上下文创建并插入翻译元素
+ *
+ * 策略说明（不在 <tr> 内插 <div>）：
+ * 1. 父元素是 <tr>（原始元素是 <td>/<th>）→ 在单元格内部追加翻译，不在 tableRow 内插入 <div>
+ * 2. 原始元素是行内元素（<a>/<span> 等 inline leaf）→ 使用 <span> 替代 <div>，保持 inline 语义
+ * 3. 普通块级元素（<p>/<li> 等）→ 保持原逻辑 insertBefore(div, original.nextSibling)
+ *
+ * @returns true 插入成功, false 插入失败（无 parentNode）
+ */
+function insertTranslationElement(
+  original: Element,
+  translatedText: string,
+  sourceId: string,
+): boolean {
+  const parent = original.parentNode as Element | null;
+  if (!parent) { return false; }
+
+  const parentTag = parent.tagName?.toLowerCase() || '';
+  const originalTag = original.tagName.toLowerCase();
+
+  // ── Case 1: 表格行内 — parentNode.tagName === 'TR' ──
+  // 原始元素是 <td>/<th>，父元素是 <tr>
+  // 不在 <tr> 内直接插入 <div>（无效 HTML），改为在 table 单元格内部追加翻译
+  if (parentTag === 'tr') {
+    const translatedEl = document.createElement('div');
+    translatedEl.className = 'imt-translation';
+    translatedEl.setAttribute('data-imt-source', sourceId);
+    translatedEl.textContent = translatedText;
+    // 追加到单元格内部最后，而非 <tr> 下方
+    original.appendChild(translatedEl);
+    return true;
+  }
+
+  // ── Case 2: 行内元素适配 — <a>/<span> 等 inline leaf ──
+  // 使用 <span> 替代 <div>，添加 imt-inline 类（display:block 保持独立行）
+  // 适用于 HN titleline <a> 等智能叶节点提取场景
+  if (IMT_INLINE_LEAF_TAGS.has(originalTag)) {
+    const translatedEl = document.createElement('span');
+    translatedEl.className = 'imt-translation imt-inline';
+    translatedEl.setAttribute('data-imt-source', sourceId);
+    translatedEl.textContent = translatedText;
+    parent.insertBefore(translatedEl, original.nextSibling);
+    return true;
+  }
+
+  // ── Case 3: 普通块级元素（<p>/<li> 等）— 原逻辑不变 ──
+  const translatedEl = document.createElement('div');
+  translatedEl.className = 'imt-translation';
+  translatedEl.setAttribute('data-imt-source', sourceId);
+  translatedEl.textContent = translatedText;
+  parent.insertBefore(translatedEl, original.nextSibling);
+  return true;
 }
 
 /**
@@ -800,15 +858,13 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           continue;
         }
 
-        // 创建翻译段落
-        const translatedEl = document.createElement('div');
-        translatedEl.className = 'imt-translation';
-        translatedEl.setAttribute('data-imt-source', item.id);
-        translatedEl.textContent = item.translated;
-
-        // 插入到原文段落之后
-        original.parentNode?.insertBefore(translatedEl, original.nextSibling);
-        injected++;
+        // 表格布局兼容注入 — 根据上下文选择合适的插入位置和元素类型
+        const inserted = insertTranslationElement(original, item.translated, item.id);
+        if (inserted) {
+          injected++;
+        } else {
+          skipped++;
+        }
       }
 
       // ── evo_v23_004: 注入结果诊断增强 ──
