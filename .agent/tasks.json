@@ -1477,7 +1477,7 @@
       "id": "evo_v21_004",
       "type": "coding",
       "title": "修复 Chrome SkillPanel skill_list 重复请求：useEffect 依赖稳定化 + 请求去重",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v20_005"
       ],
@@ -1489,7 +1489,7 @@
       "id": "evo_v21_005",
       "type": "validation",
       "title": "Debug-log 优化全量验收：immersive_translate 参数修复 + llm_translate 健壮性 + 路径插值 + 去重 + 双端构建",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v21_001",
         "evo_v21_002",
@@ -1499,6 +1499,69 @@
       "acceptance": "VSCode 插件编译通过 + Chrome 插件构建通过；immersive_translate Skill 的 argsTemplate 参数名正确；llm_translate 支持多种输入格式；SkillRunner 支持路径表达式插值；SkillPanel 不重复请求 skill_list",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -A5 'llm_translate' src/skill-registry.ts | grep -q 'texts' && grep -q 'args.paragraphs' src/llm-tools.ts && grep -q '\\$prev\\.' src/skill-runner.ts && cd ../../packages/chrome-ext && grep -q 'useRef\\|requestedRef' components/SkillPanel.tsx && echo PASS || echo FAIL",
       "evolution_goal": "结合 debug-log 日志文件，不考虑时间，使用最优解，优化 Skill 执行体验"
+    },
+    {
+      "id": "evo_v22_001",
+      "type": "coding",
+      "title": "修复 immersive_translate Skill step3 路径表达式：translations 从 {{$prev}} 改为 {{$prev.translations}}",
+      "status": "pending",
+      "depends_on": [
+        "evo_v21_005"
+      ],
+      "acceptance": "skill-registry.ts 中 immersive_translate 的 step3 argsTemplate 使用 {{$prev.translations}} 而非 {{$prev}}；VSCode 编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -A20 'browser_inject_bilingual' src/skill-registry.ts | grep -q '\\$prev\\.translations' && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
+      "evolution_goal": "debug-log-2026-03-22T02-16-57-430Z.json 驱动：injectBilingual 收到完整 llm_translate 结果对象而非 translations 数组"
+    },
+    {
+      "id": "evo_v22_002",
+      "type": "coding",
+      "title": "增强 injectBilingual 支持 string[] 平坦数组：自动按索引与 data-imt-id 元素配对",
+      "status": "pending",
+      "depends_on": [
+        "evo_v22_001"
+      ],
+      "acceptance": "action-executor.ts 中 executeInjectBilingual 能接受 [\"str1\",\"str2\"] 格式，自动映射为 [{id:\"imt-0\",translated:\"str1\"},{id:\"imt-1\",translated:\"str2\"}]；Chrome 构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -A5 'Array.isArray' utils/action-executor.ts | grep -q 'imt-' && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "debug-log-2026-03-22T02-16-57-430Z.json 驱动：llm_translate 返回 string[] 而 injectBilingual 期望 [{id,translated}]"
+    },
+    {
+      "id": "evo_v22_003",
+      "type": "coding",
+      "title": "增强 injectBilingual 防御性自动解包：当 translations 为 {translations:[...]} 包装对象时自动提取",
+      "status": "pending",
+      "depends_on": [
+        "evo_v22_002"
+      ],
+      "acceptance": "action-executor.ts 中 executeInjectBilingual 在 JSON.parse 后检测到对象含 translations 属性时自动提取数组；即使 Skill 用 {{$prev}} 也不会失败；Chrome 构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q 'translations.*Array' utils/action-executor.ts && grep -q 'auto.*unwrap\\|自动.*解包\\|\\.translations' utils/action-executor.ts && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
+      "evolution_goal": "debug-log-2026-03-22T02-16-57-430Z.json 驱动：防御性处理确保即使路径表达式未正确配置也能 fallback"
+    },
+    {
+      "id": "evo_v22_004",
+      "type": "coding",
+      "title": "SkillRunner 步骤失败诊断增强：打印插值后实际 args + resultText 摘要辅助排查",
+      "status": "pending",
+      "depends_on": [
+        "evo_v22_001"
+      ],
+      "acceptance": "skill-runner.ts 中步骤执行失败时在 outputChannel 输出插值后的 toolArgs（截断前 300 字符）和上一步 resultText 摘要；VSCode 编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'toolArgs\\|interpolated.*args\\|实际参数' src/skill-runner.ts && npm run compile 2>&1 | tail -1 | grep -v error && echo PASS || echo FAIL",
+      "evolution_goal": "debug-log-2026-03-22T02-16-57-430Z.json 驱动：步骤失败时缺少 args 诊断信息导致难以排查"
+    },
+    {
+      "id": "evo_v22_005",
+      "type": "validation",
+      "title": "Debug-log 优化全量验收：immersive_translate 路径修复 + injectBilingual 多格式兼容 + 诊断日志 + 双端构建",
+      "status": "pending",
+      "depends_on": [
+        "evo_v22_001",
+        "evo_v22_002",
+        "evo_v22_003",
+        "evo_v22_004"
+      ],
+      "acceptance": "VSCode 编译通过 + Chrome 构建通过；immersive_translate step3 使用 {{$prev.translations}} 路径；injectBilingual 支持三种输入格式（{id,translated}[]、string[]、{translations:[...]} 包装）；SkillRunner 失败诊断有 args 输出",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 | grep -v error && cd ../../packages/chrome-ext && npm run build 2>&1 | tail -1 && cd ../../packages/vscode-ext && grep -A20 'browser_inject_bilingual' src/skill-registry.ts | grep -q '\\$prev\\.translations' && cd ../../packages/chrome-ext && grep -q 'imt-' utils/action-executor.ts && echo PASS || echo FAIL",
+      "evolution_goal": "debug-log-2026-03-22T02-16-57-430Z.json 驱动：immersive_translate inject 步骤失败的完整修复验收"
     }
   ]
 }

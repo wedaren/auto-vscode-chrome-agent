@@ -177,7 +177,7 @@ const PRESET_SKILLS: Skill[] = [
       {
         toolName: 'browser_inject_bilingual',
         argsTemplate: {
-          translations: '{{$prev}}',
+          translations: '{{$prev.translations}}',
           mode: 'inject',
         },
         description: '将翻译结果以双语对照形式注入原文下方',
