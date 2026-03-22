@@ -1792,7 +1792,7 @@
       "id": "evo_v26_004",
       "type": "coding",
       "title": "ExecutionOverlay Debug 增强 — 可展开步骤详情 + 执行耗时 + 日志导出",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v26_002"
       ],
@@ -1804,7 +1804,7 @@
       "id": "evo_v26_005",
       "type": "validation",
       "title": "预设场景一键执行 + Debug 体验全量验收",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v26_001",
         "evo_v26_002",
@@ -1814,6 +1814,66 @@
       "acceptance": "VSCode 编译通过 + Chrome 构建通过；PresetScenario 模型完整且有 ≥5 个内置场景；SkillPanel 展示场景卡片且点击不弹参数弹窗；场景执行自动导航到预设 URL 再执行 Skill；StepItem 可展开查看 debug 详情；导出日志按钮可用；skill_list_result 包含 scenarios 字段",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'PresetScenario' src/skill-registry.ts && grep -q 'PRESET_SCENARIOS' src/skill-registry.ts && grep -q 'scenarios' src/message-handler.ts && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && grep -q 'ScenarioCard\\|scenarioCard\\|scenario-card' components/SkillPanel.tsx && grep -q 'toolName\\|resolvedArgs' components/SkillPanel.tsx && grep -q '导出\\|export\\|download' components/SkillPanel.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化 chrome skill 预设场景一键执行 + debug 体验增强"
+    },
+    {
+      "id": "evo_v27_001",
+      "type": "coding",
+      "title": "提取算法升级 — detectMainContent 表格布局支持 + 智能叶节点提取（<a>/<span> 等行内文本元素）",
+      "status": "pending",
+      "depends_on": [
+        "evo_v26_005"
+      ],
+      "acceptance": "detectMainContent 能识别 table.itemlist 等表格容器；对 HN 页面提取到的是 <a> 标题文本而非整个 <td> 单元格；IMT_PARAGRAPH_TAGS 或等效逻辑覆盖行内文本元素；提取结果粒度正确",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -E \"(itemlist|titleline|智能|leaf|叶节点|inline)\" utils/action-executor.ts > /dev/null && echo PASS || echo \"FAIL: 缺少表格布局支持或行内元素提取逻辑\"",
+      "evolution_goal": "沉浸式翻译体验升级 — 提取粒度从 <td> 降到 <a> 叶节点级别"
+    },
+    {
+      "id": "evo_v27_002",
+      "type": "coding",
+      "title": "注入 CSS 重设计 — 无边框纯文本沉浸式风格，参考沉浸式翻译扩展",
+      "status": "pending",
+      "depends_on": [
+        "evo_v27_001"
+      ],
+      "acceptance": "IMT_CSS 不含 border-left 和 background；翻译文本使用柔和颜色（如 #666 或 #888）+ 略小字号（0.85-0.92em）；无 padding/border-radius 等卡片样式属性；视觉风格与期待截图一致",
+      "acceptance_cmd": "cd packages/chrome-ext && ! grep -q \"border-left\" utils/action-executor.ts && grep -q \"imt-translation\" utils/action-executor.ts && echo PASS || echo \"FAIL: CSS 仍包含 border-left 卡片样式\"",
+      "evolution_goal": "沉浸式翻译体验升级 — 样式从蓝色边框卡片改为纯文本沉浸式"
+    },
+    {
+      "id": "evo_v27_003",
+      "type": "coding",
+      "title": "注入 DOM 策略重构 — 表格布局兼容注入（不在 <tr> 内插 <div>）+ 行内元素适配",
+      "status": "pending",
+      "depends_on": [
+        "evo_v27_002"
+      ],
+      "acceptance": "当原始元素在 <tr> 内时，不直接在 <tr> 内插入 <div>；翻译元素根据上下文选择合适的插入位置和元素类型；HN 页面注入不破坏表格布局；文章页面（<p> 结构）注入效果不退化",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -E \"(parentNode\\.tagName|<tr>|table|TR|isTable|tableRow|行内|inline)\" utils/action-executor.ts > /dev/null && echo PASS || echo \"FAIL: 缺少表格布局注入适配逻辑\"",
+      "evolution_goal": "沉浸式翻译体验升级 — 解决 <div> in <tr> 无效 HTML 问题"
+    },
+    {
+      "id": "evo_v27_004",
+      "type": "coding",
+      "title": "提取-翻译-注入全链路适配 — ID 映射验证 + toggle/clear 兼容新 DOM 结构",
+      "status": "pending",
+      "depends_on": [
+        "evo_v27_003"
+      ],
+      "acceptance": "新提取的 <a> 元素 data-imt-id 与翻译结果正确配对；toggle 能切换新结构下的翻译元素显隐；clear 能清除新结构下的所有翻译元素和标记；自动重标记逻辑兼容新提取策略",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q \"imt-translation\" utils/action-executor.ts && grep -q \"toggle\" utils/action-executor.ts && grep -q \"clear\" utils/action-executor.ts && echo PASS || echo \"FAIL: toggle/clear 逻辑不完整\"",
+      "evolution_goal": "沉浸式翻译体验升级 — 确保全链路端到端正确"
+    },
+    {
+      "id": "evo_v27_005",
+      "type": "validation",
+      "title": "沉浸式翻译体验升级全量验收 — 双端构建 + HN 效果达标 + 文章页不退化",
+      "status": "pending",
+      "depends_on": [
+        "evo_v27_004"
+      ],
+      "acceptance": "双端编译通过；action-executor.ts 包含表格布局检测逻辑、行内元素提取逻辑、无边框纯文本 CSS、表格兼容注入策略；toggle/clear 逻辑完整",
+      "acceptance_cmd": "cd packages/chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && cd ../../packages/vscode-ext && npm run compile 2>&1 | tail -3 && cd ../../packages/chrome-ext && grep -c \"imt-translation\" utils/action-executor.ts | xargs -I{} test {} -ge 3 && echo PASS || echo \"FAIL: 构建失败或翻译逻辑不完整\"",
+      "evolution_goal": "沉浸式翻译体验升级 — 全量验收"
     }
   ]
 }

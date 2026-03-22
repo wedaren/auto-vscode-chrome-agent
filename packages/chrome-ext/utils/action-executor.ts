@@ -513,14 +513,30 @@ const IMT_PARAGRAPH_TAGS = new Set([
 ]);
 
 /**
+ * 行内文本叶节点标签 — 智能叶节点提取(inline leaf extraction)
+ * 当段落级容器(如 <td>)内含这些行内元素时，优先提取叶节点而非整个容器
+ * 适用于 HN titleline <a> 等场景，提取粒度从 <td> 降到 <a>/<span> 级别
+ */
+const IMT_INLINE_LEAF_TAGS = new Set([
+  'a', 'span', 'em', 'strong', 'b', 'i', 'mark', 'code', 'label', 'time',
+]);
+
+/**
  * 自动检测页面主内容区域
- * 优先级: article > main > [role="main"] > .content/.post/.article > body
+ * 优先级: article > main > [role="main"] > 表格布局(itemlist) > .content/.post/.article > body
+ *
+ * 表格布局支持：HN 等站点使用 table.itemlist 作为内容容器，
+ * 需要显式识别才能正确进入表格内部提取
  */
 function detectMainContent(): Element {
   const candidates = [
     'article',
     'main',
     '[role="main"]',
+    // 表格布局支持：HN itemlist 等使用 <table> 作为内容容器的站点
+    'table.itemlist',
+    '#hnmain',
+    '.itemlist',
     '.content',
     '.post',
     '.article',
@@ -536,6 +552,50 @@ function detectMainContent(): Element {
     }
   }
   return document.body;
+}
+
+/**
+ * 智能叶节点提取(leaf node extraction)：从段落容器中提取有意义的行内文本元素
+ *
+ * 当段落容器(如 <td>)内含 <a>/<span> 等行内元素时，提取最深层的叶节点，
+ * 而非整个容器文本。例如 HN 的 <td class="title"> 内的 <a class="titleline">。
+ *
+ * 仅对表格单元格(<td>/<th>)自动启用；对 <p>/<li> 等普通段落保持整段提取。
+ */
+function extractInlineLeafNodes(container: Element): Element[] {
+  const containerTag = container.tagName.toLowerCase();
+
+  // 仅对表格单元格启用智能叶节点提取，普通段落保持整段
+  if (containerTag !== 'td' && containerTag !== 'th') {
+    return [];
+  }
+
+  const selectorStr = Array.from(IMT_INLINE_LEAF_TAGS).join(',');
+  const inlineEls = container.querySelectorAll(selectorStr);
+  const leaves: Element[] = [];
+
+  for (const el of inlineEls) {
+    const text = (el.textContent || '').trim();
+    if (text.length < 2) { continue; }
+    if (el.closest('.imt-translation')) { continue; }
+
+    // 检查是否为真正的叶节点：不含有实质文本的子行内元素
+    const childInlines = el.querySelectorAll(selectorStr);
+    let hasTextChild = false;
+    for (const child of childInlines) {
+      if ((child.textContent || '').trim().length >= 2) {
+        hasTextChild = true;
+        break;
+      }
+    }
+
+    // 只收集叶节点（无有意义子行内元素的）
+    if (!hasTextChild) {
+      leaves.push(el);
+    }
+  }
+
+  return leaves;
 }
 
 /**
@@ -556,6 +616,7 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
   let idCounter = 0;
 
   // 递归遍历 DOM 树，提取内容段落
+  // 智能叶节点提取：对表格单元格(<td>/<th>)优先提取内部 <a>/<span> 等行内元素
   function walk(node: Element): void {
     if (paragraphs.length >= maxCount) { return; }
 
@@ -578,6 +639,28 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
       const text = (node.textContent || '').trim();
       // 跳过空段落和极短段落（少于2字符）
       if (text.length >= 2) {
+        // ── 智能叶节点提取 ──
+        // 对表格单元格(<td>/<th>)，优先提取内部的行内文本叶节点(<a>/<span>等)
+        // 例如 HN 的 titleline <a> 标题链接，而非整个 <td> 单元格文本
+        const leafNodes = extractInlineLeafNodes(node);
+        if (leafNodes.length > 0) {
+          for (const leaf of leafNodes) {
+            if (paragraphs.length >= maxCount) { break; }
+            const leafText = (leaf.textContent || '').trim();
+            if (leafText.length >= 2) {
+              const id = `imt-${idCounter++}`;
+              leaf.setAttribute('data-imt-id', id);
+              paragraphs.push({
+                id,
+                tag: leaf.tagName.toLowerCase(),
+                text: leafText.slice(0, 2000),
+              });
+            }
+          }
+          return; // 叶节点已提取，不再整段提取
+        }
+
+        // 无叶节点 → 整段提取（原逻辑）
         const id = `imt-${idCounter++}`;
         node.setAttribute('data-imt-id', id);
         paragraphs.push({ id, tag, text: text.slice(0, 2000) });
