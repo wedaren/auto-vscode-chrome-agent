@@ -35,6 +35,32 @@ export interface SkillStep {
     description: string;
     /** 是否可选步骤（失败时可跳过而非终止整个 Skill） */
     optional?: boolean;
+    /**
+     * evo_v28_002: 智能重复 — 将本步骤及后续 groupSize-1 个步骤组成重复组，
+     * 根据页面尺寸动态计算迭代次数，配合 terminateCheck 实现滚动到底自动终止。
+     * 用于 batch_screenshot 等需要逐屏滚动的场景。
+     */
+    repeat?: {
+        /** 重复组包含的步骤数（含本步骤） */
+        groupSize: number;
+        /** 最大迭代次数硬上限（安全兜底） */
+        maxIterations: number;
+        /**
+         * 动态最大迭代次数表达式，使用 {{$step_N.field}} 语法。
+         * 解析后的值代表页面总屏数，运行时自动减 1（首屏已在重复组前截取）。
+         * 解析失败时回退到 maxIterations。
+         */
+        maxIterationsExpr?: string;
+        /**
+         * 智能终止检查：每次迭代前调用指定工具检测是否应停止。
+         * 当 condition 为 'atBottom' 时，检测 scrollTop + clientHeight >= scrollHeight。
+         */
+        terminateCheck?: {
+            toolName: string;
+            argsTemplate: Record<string, unknown>;
+            condition: 'atBottom';
+        };
+    };
 }
 /**
  * Skill — MCP Tool Schema 风格的技能定义

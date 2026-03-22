@@ -47,6 +47,32 @@ export interface SkillStep {
   description: string;
   /** 是否可选步骤（失败时可跳过而非终止整个 Skill） */
   optional?: boolean;
+  /**
+   * evo_v28_002: 智能重复 — 将本步骤及后续 groupSize-1 个步骤组成重复组，
+   * 根据页面尺寸动态计算迭代次数，配合 terminateCheck 实现滚动到底自动终止。
+   * 用于 batch_screenshot 等需要逐屏滚动的场景。
+   */
+  repeat?: {
+    /** 重复组包含的步骤数（含本步骤） */
+    groupSize: number;
+    /** 最大迭代次数硬上限（安全兜底） */
+    maxIterations: number;
+    /**
+     * 动态最大迭代次数表达式，使用 {{$step_N.field}} 语法。
+     * 解析后的值代表页面总屏数，运行时自动减 1（首屏已在重复组前截取）。
+     * 解析失败时回退到 maxIterations。
+     */
+    maxIterationsExpr?: string;
+    /**
+     * 智能终止检查：每次迭代前调用指定工具检测是否应停止。
+     * 当 condition 为 'atBottom' 时，检测 scrollTop + clientHeight >= scrollHeight。
+     */
+    terminateCheck?: {
+      toolName: string;
+      argsTemplate: Record<string, unknown>;
+      condition: 'atBottom';
+    };
+  };
 }
 
 /**
@@ -843,11 +869,11 @@ const PRESET_SKILLS: Skill[] = [
     ],
   },
 
-  // 15. 批量截图
+  // 15. 批量截图 — evo_v28_002: 使用 browser_get_page_info 替代 browser_evaluate + 智能滚动终止
   {
     name: 'batch_screenshot',
     displayName: '批量截图',
-    description: '从页面顶部到底部分段截图，自动滚动并逐屏捕获，适用于长页面存档、视觉对比、全页面记录',
+    description: '从页面顶部到底部分段截图，自动滚动并逐屏捕获，根据 scrollHeight/clientHeight 动态计算总屏数，智能检测到达页面底部自动终止。CSP 安全，适用于长页面存档、视觉对比、全页面记录',
     category: 'preset',
     enabled: true,
     parameters: {
@@ -862,62 +888,44 @@ const PRESET_SKILLS: Skill[] = [
       required: [],
     },
     steps: [
+      // Step 0: 滚动到页面顶部
       {
         toolName: 'browser_scroll',
         argsTemplate: { mode: 'to-top' },
         description: '滚动到页面顶部',
       },
+      // Step 1: CSP 安全的页面度量（不依赖 eval，直接读取 DOM 属性）
       {
-        toolName: 'browser_evaluate',
-        argsTemplate: {
-          code: '(() => { return JSON.stringify({ url: window.location.href, title: document.title, scrollHeight: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight, estimatedScreens: Math.ceil(document.documentElement.scrollHeight / document.documentElement.clientHeight) }); })()',
-        },
-        description: '获取页面尺寸信息，估算总屏数',
+        toolName: 'browser_get_page_info',
+        argsTemplate: {},
+        description: '获取页面尺寸信息，动态计算总屏数（CSP 安全）',
       },
+      // Step 2: 截取首屏
       {
         toolName: 'browser_screenshot',
         argsTemplate: {},
-        description: '截取第 1 屏（顶部）',
+        description: '截取首屏（顶部）',
       },
+      // Step 3-4: 滚动+截图 重复组 — 根据 totalScreens 动态迭代，智能检测到底终止
       {
         toolName: 'browser_scroll',
         argsTemplate: { mode: 'by-pixels', pixels: '{{scrollPixels}}' },
         description: '向下滚动一屏',
+        repeat: {
+          groupSize: 2,
+          maxIterations: 20,
+          maxIterationsExpr: '{{$step_1.totalScreens}}',
+          terminateCheck: {
+            toolName: 'browser_get_page_info',
+            argsTemplate: {},
+            condition: 'atBottom',
+          },
+        },
       },
       {
         toolName: 'browser_screenshot',
         argsTemplate: {},
-        description: '截取第 2 屏',
-      },
-      {
-        toolName: 'browser_scroll',
-        argsTemplate: { mode: 'by-pixels', pixels: '{{scrollPixels}}' },
-        description: '继续向下滚动',
-      },
-      {
-        toolName: 'browser_screenshot',
-        argsTemplate: {},
-        description: '截取第 3 屏',
-      },
-      {
-        toolName: 'browser_scroll',
-        argsTemplate: { mode: 'by-pixels', pixels: '{{scrollPixels}}' },
-        description: '继续向下滚动',
-      },
-      {
-        toolName: 'browser_screenshot',
-        argsTemplate: {},
-        description: '截取第 4 屏',
-      },
-      {
-        toolName: 'browser_scroll',
-        argsTemplate: { mode: 'to-bottom' },
-        description: '滚动到页面底部',
-      },
-      {
-        toolName: 'browser_screenshot',
-        argsTemplate: {},
-        description: '截取最后一屏（底部）',
+        description: '截取当前屏',
       },
     ],
   },

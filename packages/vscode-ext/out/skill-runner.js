@@ -110,37 +110,51 @@ class SkillRunner {
         }
         // 4. 逐步执行
         const stepResults = [];
-        const totalSteps = skill.steps.length;
-        for (let i = 0; i < totalSteps; i++) {
+        const definedSteps = skill.steps.length;
+        let aborted = false;
+        for (let i = 0; i < definedSteps; i++) {
             // 检查取消
             if (token?.isCancellationRequested) {
                 this.outputChannel.appendLine('[SkillRunner] 收到取消信号，中断执行');
                 return {
                     success: false,
                     stepResults,
-                    summary: `Skill 被取消（已完成 ${i}/${totalSteps} 步）`,
+                    summary: `Skill 被取消（已完成 ${stepResults.length} 步）`,
                 };
             }
             const step = skill.steps[i];
+            // ── evo_v28_002: 智能重复组处理 ──
+            if (step.repeat) {
+                const repeatResult = await this.executeRepeatGroup(skill, i, resolvedParams, stepResults, onProgress, token, targetTabId);
+                if (repeatResult.aborted) {
+                    aborted = true;
+                    break;
+                }
+                // 跳过重复组中的后续步骤定义（for 循环会 +1）
+                i += step.repeat.groupSize - 1;
+                continue;
+            }
+            // ── 普通步骤执行（原有逻辑） ──
             const isOptional = step.optional === true;
+            const currentIndex = stepResults.length;
             // 报告进度：running（含工具名称预告）
             onProgress?.({
-                stepIndex: i,
-                totalSteps,
+                stepIndex: currentIndex,
+                totalSteps: definedSteps,
                 status: 'running',
                 description: step.description,
                 toolName: step.toolName,
             });
             // 执行步骤（传入已完成的 stepResults 供 {{$prev}} / {{$step_N}} 插值）
             const stepStartTime = Date.now();
-            const stepResult = await this.executeStep(step, i, resolvedParams, stepResults, token, targetTabId);
+            const stepResult = await this.executeStep(step, currentIndex, resolvedParams, stepResults, token, targetTabId);
             const stepDurationMs = Date.now() - stepStartTime;
             stepResults.push(stepResult);
             if (stepResult.success) {
                 // 报告进度：success（含 debug 增强信息）
                 onProgress?.({
-                    stepIndex: i,
-                    totalSteps,
+                    stepIndex: currentIndex,
+                    totalSteps: definedSteps,
                     status: 'success',
                     result: stepResult.resultText,
                     description: step.description,
@@ -148,18 +162,18 @@ class SkillRunner {
                     resolvedArgs: stepResult.resolvedArgs,
                     durationMs: stepDurationMs,
                 });
-                this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 成功: ${step.description}`);
+                this.outputChannel.appendLine(`[SkillRunner] 步骤 ${currentIndex + 1} 成功: ${step.description}`);
                 // ── evo_v23_004: 检测 injectBilingual injected=0 并输出诊断警告 ──
                 this.detectInjectZeroDiagnostic(stepResult);
             }
             else {
                 // ── 失败诊断增强：打印插值后实际 args + 上一步 resultText 摘要 ──
-                this.logStepFailureDiagnostics(i, totalSteps, step, stepResult, stepResults);
+                this.logStepFailureDiagnostics(currentIndex, definedSteps, step, stepResult, stepResults);
                 if (isOptional) {
                     // 可选步骤失败 → 跳过（含 debug 增强信息）
                     onProgress?.({
-                        stepIndex: i,
-                        totalSteps,
+                        stepIndex: currentIndex,
+                        totalSteps: definedSteps,
                         status: 'skipped',
                         result: stepResult.error,
                         description: step.description,
@@ -167,13 +181,13 @@ class SkillRunner {
                         resolvedArgs: stepResult.resolvedArgs,
                         durationMs: stepDurationMs,
                     });
-                    this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 失败（可选，跳过）: ${stepResult.error}`);
+                    this.outputChannel.appendLine(`[SkillRunner] 步骤 ${currentIndex + 1} 失败（可选，跳过）: ${stepResult.error}`);
                 }
                 else {
                     // 必需步骤失败 → 终止（含 debug 增强信息）
                     onProgress?.({
-                        stepIndex: i,
-                        totalSteps,
+                        stepIndex: currentIndex,
+                        totalSteps: definedSteps,
                         status: 'failed',
                         result: stepResult.error,
                         description: step.description,
@@ -181,7 +195,7 @@ class SkillRunner {
                         resolvedArgs: stepResult.resolvedArgs,
                         durationMs: stepDurationMs,
                     });
-                    this.outputChannel.appendLine(`[SkillRunner] 步骤 ${i + 1}/${totalSteps} 失败（终止）: ${stepResult.error}`);
+                    this.outputChannel.appendLine(`[SkillRunner] 步骤 ${currentIndex + 1} 失败（终止）: ${stepResult.error}`);
                     return {
                         success: false,
                         stepResults,
@@ -191,9 +205,10 @@ class SkillRunner {
             }
         }
         // 全部步骤执行完毕
-        const summary = this.buildSummary(skill, stepResults, true);
-        this.outputChannel.appendLine(`[SkillRunner] Skill "${skill.name}" 执行完成: ${totalSteps} 步`);
-        return { success: true, stepResults, summary };
+        const allDone = !aborted;
+        const summary = this.buildSummary(skill, stepResults, allDone);
+        this.outputChannel.appendLine(`[SkillRunner] Skill "${skill.name}" 执行完成: ${stepResults.length} 步${aborted ? '（含重复组中断）' : ''}`);
+        return { success: allDone, stepResults, summary };
     }
     // ────────────────────────────────────────────────────────────────
     // 私有方法
@@ -436,6 +451,146 @@ class SkillRunner {
         }
         // 3. 其余 → McpClient
         return this.mcpClient.callTool(toolName, args);
+    }
+    // ────────────────────────────────────────────────────────────────
+    // evo_v28_002: 智能重复组执行
+    // ────────────────────────────────────────────────────────────────
+    /**
+     * 执行重复组 — 将指定步骤组循环执行，根据页面尺寸动态计算迭代次数，
+     * 配合 terminateCheck 实现滚动到底自动终止。
+     *
+     * @param skill 当前 Skill 定义
+     * @param startIndex 重复组在 skill.steps 中的起始下标
+     * @param params 用户参数
+     * @param existingResults 重复组之前已完成的步骤结果
+     * @param onProgress 进度回调
+     * @param token 取消令牌
+     * @param targetTabId 目标 Tab ID
+     * @returns { aborted: boolean } 当重复组中有必需步骤失败时 aborted=true
+     */
+    async executeRepeatGroup(skill, startIndex, params, existingResults, onProgress, token, targetTabId) {
+        const step = skill.steps[startIndex];
+        const repeat = step.repeat;
+        const groupSteps = skill.steps.slice(startIndex, startIndex + repeat.groupSize);
+        // 1. 动态计算最大迭代次数
+        let maxIter = repeat.maxIterations;
+        if (repeat.maxIterationsExpr) {
+            const resolved = this.interpolateValue(repeat.maxIterationsExpr, params, existingResults);
+            const parsed = parseInt(String(resolved), 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                // 首屏已在重复组前截取，所以总屏数减 1
+                maxIter = Math.min(Math.max(parsed - 1, 0), repeat.maxIterations);
+            }
+        }
+        this.outputChannel.appendLine(`[SkillRunner] 进入重复组: ${repeat.groupSize} 步 × 最多 ${maxIter} 次迭代`);
+        // 2. 循环执行
+        for (let iter = 0; iter < maxIter; iter++) {
+            if (token?.isCancellationRequested) {
+                this.outputChannel.appendLine('[SkillRunner] 重复组: 收到取消信号');
+                break;
+            }
+            // 2a. 智能终止检查：调用 browser_get_page_info 判断是否已到页面底部
+            if (repeat.terminateCheck) {
+                const shouldStop = await this.checkTerminateCondition(repeat.terminateCheck, params, existingResults, token, targetTabId);
+                if (shouldStop) {
+                    this.outputChannel.appendLine(`[SkillRunner] 智能滚动终止: 已到达页面底部（第 ${iter + 1}/${maxIter} 次迭代前检测）`);
+                    break;
+                }
+            }
+            // 2b. 执行组内每个步骤
+            for (let g = 0; g < groupSteps.length; g++) {
+                if (token?.isCancellationRequested) {
+                    break;
+                }
+                const groupStep = groupSteps[g];
+                const currentIndex = existingResults.length;
+                // 报告进度
+                onProgress?.({
+                    stepIndex: currentIndex,
+                    totalSteps: existingResults.length + (maxIter - iter) * repeat.groupSize,
+                    status: 'running',
+                    description: `${groupStep.description} (${iter + 1}/${maxIter})`,
+                    toolName: groupStep.toolName,
+                });
+                const stepStartTime = Date.now();
+                const stepResult = await this.executeStep(groupStep, currentIndex, params, existingResults, token, targetTabId);
+                const stepDurationMs = Date.now() - stepStartTime;
+                existingResults.push(stepResult);
+                if (stepResult.success) {
+                    onProgress?.({
+                        stepIndex: currentIndex,
+                        totalSteps: existingResults.length + (maxIter - iter - 1) * repeat.groupSize,
+                        status: 'success',
+                        result: stepResult.resultText,
+                        description: `${groupStep.description} (${iter + 1}/${maxIter})`,
+                        toolName: stepResult.toolName,
+                        resolvedArgs: stepResult.resolvedArgs,
+                        durationMs: stepDurationMs,
+                    });
+                    this.outputChannel.appendLine(`[SkillRunner] 重复组 步骤 ${g + 1}/${repeat.groupSize} 迭代 ${iter + 1}/${maxIter} 成功: ${groupStep.description}`);
+                }
+                else if (groupStep.optional) {
+                    onProgress?.({
+                        stepIndex: currentIndex,
+                        totalSteps: existingResults.length + (maxIter - iter - 1) * repeat.groupSize,
+                        status: 'skipped',
+                        result: stepResult.error,
+                        description: groupStep.description,
+                        toolName: stepResult.toolName,
+                        resolvedArgs: stepResult.resolvedArgs,
+                        durationMs: stepDurationMs,
+                    });
+                    this.outputChannel.appendLine(`[SkillRunner] 重复组 步骤失败（可选，跳过）: ${stepResult.error}`);
+                }
+                else {
+                    // 必需步骤失败 → 终止整个重复组
+                    onProgress?.({
+                        stepIndex: currentIndex,
+                        totalSteps: existingResults.length,
+                        status: 'failed',
+                        result: stepResult.error,
+                        description: groupStep.description,
+                        toolName: stepResult.toolName,
+                        resolvedArgs: stepResult.resolvedArgs,
+                        durationMs: stepDurationMs,
+                    });
+                    this.outputChannel.appendLine(`[SkillRunner] 重复组 步骤失败（终止）: ${stepResult.error}`);
+                    return { aborted: true };
+                }
+            }
+        }
+        this.outputChannel.appendLine(`[SkillRunner] 重复组执行完毕`);
+        return { aborted: false };
+    }
+    /**
+     * 智能终止条件检查 — 调用指定工具并根据返回值判断是否应停止重复
+     *
+     * 当 condition 为 'atBottom' 时，检查 scrollTop + clientHeight >= scrollHeight - 50，
+     * 即滚动位置已到达（或接近）页面底部时返回 true。
+     */
+    async checkTerminateCondition(check, params, allResults, token, targetTabId) {
+        try {
+            const args = this.interpolateArgs(check.argsTemplate, params, allResults);
+            const result = await this.callTool(check.toolName, args, token, targetTabId);
+            if (result.isError) {
+                return false;
+            }
+            const text = this.formatToolResult(result);
+            const info = JSON.parse(text);
+            if (check.condition === 'atBottom') {
+                const scrollTop = Number(info.scrollTop ?? 0);
+                const clientHeight = Number(info.clientHeight ?? 0);
+                const scrollHeight = Number(info.scrollHeight ?? Infinity);
+                const atBottom = scrollTop + clientHeight >= scrollHeight - 50;
+                this.outputChannel.appendLine(`[SkillRunner] 终止检查: scrollTop=${scrollTop}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, atBottom=${atBottom}`);
+                return atBottom;
+            }
+            return false;
+        }
+        catch {
+            // 检查失败时不终止，继续迭代
+            return false;
+        }
     }
     /**
      * 格式化工具结果为可读文本

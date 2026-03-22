@@ -164,6 +164,27 @@ export declare class SkillRunner {
      */
     private callTool;
     /**
+     * 执行重复组 — 将指定步骤组循环执行，根据页面尺寸动态计算迭代次数，
+     * 配合 terminateCheck 实现滚动到底自动终止。
+     *
+     * @param skill 当前 Skill 定义
+     * @param startIndex 重复组在 skill.steps 中的起始下标
+     * @param params 用户参数
+     * @param existingResults 重复组之前已完成的步骤结果
+     * @param onProgress 进度回调
+     * @param token 取消令牌
+     * @param targetTabId 目标 Tab ID
+     * @returns { aborted: boolean } 当重复组中有必需步骤失败时 aborted=true
+     */
+    private executeRepeatGroup;
+    /**
+     * 智能终止条件检查 — 调用指定工具并根据返回值判断是否应停止重复
+     *
+     * 当 condition 为 'atBottom' 时，检查 scrollTop + clientHeight >= scrollHeight - 50，
+     * 即滚动位置已到达（或接近）页面底部时返回 true。
+     */
+    private checkTerminateCondition;
+    /**
      * 格式化工具结果为可读文本
      */
     private formatToolResult;
