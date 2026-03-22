@@ -4,13 +4,13 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
     "task_id": "evo_v22_002",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "✔ Finished in 1.629 s\nPASS"
   },
   "last_tick": "2026-03-22T00:00:00.000000Z",
   "pm_done": true

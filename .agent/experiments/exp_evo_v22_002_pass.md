@@ -18,3 +18,22 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+### 评分明细
+| 项目 | 得分 |
+|---|---|
+| acceptance_cmd 通过（grep imt- + npm run build） | 60/60 |
+| TypeScript 无编译错误（build 成功） | 20/20 |
+| 符合 program.md 约束（无外部 API key 依赖、Chrome 不内置模型） | 20/20 |
+
+### 代码审查要点
+- `executeInjectBilingual` 第 654-667 行：`Array.isArray` 检查后判断 `typeof parsed[0] === 'string'`，自动 map 为 `{id: "imt-${idx}", translated: text}` 格式 ✓
+- 原有 `{id, translated}[]` 格式处理路径不受影响 ✓
+- 文件顶部注释完整 ✓
+- 无新增外部依赖 ✓
