@@ -1693,8 +1693,10 @@
       "id": "evo_v25_001",
       "type": "coding",
       "title": "VSCode 侧图片类型识别：toMcpToolResult 区分 image 类型 + agent_step 增加 imageData 字段 + formatToolResult 图片摘要",
-      "status": "pending",
-      "depends_on": ["evo_v24_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v24_005"
+      ],
       "acceptance": "browser-tools.ts 的 toMcpToolResult 识别 screenshot 字段并返回 { type: 'image' } 内容项；agent-loop.ts 的 formatToolResult 处理 image 类型返回文本摘要而非 base64 原文；message-handler.ts 的 agent_step payload 包含可选 imageData 字段传给 Chrome UI；VSCode 编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'type.*image' src/browser-tools.ts && grep -q 'imageData' src/message-handler.ts && grep -q 'image' src/agent-loop.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化图片展示体验"
@@ -1704,7 +1706,9 @@
       "type": "coding",
       "title": "Chrome 侧 ImagePreview 组件：base64 缩略图渲染 + 点击 Lightbox 全屏查看",
       "status": "pending",
-      "depends_on": ["evo_v25_001"],
+      "depends_on": [
+        "evo_v25_001"
+      ],
       "acceptance": "新建 ImagePreview.tsx 组件，接收 src (dataUrl/URL) 属性渲染缩略图（max-width 100%、圆角、阴影）；点击图片弹出 Lightbox overlay 全屏显示；Lightbox 点击背景或 ESC 关闭；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && test -f components/ImagePreview.tsx && grep -q 'Lightbox\\|lightbox\\|overlay\\|modal' components/ImagePreview.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化图片展示体验"
@@ -1714,7 +1718,9 @@
       "type": "coding",
       "title": "AgentStepView observe 步骤图片渲染：AgentStep 接口增加 imageData + ObserveContent 识别并渲染图片",
       "status": "pending",
-      "depends_on": ["evo_v25_002"],
+      "depends_on": [
+        "evo_v25_002"
+      ],
       "acceptance": "AgentStep 接口增加可选 imageData 字段；App.tsx 解析 agent_step payload 中的 imageData 传入 steps；ObserveContent 组件检测 imageData 或 content 中的 data:image 模式，使用 ImagePreview 渲染图片而非纯文本；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'imageData' components/AgentStepView.tsx && grep -q 'ImagePreview' components/AgentStepView.tsx && grep -q 'imageData' entrypoints/sidepanel/App.tsx && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化图片展示体验"
@@ -1724,7 +1730,9 @@
       "type": "coding",
       "title": "MessageBubble Markdown 图片渲染 + 图片 CSS 样式体系（缩略图 + Lightbox overlay）",
       "status": "pending",
-      "depends_on": ["evo_v25_002"],
+      "depends_on": [
+        "evo_v25_002"
+      ],
       "acceptance": "marked 实例添加 image() 自定义渲染器，输出 <img> 标签支持 Markdown 图片语法；style.css 添加 .message-bubble-markdown img 样式（max-width、border-radius、box-shadow、cursor pointer）和 .image-lightbox-overlay CSS；Chrome 构建通过",
       "acceptance_cmd": "cd packages/chrome-ext && grep -q 'image(' components/MessageBubble.tsx && grep -q 'message-bubble-markdown img\\|.image-lightbox' assets/style.css && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化图片展示体验"
@@ -1734,7 +1742,12 @@
       "type": "validation",
       "title": "图片展示体验全量验收：双端构建 + 截图数据不作为原始文本 + 图片组件存在 + CSS 样式完整",
       "status": "pending",
-      "depends_on": ["evo_v25_001", "evo_v25_002", "evo_v25_003", "evo_v25_004"],
+      "depends_on": [
+        "evo_v25_001",
+        "evo_v25_002",
+        "evo_v25_003",
+        "evo_v25_004"
+      ],
       "acceptance": "VSCode 编译通过 + Chrome 构建通过；browser-tools.ts 支持 image 类型识别；agent-loop.ts 不将 base64 原文作为 observe 内容；ImagePreview 组件存在且含 Lightbox 功能；AgentStepView 使用 ImagePreview 渲染图片；MessageBubble marked 支持 image 渲染；style.css 有完整图片样式",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q 'type.*image' src/browser-tools.ts && grep -q 'image' src/agent-loop.ts && npm run compile 2>&1 | tail -1 && cd ../../packages/chrome-ext && test -f components/ImagePreview.tsx && grep -q 'ImagePreview' components/AgentStepView.tsx && grep -q 'image(' components/MessageBubble.tsx && grep -q 'message-bubble-markdown img' assets/style.css && npm run build 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "优化图片展示体验"
