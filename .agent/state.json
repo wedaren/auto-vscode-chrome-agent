@@ -8,10 +8,10 @@
   "last_validation": {
     "task_id": "evo_v29_001",
     "result": "pass",
-    "score": 92,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-23T04:00:00.000Z"
+    "acceptance_cmd_output": "SmartSuggestions found in chrome-ext (SmartSuggestions.tsx, MessageBubble.tsx); follow_up_suggestions found in chrome-ext (useChat.ts) and vscode-ext (message-handler.ts); PASS",
+    "validated_at": "2026-03-23T04:10:00.000Z"
   },
   "last_tick": "2026-03-23T04:00:00.000Z",
   "pm_done": true

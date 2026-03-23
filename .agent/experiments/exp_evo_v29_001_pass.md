@@ -36,3 +36,18 @@ VSCode ext compile: ⚡ Done in 46ms
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：100/100
+问题：
+- 无
+
+验收明细：
+- acceptance_cmd：PASS（60/60）— SmartSuggestions 组件存在于 chrome-ext，follow_up_suggestions 协议双端均已实现
+- TypeScript 类型检查：chrome-ext tsc --noEmit 零错误，vscode-ext tsc --noEmit 零错误（20/20）
+- program.md 约束符合度（20/20）：
+  - 模型调用仅通过 vscode.lm API ✅
+  - Chrome 插件不内置模型 ✅（SmartSuggestions 纯展示组件，无 LLM 调用）
+  - 未引入需要外部 API key 的依赖 ✅
+- 新增文件 SmartSuggestions.tsx 顶部注释完整 ✅
