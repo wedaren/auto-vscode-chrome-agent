@@ -29,3 +29,11 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- acceptance_cmd spec 中 vscode-ext 使用 `pnpm build` 但实际脚本名为 `pnpm compile`；由于 `| tail -5` 掩盖了退出码，最终输出仍为 PASS；实际 `pnpm compile` 构建成功（56ms 无错误）
+- 代码实现完整：CODE_COLLAPSE_THRESHOLD=15、CODE_COLLAPSE_VISIBLE_LINES=5、HEADING_NAV_THRESHOLD=500 三个常量 + HeadingNav 组件 + extractHeadings 解析 + 折叠/展开事件绑定
+- 无禁止依赖、无直接模型调用、文件顶部注释完整
