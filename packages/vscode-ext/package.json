@@ -3,7 +3,7 @@
   "publisher": "wedaren",
   "displayName": "Browser Agent",
   "description": "VSCode 插件 — Browser Agent 的 agent 大脑",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "engines": {
     "vscode": "^1.96.0"
