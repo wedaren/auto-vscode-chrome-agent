@@ -4,15 +4,15 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 92,
+  "last_score": 95,
   "last_validation": {
     "task_id": "evo_v29_003",
     "result": "pass",
-    "score": 92,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "pinned found in useChatStorage.ts (13 references); searchQuery found in ConversationList.tsx (7 references); PASS",
-    "validated_at": "2026-03-23T05:00:00.000Z"
+    "acceptance_cmd_output": "packages/chrome-ext/hooks/useChatStorage.ts:  /** 是否置顶（pinned 会话始终排在列表最前面） */\npackages/chrome-ext/hooks/useChatStorage.ts:  pinned?: boolean;\npackages/chrome-ext/hooks/useChatStorage.ts:        // 保留已有的 pinned 状态\npackages/chrome-ext/hooks/useChatStorage.ts:          pinned: existingMeta?.pinned ?? false,\npackages/chrome-ext/hooks/useChatStorage.ts:        // 排序：pinned 置顶优先，组内按 updatedAt 降序\npackages/chrome-ext/hooks/useChatStorage.ts:          const aPinned = a.pinned ? 1 : 0;\npackages/chrome-ext/hooks/useChatStorage.ts:          const bPinned = b.pinned ? 1 : 0;\npackages/chrome-ext/hooks/useChatStorage.ts:  /** 切换会话置顶状态（pinned ⇄ unpinned），持久化到 chrome.storage.local */\npackages/chrome-ext/hooks/useChatStorage.ts:        target.pinned = !target.pinned;\npackages/chrome-ext/hooks/useChatStorage.ts:      // 重新排序：pinned 置顶优先，组内按 updatedAt 降序\npackages/chrome-ext/hooks/useChatStorage.ts:        const aPinned = a.pinned ? 1 : 0;\npackages/chrome-ext/hooks/useChatStorage.ts:        const bPinned = b.pinned ? 1 : 0;\npackages/chrome-ext/hooks/useChatStorage.ts:      console.log('[useChatStorage] 会话置顶已切换:', id, target?.pinned);\npackages/chrome-ext/components/ConversationList.tsx:  const [searchQuery, setSearchQuery] = useState('');\npackages/chrome-ext/components/ConversationList.tsx:    const query = searchQuery.trim().toLowerCase();\npackages/chrome-ext/components/ConversationList.tsx:  }, [conversations, searchQuery]);\npackages/chrome-ext/components/ConversationList.tsx:            value={searchQuery}\npackages/chrome-ext/components/ConversationList.tsx:          {searchQuery && (\npackages/chrome-ext/components/ConversationList.tsx:            {searchQuery ? (\npackages/chrome-ext/components/ConversationList.tsx:          {searchQuery && filteredConversations.length !== conversations.length && (\nPASS",
+    "validated_at": "2026-03-23T05:10:00.000Z"
   },
-  "last_tick": "2026-03-23T05:00:00.000Z",
+  "last_tick": "2026-03-23T05:10:00.000Z",
   "pm_done": true
 }
