@@ -1,25 +1,26 @@
 {
   "phase": "idle",
-  "current_task": "evo_v30_001",
+  "current_task": "evo_v30_002",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v30_001",
+    "task_id": "evo_v30_002",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 43ms\nPASS",
-    "validated_at": "2026-03-23T09:10:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 47ms\nPASS",
+    "validated_at": "2026-03-23T09:20:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 匹配 llm_translate_progressive, handleLlmTranslateProgressive, translate_progress, FIRST_BATCH_SIZE, PROGRESSIVE_BATCH_SIZE 全部命中; npm run compile 成功 (43ms)",
-      "typescript_build": "PASS — vscode-ext 编译无 TS 错误",
-      "top_comment": "PASS — llm-tools.ts 顶部注释已更新，包含 llm_translate_progressive 描述",
-      "no_forbidden_deps": "PASS — 仅导入 vscode 和本地模块，无外部 API key 依赖",
-      "program_md_constraints": "PASS — 所有 LLM 调用通过 LmService (vscode.lm API); Chrome 插件不内置模型; CancellationToken 支持完整; 原 llm_translate 保留兼容"
+      "acceptance_cmd": "PASS — grep 匹配 immersive_translate Skill 定义包含 llm_translate_progressive; llm-tools.ts 已注册; npm run compile 成功 (47ms)",
+      "steps_count": "PASS — immersive_translate steps 恰好 2 步（browser_extract_paragraphs + llm_translate_progressive）",
+      "old_llm_translate_preserved": "PASS — llm_translate 工具仍注册在 LLM_TOOL_REGISTRY 中",
+      "skill_runner_routing": "PASS — SkillRunner.callTool 已含 callLlmTool + LlmToolContext 路由",
+      "typescript_compile": "PASS — npm run compile 零错误",
+      "program_md_constraints": "PASS — 模型调用仅通过 vscode.lm API（经 LmService）; 无外部 API key 依赖; 文件有顶部注释"
     }
   },
-  "last_tick": "2026-03-23T09:10:00.000Z",
+  "last_tick": "2026-03-23T09:15:00.000Z",
   "pm_done": true
 }
