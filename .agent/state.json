@@ -1,27 +1,25 @@
 {
   "phase": "idle",
-  "current_task": "evo_v29_005",
+  "current_task": "evo_v30_001",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 92,
   "last_validation": {
-    "task_id": "evo_v29_005",
+    "task_id": "evo_v30_001",
     "result": "pass",
-    "score": 95,
-    "issues": [
-      "acceptance_cmd spec uses 'pnpm build' for vscode-ext but correct script is 'pnpm compile'; masked by pipe, actual build succeeds"
-    ],
-    "acceptance_cmd_output": "grep: 7 matches (code-collapse/collapsible in MessageBubble.tsx); chrome-ext: ✔ Built in 2.334s; vscode-ext: pnpm build DNE but pnpm compile ✔ Done in 56ms; final output: PASS",
-    "validated_at": "2026-03-23T08:00:00.000Z",
+    "score": 92,
+    "issues": [],
+    "acceptance_cmd_output": "out/extension.js 566.6kb; Done in 76ms; PASS",
+    "validated_at": "2026-03-23T09:00:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 7 matches, chrome-ext built 2.3s, final output PASS",
-      "typescript_build": "PASS — chrome-ext built in 2.3s (no TS errors), vscode-ext compiled in 56ms (no TS errors)",
-      "top_comment": "PASS — lines 1-3 have component description and feature summary",
+      "acceptance_cmd": "PASS — grep matches for llm_translate_progressive, handleLlmTranslateProgressive, translate_progress, FIRST_BATCH_SIZE, PROGRESSIVE_BATCH_SIZE all found; npm run compile succeeded",
+      "typescript_build": "PASS — vscode-ext compiled in 76ms (no TS errors)",
+      "top_comment": "PASS — llm-tools.ts top comment updated to reflect new tool",
       "no_forbidden_deps": "PASS — no external API key imports",
-      "program_md_constraints": "PASS — no direct model calls in Chrome ext, all LLM via vscode.lm"
+      "program_md_constraints": "PASS — all LLM calls via vscode.lm (LmService)"
     }
   },
-  "last_tick": "2026-03-23T07:00:00.000Z",
+  "last_tick": "2026-03-23T09:00:00.000Z",
   "pm_done": true
 }

@@ -1990,7 +1990,7 @@
       "id": "evo_v29_005",
       "type": "coding",
       "title": "长回复增强 — 代码块折叠 (>15行默认折叠) + 长回复标题导航 + 全量验收",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v29_001",
         "evo_v29_002",
@@ -2000,6 +2000,56 @@
       "acceptance": "超过 15 行的代码块默认折叠显示前 5 行 + 展开按钮；超过 500 字的回复顶部显示 Markdown 标题导航；全部 5 项优化双端构建通过",
       "acceptance_cmd": "grep -r 'code-collapse\\|codeCollapse\\|collapsible' packages/chrome-ext/components/MessageBubble.tsx && cd packages/chrome-ext && pnpm build 2>&1 | tail -5 && cd ../vscode-ext && pnpm build 2>&1 | tail -5 && echo PASS || echo FAIL",
       "evolution_goal": "不考虑时间，使用最优解，优化用户体验"
+    },
+    {
+      "id": "evo_v30_001",
+      "type": "coding",
+      "title": "llm_translate_progressive 工具 — 翻译一批注入一批的渐进式翻译核心",
+      "status": "pending",
+      "depends_on": ["evo_v29_005"],
+      "acceptance": "vscode-ext 的 llm-tools.ts 新增 handleLlmTranslateProgressive 函数；首批 5 段、后续每批 15 段；每批翻译完成后立即通过 WsServer 调用 browser_inject_bilingual 注入该批次；每批注入后通过 WsServer 发送 translate_progress 消息（含 translated/total 计数）；支持 CancellationToken 取消；单批翻译失败记录并继续后续批次，末尾重试失败批次一次",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -E '(llm_translate_progressive|handleLlmTranslateProgressive|translate_progress)' src/llm-tools.ts > /dev/null && grep -E 'FIRST_BATCH_SIZE|PROGRESSIVE_BATCH_SIZE' src/llm-tools.ts > /dev/null && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: 渐进式翻译工具未实现或编译失败'",
+      "evolution_goal": "沉浸式翻译渐进式体验优化 — 避免长等待，快速出首批结果"
+    },
+    {
+      "id": "evo_v30_002",
+      "type": "coding",
+      "title": "更新 immersive_translate Skill 定义 — 2 步流（extract → progressive_translate_inject）",
+      "status": "pending",
+      "depends_on": ["evo_v30_001"],
+      "acceptance": "skill-registry.ts 中 immersive_translate Skill 的 steps 改为 2 步：步骤 1 browser_extract_paragraphs（不变）、步骤 2 llm_translate_progressive（替代原 llm_translate + browser_inject_bilingual 两步）；llm-tools.ts 的工具注册表包含 llm_translate_progressive；SkillRunner 可正常路由到新工具",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -A 20 'immersive_translate' src/skill-registry.ts | grep -c 'llm_translate_progressive' | xargs -I{} test {} -ge 1 && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: Skill 定义未更新或编译失败'",
+      "evolution_goal": "沉浸式翻译渐进式体验优化 — Skill 定义适配渐进式流程"
+    },
+    {
+      "id": "evo_v30_003",
+      "type": "coding",
+      "title": "WebSocket translate_progress 协议 + Chrome 侧翻译进度条组件",
+      "status": "pending",
+      "depends_on": ["evo_v30_001"],
+      "acceptance": "Chrome 侧 TranslateControl.tsx 监听 translate_progress WebSocket 消息；显示实时进度条'翻译中: N/M 段落已完成'；进度条有动画过渡效果；翻译完成后进度消失并显示'翻译完成 ✓'；进度消息格式 { type: 'translate_progress', payload: { translated, total, batchIndex, totalBatches, status } }",
+      "acceptance_cmd": "grep -r 'translate_progress' packages/chrome-ext/ > /dev/null && grep -rE '(TranslateProgress|translateProgress|翻译中|段落已完成)' packages/chrome-ext/components/TranslateControl.tsx > /dev/null && echo PASS || echo 'FAIL: Chrome 侧翻译进度组件未实现'",
+      "evolution_goal": "沉浸式翻译渐进式体验优化 — 批次级进度可视化"
+    },
+    {
+      "id": "evo_v30_004",
+      "type": "coding",
+      "title": "单批失败隔离与重试 + 原 llm_translate 保留兼容",
+      "status": "pending",
+      "depends_on": ["evo_v30_001"],
+      "acceptance": "llm_translate_progressive 工具在某批翻译失败时跳过并记录失败批次索引；全部批次处理完后对失败批次重试一次；重试仍失败的批次在最终结果中标记为未翻译；原 llm_translate 工具保留不删除（其他 Skill 可能依赖）；返回结果包含 failedBatches 字段供调试",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -E '(failedBatch|retryBatch|batch.*fail|RETRY)' src/llm-tools.ts > /dev/null && grep -q 'handleLlmTranslate' src/llm-tools.ts && npm run compile 2>&1 | tail -1 && echo PASS || echo 'FAIL: 批次失败隔离或重试逻辑未实现'",
+      "evolution_goal": "沉浸式翻译渐进式体验优化 — 错误韧性"
+    },
+    {
+      "id": "evo_v30_005",
+      "type": "validation",
+      "title": "渐进式翻译全量验收 — 双端编译 + 端到端流程验证",
+      "status": "pending",
+      "depends_on": ["evo_v30_001", "evo_v30_002", "evo_v30_003", "evo_v30_004"],
+      "acceptance": "双端编译通过；llm_translate_progressive 工具已注册且可被 SkillRunner 路由；immersive_translate Skill 为 2 步流；Chrome 侧有 translate_progress 监听和进度展示；原 llm_translate 工具保留",
+      "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 && grep -q 'llm_translate_progressive' src/llm-tools.ts && grep -A 15 'immersive_translate' src/skill-registry.ts | grep -q 'llm_translate_progressive' && cd ../../packages/chrome-ext && grep -q 'translate_progress' components/TranslateControl.tsx && echo PASS || echo 'FAIL: 全量验收未通过'",
+      "evolution_goal": "沉浸式翻译渐进式体验优化 — 全量验收"
     }
   ]
 }

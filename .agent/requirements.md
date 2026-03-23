@@ -24,6 +24,7 @@
 | R-14 | 沉浸式翻译体验升级 | P0 | 🔄 进行中 | 提取/注入/样式全链路升级，支持表格布局，达到专业沉浸式翻译效果 |
 | R-15 | CSP 安全工具 + 长截图合成下载 + 语言一致性 | P0 | 🔄 进行中 | CSP 安全的页面度量工具 + batch_screenshot 升级 + 长图拼接下载 + Agent 语言一致性 |
 | R-16 | 全方位用户体验优化 | P0 | 🔄 进行中 | 智能跟进建议 + Agent 执行进度条 + 会话搜索置顶 + 斜杠命令扩展 + 长回复增强 |
+| R-17 | 沉浸式翻译渐进式体验 | P0 | 🔄 进行中 | 翻译一批注入一批，首批 3-5s 可见，段落级进度展示 |
 
 ---
 
@@ -236,6 +237,19 @@
 | 验收 | ① AI 回复后出现 2-3 个动态建议芯片，点击可直接发送；② Agent 多步执行时显示进度条（步骤计数 + 描述 + 耗时），可取消；③ 会话列表有搜索框可过滤，可置顶且置顶持久化；④ 输入 `/skill ` 弹出 Skill 列表自动补全，选择后触发执行；⑤ 超过 15 行的代码块默认折叠，点击可展开 |
 | 影响范围 | chrome-ext（新组件 SmartSuggestions + AgentProgressBar；增强 ConversationList + ChatInput + MessageBubble）/ vscode-ext（message-handler.ts 生成跟进建议 + ws 协议扩展 follow_up_suggestions） |
 | 备注 | 跟进建议由 VSCode 侧 LLM 生成（在 chat_response_end 后追加一次轻量 LLM 调用），延迟不可接受时降级为 Chrome 侧规则匹配 |
+
+### R-17 沉浸式翻译渐进式体验
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + evo_v27/v19 沉浸式翻译迭代反馈 |
+| 优先级 | P0 |
+| 状态 | 🔄 进行中 |
+| 描述 | 当前 `immersive_translate` 是串行 3 步流（extract ALL → translate ALL → inject ALL），用户必须等全部翻译完成才能看到结果，200 段落页面等待 30-50 秒。需要改为渐进式翻译：每翻译完一小批立即注入页面并推送进度，首批 3-5 秒可见。具体包括：① 新增 `llm_translate_progressive` 工具实现翻译-注入循环；② 首批 5 段、后续 15 段的自适应批量；③ WebSocket `translate_progress` 批次级进度推送；④ Chrome 侧翻译进度条展示；⑤ 更新 Skill 定义为 2 步流。 |
+| 用户价值 | 用户在几秒内看到翻译结果开始出现，减少"系统是否在工作"的焦虑；翻译质量不因渐进式而降低 |
+| 验收 | ① 触发沉浸式翻译后 5 秒内页面出现首批翻译；② Chrome 侧显示"翻译中: N/M 段落"实时进度；③ 全部翻译完成后进度消失，显示完成状态；④ 单批失败不阻断整体翻译；⑤ 翻译质量与原串行流一致（相同 prompt、相同 batch 翻译逻辑） |
+| 影响范围 | vscode-ext（`llm-tools.ts` 新增渐进式工具 + `skill-registry.ts` 更新 Skill 定义 + `ws-server.ts` 进度推送）/ chrome-ext（`TranslateControl.tsx` 进度条 + `action-executor.ts` 增量注入已支持） |
+| 备注 | `injectBilingual` 已支持按 `data-imt-id` 增量注入，不需要修改注入逻辑。核心改动在 VSCode 侧新工具和 Chrome 侧进度展示。 |
 
 ---
 

@@ -1,6 +1,6 @@
 // llm-tools.ts — LLM 工具注册表
 // 职责：提供 llm_* 前缀的工具实现，由 SkillRunner 通过前缀路由调用。
-//       当前实现：llm_translate（批量翻译工具）。
+//       实现：llm_translate（批量翻译工具）、llm_translate_progressive（渐进式翻译+即时注入）。
 //       所有 LLM 工具通过 LmService 调用 vscode.lm API。
 import * as vscode from 'vscode';
 import { LmService } from './lm-service';
@@ -33,12 +33,41 @@ export interface LlmTranslateResult {
   count: number;
 }
 
+// ────────────────────────────────────────────────────────────────
+// evo_v30_001: LlmToolContext — 渐进式翻译所需的外部依赖
+// ────────────────────────────────────────────────────────────────
+
+/** translate_progress 消息 payload */
+export interface TranslateProgressPayload {
+  translated: number;
+  total: number;
+  batchIndex: number;
+  totalBatches: number;
+  status: 'translating' | 'injecting' | 'done' | 'error';
+}
+
+/**
+ * LLM 工具执行上下文 — 为需要与浏览器交互的 LLM 工具（如 llm_translate_progressive）
+ * 提供调用浏览器工具和发送进度通知的能力。
+ *
+ * 由 SkillRunner 在 callTool 路由时构造，普通 llm_translate 可忽略此参数。
+ */
+export interface LlmToolContext {
+  /** 调用浏览器工具（如 browser_inject_bilingual），由 BrowserToolProvider.callTool 包装 */
+  callBrowserTool?: (toolName: string, args: Record<string, unknown>, targetTabId?: number) => Promise<McpToolResult>;
+  /** 发送 translate_progress 消息到 Chrome 侧，由 WsServer.send 包装 */
+  sendTranslateProgress?: (payload: TranslateProgressPayload) => void;
+  /** Chrome 侧锁定的目标 Tab ID */
+  targetTabId?: number;
+}
+
 /** LLM 工具处理函数签名 */
 type LlmToolHandler = (
   args: Record<string, unknown>,
   lmService: LmService,
   outputChannel: vscode.OutputChannel,
   token?: vscode.CancellationToken,
+  context?: LlmToolContext,
 ) => Promise<McpToolResult>;
 
 // ────────────────────────────────────────────────────────────────
@@ -48,6 +77,7 @@ type LlmToolHandler = (
 /** 已注册的 LLM 工具名称 → 处理函数映射 */
 const LLM_TOOL_REGISTRY: Record<string, LlmToolHandler> = {
   llm_translate: handleLlmTranslate,
+  llm_translate_progressive: handleLlmTranslateProgressive,
 };
 
 /**
@@ -67,6 +97,11 @@ export function listLlmTools(): { name: string; description: string }[] {
       description:
         '批量翻译文本段落。接收文本数组和目标语言，通过 vscode.lm API 调用语言模型翻译，返回与输入一一对应的翻译结果数组。',
     },
+    {
+      name: 'llm_translate_progressive',
+      description:
+        '渐进式翻译+即时注入。首批 5 段、后续每批 15 段，每批翻译完立即通过 browser_inject_bilingual 注入页面，并推送 translate_progress 进度消息。',
+    },
   ];
 }
 
@@ -78,6 +113,7 @@ export function listLlmTools(): { name: string; description: string }[] {
  * @param lmService LmService 实例
  * @param outputChannel 日志输出通道
  * @param token 取消令牌
+ * @param context 可选的工具上下文（渐进式翻译等需要浏览器交互的工具使用）
  * @returns McpToolResult 标准工具结果
  */
 export async function callLlmTool(
@@ -86,6 +122,7 @@ export async function callLlmTool(
   lmService: LmService,
   outputChannel: vscode.OutputChannel,
   token?: vscode.CancellationToken,
+  context?: LlmToolContext,
 ): Promise<McpToolResult> {
   const handler = LLM_TOOL_REGISTRY[toolName];
   if (!handler) {
@@ -94,7 +131,7 @@ export async function callLlmTool(
       isError: true,
     };
   }
-  return handler(args, lmService, outputChannel, token);
+  return handler(args, lmService, outputChannel, token, context);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -419,4 +456,343 @@ function parseTranslationResponse(
   );
   const lines = trimmed.split('\n').filter((l) => l.trim().length > 0);
   return lines;
+}
+
+// ────────────────────────────────────────────────────────────────
+// evo_v30_001: llm_translate_progressive — 渐进式翻译+即时注入
+// ────────────────────────────────────────────────────────────────
+
+/** 首批翻译段落数（快速出首屏结果） */
+const FIRST_BATCH_SIZE = 5;
+
+/** 后续每批翻译段落数 */
+const PROGRESSIVE_BATCH_SIZE = 15;
+
+/** 带 id 的段落结构（来自 browser_extract_paragraphs 输出） */
+interface ParagraphWithId {
+  id: string;
+  text: string;
+}
+
+/** 失败批次记录（用于末尾重试） */
+interface FailedBatch {
+  batchIndex: number;
+  paragraphs: ParagraphWithId[];
+  error: string;
+}
+
+/**
+ * 从 args 中解析带 id 的段落数组。
+ *
+ * 支持格式：
+ * - { paragraphs: [{ id, text }, ...] }（browser_extract_paragraphs 标准输出）
+ * - JSON 字符串形式的上述结构
+ * - args.texts / args.paragraphs / args.input 中的各种嵌套
+ *
+ * @returns 解析后的 ParagraphWithId[] 或 null
+ */
+function resolveParagraphsWithIds(args: Record<string, unknown>): ParagraphWithId[] | null {
+  // 尝试从常见参数名中提取
+  const candidates = [args.texts, args.paragraphs, args.input, args];
+
+  for (const raw of candidates) {
+    const result = extractParagraphsWithIds(raw);
+    if (result && result.length > 0) { return result; }
+  }
+
+  return null;
+}
+
+/**
+ * 从单个值中提取 { id, text }[] 段落数组。
+ * 递归处理 JSON 字符串、对象、数组等格式。
+ */
+function extractParagraphsWithIds(value: unknown): ParagraphWithId[] | null {
+  if (!value) { return null; }
+
+  // JSON 字符串 → 解析后递归
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) { return null; }
+    try {
+      const parsed = JSON.parse(trimmed);
+      return extractParagraphsWithIds(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  // 数组：[{ id, text }, ...]
+  if (Array.isArray(value)) {
+    const items = value
+      .filter((item): item is { id: string; text: string } =>
+        item && typeof item === 'object' && typeof item.id === 'string' && typeof item.text === 'string')
+      .map(({ id, text }) => ({ id, text }));
+    return items.length > 0 ? items : null;
+  }
+
+  // 对象：{ paragraphs: [...] } 或 { count, paragraphs: [...] }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    if (Array.isArray(obj.paragraphs)) {
+      return extractParagraphsWithIds(obj.paragraphs);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * llm_translate_progressive — 渐进式翻译核心工具
+ *
+ * 翻译一批注入一批：
+ * 1. 首批 FIRST_BATCH_SIZE=5 段 → 快速翻译 → 立即注入 → 推送进度
+ * 2. 后续每批 PROGRESSIVE_BATCH_SIZE=15 段 → 翻译 → 注入 → 推送进度
+ * 3. 单批失败 → 记录并继续后续批次
+ * 4. 全部处理完 → 对失败批次重试一次
+ *
+ * 需要 LlmToolContext 提供 callBrowserTool 和 sendTranslateProgress 回调。
+ * 如果 context 缺失（如从 AgentLoop 直接调用），退化为普通 llm_translate 行为。
+ */
+async function handleLlmTranslateProgressive(
+  args: Record<string, unknown>,
+  lmService: LmService,
+  outputChannel: vscode.OutputChannel,
+  token?: vscode.CancellationToken,
+  context?: LlmToolContext,
+): Promise<McpToolResult> {
+  // ── 1. 参数解析 ──
+  const paragraphs = resolveParagraphsWithIds(args);
+  if (!paragraphs || paragraphs.length === 0) {
+    // 降级：尝试作为纯文本数组处理（兼容无 id 场景）
+    const texts = resolveTextsFromArgs(args);
+    if (!texts || texts.length === 0) {
+      return {
+        content: [{ type: 'text', text: 'llm_translate_progressive: 缺少 paragraphs 参数或格式不正确。需要 [{ id, text }] 数组。' }],
+        isError: true,
+      };
+    }
+    // 无 id → 用索引生成 fallback id
+    const fallbackParagraphs = texts.map((t, i) => ({ id: `fallback-${i}`, text: t }));
+    return executeProgressiveTranslation(fallbackParagraphs, args, lmService, outputChannel, token, context);
+  }
+
+  return executeProgressiveTranslation(paragraphs, args, lmService, outputChannel, token, context);
+}
+
+/**
+ * 渐进式翻译执行核心
+ */
+async function executeProgressiveTranslation(
+  paragraphs: ParagraphWithId[],
+  args: Record<string, unknown>,
+  lmService: LmService,
+  outputChannel: vscode.OutputChannel,
+  token?: vscode.CancellationToken,
+  context?: LlmToolContext,
+): Promise<McpToolResult> {
+  const targetLanguage = String(args.targetLanguage || args.target_language || 'zh-CN');
+  const sourceLanguage = args.sourceLanguage || args.source_language;
+  const total = paragraphs.length;
+
+  outputChannel.appendLine(
+    `[llm_translate_progressive] 开始渐进式翻译 ${total} 段 → ${targetLanguage}（首批 ${FIRST_BATCH_SIZE}，后续每批 ${PROGRESSIVE_BATCH_SIZE}）`,
+  );
+
+  // ── 2. 切分批次：首批 5 段，后续每批 15 段 ──
+  const batches: ParagraphWithId[][] = [];
+  if (total > 0) {
+    batches.push(paragraphs.slice(0, FIRST_BATCH_SIZE));
+    for (let i = FIRST_BATCH_SIZE; i < total; i += PROGRESSIVE_BATCH_SIZE) {
+      batches.push(paragraphs.slice(i, i + PROGRESSIVE_BATCH_SIZE));
+    }
+  }
+  const totalBatches = batches.length;
+
+  outputChannel.appendLine(
+    `[llm_translate_progressive] 共 ${totalBatches} 个批次`,
+  );
+
+  // ── 3. 逐批处理 ──
+  const allTranslations: string[] = [];
+  const failedBatches: FailedBatch[] = [];
+  let translatedCount = 0;
+
+  for (let bi = 0; bi < totalBatches; bi++) {
+    if (token?.isCancellationRequested) {
+      outputChannel.appendLine('[llm_translate_progressive] 翻译被取消');
+      return {
+        content: [{ type: 'text', text: 'llm_translate_progressive: 翻译被取消' }],
+        isError: true,
+      };
+    }
+
+    const batch = batches[bi];
+    const batchTexts = batch.map((p) => p.text);
+
+    // 通知：翻译中
+    context?.sendTranslateProgress?.({
+      translated: translatedCount,
+      total,
+      batchIndex: bi + 1,
+      totalBatches,
+      status: 'translating',
+    });
+
+    outputChannel.appendLine(
+      `[llm_translate_progressive] 批次 ${bi + 1}/${totalBatches}（${batch.length} 段）→ 翻译中`,
+    );
+
+    try {
+      const batchResult = await translateBatch(
+        batchTexts,
+        targetLanguage,
+        sourceLanguage ? String(sourceLanguage) : undefined,
+        lmService,
+        outputChannel,
+        token,
+      );
+
+      // 翻译成功 → 立即注入
+      allTranslations.push(...batchResult);
+      translatedCount += batch.length;
+
+      // 通知：注入中
+      context?.sendTranslateProgress?.({
+        translated: translatedCount,
+        total,
+        batchIndex: bi + 1,
+        totalBatches,
+        status: 'injecting',
+      });
+
+      // 构建注入 payload：[{ id, translated }]
+      const injectPayload = batch.map((p, idx) => ({
+        id: p.id,
+        translated: batchResult[idx] ?? p.text,
+      }));
+
+      // 通过 BrowserToolProvider 调用 browser_inject_bilingual
+      if (context?.callBrowserTool) {
+        try {
+          await context.callBrowserTool(
+            'browser_inject_bilingual',
+            {
+              mode: 'inject',
+              translations: JSON.stringify(injectPayload),
+            },
+            context.targetTabId,
+          );
+          outputChannel.appendLine(
+            `[llm_translate_progressive] 批次 ${bi + 1} 注入完成（${batch.length} 段）`,
+          );
+        } catch (injectErr) {
+          const errMsg = injectErr instanceof Error ? injectErr.message : String(injectErr);
+          outputChannel.appendLine(
+            `[llm_translate_progressive] 批次 ${bi + 1} 注入失败: ${errMsg}（翻译结果保留）`,
+          );
+        }
+      }
+    } catch (err) {
+      // 批次翻译失败 → 记录并继续
+      const errMsg = err instanceof Error ? err.message : String(err);
+      outputChannel.appendLine(
+        `[llm_translate_progressive] 批次 ${bi + 1} 翻译失败: ${errMsg}，跳过继续`,
+      );
+      failedBatches.push({ batchIndex: bi, paragraphs: batch, error: errMsg });
+      // 用原文占位
+      allTranslations.push(...batch.map((p) => p.text));
+    }
+  }
+
+  // ── 4. 重试失败批次（最多重试一次） ──
+  const retriedBatches: number[] = [];
+  const stillFailedBatches: number[] = [];
+
+  if (failedBatches.length > 0) {
+    outputChannel.appendLine(
+      `[llm_translate_progressive] RETRY: 重试 ${failedBatches.length} 个失败批次`,
+    );
+
+    for (const fb of failedBatches) {
+      if (token?.isCancellationRequested) { break; }
+
+      const retryTexts = fb.paragraphs.map((p) => p.text);
+      try {
+        const retryResult = await translateBatch(
+          retryTexts,
+          targetLanguage,
+          sourceLanguage ? String(sourceLanguage) : undefined,
+          lmService,
+          outputChannel,
+          token,
+        );
+
+        // 计算原始偏移，替换 allTranslations 中对应位置
+        let offset = 0;
+        for (let k = 0; k < fb.batchIndex; k++) {
+          offset += batches[k].length;
+        }
+        for (let j = 0; j < retryResult.length; j++) {
+          allTranslations[offset + j] = retryResult[j];
+        }
+
+        // 重试成功 → 注入
+        const injectPayload = fb.paragraphs.map((p, idx) => ({
+          id: p.id,
+          translated: retryResult[idx] ?? p.text,
+        }));
+
+        if (context?.callBrowserTool) {
+          try {
+            await context.callBrowserTool(
+              'browser_inject_bilingual',
+              { mode: 'inject', translations: JSON.stringify(injectPayload) },
+              context.targetTabId,
+            );
+          } catch {
+            // 注入失败不影响结果
+          }
+        }
+
+        retriedBatches.push(fb.batchIndex);
+        outputChannel.appendLine(
+          `[llm_translate_progressive] RETRY 批次 ${fb.batchIndex + 1} 成功`,
+        );
+      } catch (retryErr) {
+        stillFailedBatches.push(fb.batchIndex);
+        outputChannel.appendLine(
+          `[llm_translate_progressive] RETRY 批次 ${fb.batchIndex + 1} 仍然失败`,
+        );
+      }
+    }
+  }
+
+  // ── 5. 发送完成通知 ──
+  context?.sendTranslateProgress?.({
+    translated: total,
+    total,
+    batchIndex: totalBatches,
+    totalBatches,
+    status: 'done',
+  });
+
+  // ── 6. 构建结果 ──
+  const result = {
+    translations: allTranslations,
+    targetLanguage,
+    count: allTranslations.length,
+    totalBatches,
+    failedBatches: stillFailedBatches,
+    retriedBatches,
+  };
+
+  outputChannel.appendLine(
+    `[llm_translate_progressive] 翻译完成: ${result.count} 段，失败 ${stillFailedBatches.length} 批`,
+  );
+
+  return {
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+    isError: false,
+  };
 }

@@ -11,7 +11,7 @@ import { Skill, SkillStep } from './skill-registry';
 import { BrowserToolProvider } from './browser-tools';
 import { McpClient, McpToolResult } from './mcp-client';
 import { LmService } from './lm-service';
-import { isLlmTool, callLlmTool } from './llm-tools';
+import { isLlmTool, callLlmTool, LlmToolContext } from './llm-tools';
 
 // ────────────────────────────────────────────────────────────────
 // 类型定义
@@ -93,6 +93,8 @@ export class SkillRunner {
   private readonly mcpClient: McpClient;
   private readonly outputChannel: vscode.OutputChannel;
   private readonly lmService: LmService;
+  /** evo_v30_001: 当前执行期间的 LLM 工具上下文（execute 开始时设置，结束时清除） */
+  private currentLlmToolContext?: LlmToolContext;
 
   constructor(
     browserToolProvider: BrowserToolProvider,
@@ -197,7 +199,11 @@ export class SkillRunner {
     onProgress?: (progress: SkillProgress) => void,
     token?: vscode.CancellationToken,
     targetTabId?: number,
+    llmToolContext?: LlmToolContext,
   ): Promise<SkillRunResult> {
+    // evo_v30_001: 存储 LLM 工具上下文，供 callTool 路由到 LLM 工具时使用
+    this.currentLlmToolContext = llmToolContext;
+
     this.outputChannel.appendLine(
       `[SkillRunner] 开始执行 Skill: ${skill.name}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}`,
     );
@@ -349,6 +355,9 @@ export class SkillRunner {
     this.outputChannel.appendLine(
       `[SkillRunner] Skill "${skill.name}" 执行完成: ${stepResults.length} 步${aborted ? '（含重复组中断）' : ''}`,
     );
+
+    // evo_v30_001: 清除 LLM 工具上下文
+    this.currentLlmToolContext = undefined;
 
     return { success: allDone, stepResults, summary };
   }
@@ -640,7 +649,14 @@ export class SkillRunner {
           isError: true,
         };
       }
-      return callLlmTool(toolName, args, this.lmService, this.outputChannel, token);
+      // evo_v30_001: 构造 LlmToolContext，提供浏览器工具调用和进度通知能力
+      const llmCtx: LlmToolContext = {
+        ...this.currentLlmToolContext,
+        callBrowserTool: (name, bArgs, tabId) =>
+          this.browserToolProvider.callTool(name, bArgs, tabId ?? targetTabId),
+        targetTabId,
+      };
+      return callLlmTool(toolName, args, this.lmService, this.outputChannel, token, llmCtx);
     }
 
     // 2. browser_* 前缀 → BrowserToolProvider

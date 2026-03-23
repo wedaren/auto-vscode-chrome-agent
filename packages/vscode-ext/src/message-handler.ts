@@ -14,6 +14,7 @@ import { AgentLoop, AgentStep } from './agent-loop';
 import { startAgentRun, addAgentStep, completeAgentRun } from './agent-tree';
 import { LlmRequestCollector, LlmRequestDetail } from './llm-request-collector';
 import { createChildMeta } from './observability';
+import type { LlmToolContext } from './llm-tools';
 import type { ObservabilityStore } from './observability-store';
 import {
   smartTruncate,
@@ -795,6 +796,18 @@ export class MessageHandler {
           }
         }
 
+        // evo_v30_001: 构造 LlmToolContext，为渐进式翻译提供 translate_progress 消息推送
+        const llmToolContext: LlmToolContext = {
+          sendTranslateProgress: (payload) => {
+            this.wsServer.send(ws, {
+              type: 'translate_progress',
+              payload,
+              sessionId: msg.sessionId,
+              meta: this.childMeta(msg, 'translate.progress'),
+            });
+          },
+        };
+
         const result = await this.skillRunner!.execute(
           skill,
           params,
@@ -832,6 +845,7 @@ export class MessageHandler {
           },
           undefined, // token
           targetTabId,
+          llmToolContext,
         );
 
         // agent_progress: Skill 完成
