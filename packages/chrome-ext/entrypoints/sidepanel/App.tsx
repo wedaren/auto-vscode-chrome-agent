@@ -306,6 +306,9 @@ function AppContent({ errorLog }: AppContentProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
   const [modelsLoading, setModelsLoading] = useState(false);
+
+  // --- Skill 列表状态（供 ChatInput /skill 命令使用） ---
+  const [chatSkills, setChatSkills] = useState<Array<{ name: string; displayName: string; description: string; category: 'preset' | 'custom' }>>([]);
   /** 服务端配置的下拉列表最大可见模型数量 */
   const [maxVisibleModels, setMaxVisibleModels] = useState<number | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -340,6 +343,19 @@ function AppContent({ errorLog }: AppContentProps) {
         case 'pong':
           console.log('[App] 收到 pong，连接确认');
           break;
+        case 'skill_list_result': {
+          const skillPayload = msg.payload as {
+            skills?: Array<{ name: string; displayName: string; description: string; category: 'preset' | 'custom'; enabled: boolean }>;
+          };
+          if (skillPayload?.skills) {
+            setChatSkills(
+              skillPayload.skills
+                .filter((s) => s.enabled)
+                .map((s) => ({ name: s.name, displayName: s.displayName, description: s.description, category: s.category })),
+            );
+          }
+          break;
+        }
         case 'models_list': {
           const payload = msg.payload as {
             models: ModelInfo[];
@@ -397,6 +413,8 @@ function AppContent({ errorLog }: AppContentProps) {
         source: 'chrome-ui',
         event: 'models.list.request',
       }));
+      // 同时请求 Skill 列表（供 ChatInput /skill 命令使用）
+      sendMessage('skill_list', {});
       showToast({ type: 'success', message: '已连接到 VSCode', duration: 2000 });
     }
     if (connectionState === 'disconnected' || connectionState === 'reconnecting') {
@@ -471,6 +489,17 @@ function AppContent({ errorLog }: AppContentProps) {
         modelSelector.click();
       }
     }
+  }, []);
+
+  /** /skill 命令：触发 Skill 执行（无参数直接执行，通过 WebSocket 发送 skill_execute） */
+  const handleExecuteSkill = useCallback((skillName: string) => {
+    sendMessage('skill_execute', { skillName, params: {} });
+    showToast({ type: 'info', message: `正在执行 Skill: ${skillName}`, duration: 2000 });
+  }, [sendMessage, showToast]);
+
+  /** /skill 命令：切换到 Skills Tab（当用户需要配置参数时） */
+  const handleSwitchToSkills = useCallback(() => {
+    setActiveTab('skills');
   }, []);
 
   /** 提取用户消息历史（供 ChatInput ArrowUp 使用） */
@@ -691,6 +720,9 @@ function AppContent({ errorLog }: AppContentProps) {
             onClearConversation={handleClearConversation}
             onToggleModels={handleToggleModels}
             userMessages={userMessages}
+            skills={chatSkills}
+            onExecuteSkill={handleExecuteSkill}
+            onSwitchToSkills={handleSwitchToSkills}
           />
         </>
       )}
