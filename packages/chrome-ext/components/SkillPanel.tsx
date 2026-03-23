@@ -101,6 +101,15 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
   // 沉浸式翻译完成信号（传给 TranslateControl 组件同步状态）
   const [translateCompletion, setTranslateCompletion] = useState<{ success: boolean; timestamp: number } | null>(null);
 
+  // evo_v30_003: 翻译进度（从 translate_progress WebSocket 消息获取，传给 TranslateControl 组件）
+  const [translateProgress, setTranslateProgress] = useState<{
+    translated: number;
+    total: number;
+    batchIndex: number;
+    totalBatches: number;
+    status: 'translating' | 'injecting' | 'done' | 'error';
+  } | null>(null);
+
   // ── 请求去重：使用 ref 追踪 sendMessage 引用和请求状态 ──
   const sendMessageRef = useRef(sendMessage);
   sendMessageRef.current = sendMessage;
@@ -178,6 +187,22 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
           // 通知 TranslateControl 执行结果
           if (isImmersiveTranslateSkill(result.skillName)) {
             setTranslateCompletion({ success: result.success, timestamp: Date.now() });
+          }
+          break;
+        }
+        // evo_v30_003: 翻译进度消息 — 从 llm_translate_progressive 工具推送
+        case 'translate_progress': {
+          const progress = msg.payload as {
+            translated: number;
+            total: number;
+            batchIndex: number;
+            totalBatches: number;
+            status: 'translating' | 'injecting' | 'done' | 'error';
+          };
+          setTranslateProgress(progress);
+          // 完成或出错时，延迟清除进度（让用户看到最终状态）
+          if (progress.status === 'done' || progress.status === 'error') {
+            setTimeout(() => setTranslateProgress(null), 3000);
           }
           break;
         }
@@ -337,6 +362,7 @@ export default function SkillPanel({ sendMessage, onMessage, isConnected }: Skil
                   disabled={execution?.isRunning === true}
                   isConnected={isConnected}
                   lastCompletion={translateCompletion}
+                  translateProgress={translateProgress}
                 />
               </div>
             )}

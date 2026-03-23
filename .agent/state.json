@@ -1,26 +1,28 @@
 {
   "phase": "idle",
-  "current_task": "evo_v30_002",
+  "current_task": "evo_v30_003",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 93,
   "last_validation": {
-    "task_id": "evo_v30_002",
+    "task_id": "evo_v30_003",
     "result": "pass",
-    "score": 95,
+    "score": 93,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 47ms\nPASS",
-    "validated_at": "2026-03-23T09:20:00.000Z",
+    "acceptance_cmd_output": "PASS",
+    "validated_at": "2026-03-23T10:00:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 匹配 immersive_translate Skill 定义包含 llm_translate_progressive; llm-tools.ts 已注册; npm run compile 成功 (47ms)",
-      "steps_count": "PASS — immersive_translate steps 恰好 2 步（browser_extract_paragraphs + llm_translate_progressive）",
-      "old_llm_translate_preserved": "PASS — llm_translate 工具仍注册在 LLM_TOOL_REGISTRY 中",
-      "skill_runner_routing": "PASS — SkillRunner.callTool 已含 callLlmTool + LlmToolContext 路由",
-      "typescript_compile": "PASS — npm run compile 零错误",
-      "program_md_constraints": "PASS — 模型调用仅通过 vscode.lm API（经 LmService）; 无外部 API key 依赖; 文件有顶部注释"
+      "acceptance_cmd": "PASS — grep 匹配 translate_progress 在 chrome-ext 中; TranslateControl.tsx 包含 TranslateProgress/translateProgress/翻译中/段落已完成",
+      "ws_protocol_doc": "PASS — ws-client.ts 注释区包含 translate_progress 消息类型文档",
+      "skillpanel_listener": "PASS — SkillPanel.tsx case 'translate_progress' 监听并传递 translateProgress prop",
+      "progress_bar_component": "PASS — TranslateProgressBar 子组件含进度条 + 文本 + 批次信息 + 百分比",
+      "animation_transitions": "PASS — transition-all duration-700 ease-out + animate-pulse-subtle + animate-pulse",
+      "completion_display": "PASS — 翻译完成 ✓ 提示 + done 后 3 秒延迟消失",
+      "chrome_build": "PASS — pnpm build 成功 (1.972s)",
+      "vscode_build": "PASS — npm run compile 成功 (46ms)"
     }
   },
-  "last_tick": "2026-03-23T09:15:00.000Z",
+  "last_tick": "2026-03-23T10:00:00.000Z",
   "pm_done": true
 }

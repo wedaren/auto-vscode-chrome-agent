@@ -26,6 +26,10 @@
 //                        payload: { skillName, stepIndex, totalSteps, status, description, result? }
 //   skill_complete     — VSCode → Chrome：执行完成/失败
 //                        payload: { skillName, success, summary }
+// 翻译进度类（渐进式翻译协议）：
+//   translate_progress — VSCode → Chrome：翻译批次进度推送
+//                        payload: { translated, total, batchIndex, totalBatches, status }
+//                        status: 'translating' | 'injecting' | 'done' | 'error'
 // 握手类：welcome（Server → Client，新连接建立时发送，payload: { replacedPrevious }）
 // 心跳类：heartbeat_ping / heartbeat_pong（内部使用，区别于业务 ping/pong）
 

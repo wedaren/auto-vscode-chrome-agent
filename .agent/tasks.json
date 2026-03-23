@@ -2017,7 +2017,7 @@
       "id": "evo_v30_002",
       "type": "coding",
       "title": "更新 immersive_translate Skill 定义 — 2 步流（extract → progressive_translate_inject）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v30_001"
       ],
