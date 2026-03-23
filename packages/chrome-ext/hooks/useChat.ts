@@ -72,6 +72,8 @@ export interface UseChatReturn {
   refreshConversations: () => Promise<void>;
   /** 重试发送失败的消息（一键重试） */
   retryMessage: (messageId: string) => void;
+  /** 切换会话置顶状态（pin/unpin），持久化到 storage */
+  togglePin: (id: string) => Promise<void>;
 }
 
 /**
@@ -94,7 +96,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
   const streamingMsgIdRef = useRef<string | null>(null);
 
   // --- 持久化：useChatStorage 集成 ---
-  const { saveConversation, loadConversation, listConversations, deleteConversation: storageDelete } = useChatStorage();
+  const { saveConversation, loadConversation, listConversations, deleteConversation: storageDelete, togglePin: storageTogglePin } = useChatStorage();
   const conversationIdRef = useRef<string>(crypto.randomUUID());
   const conversationCreatedAtRef = useRef<number>(Date.now());
   const isStorageInitializedRef = useRef(false);
@@ -211,6 +213,16 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
       console.error('[useChat] 删除会话失败:', err);
     }
   }, [isStreaming, storageDelete, listConversations, loadConversation]);
+
+  /** 切换会话置顶状态：pin/unpin，持久化后刷新列表 */
+  const togglePin = useCallback(async (id: string) => {
+    try {
+      const updatedIndex = await storageTogglePin(id);
+      setConversations(updatedIndex);
+    } catch (err) {
+      console.error('[useChat] 切换置顶失败:', err);
+    }
+  }, [storageTogglePin]);
 
   /** 处理来自 WebSocket 的聊天相关消息（try-catch 防护，防止单条消息处理失败导致整个 Hook 崩溃） */
   const handleChatMessage = useCallback((msg: BridgeMessage) => {
@@ -604,5 +616,6 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
     deleteConversation: handleDeleteConversation,
     refreshConversations,
     retryMessage,
+    togglePin,
   };
 }

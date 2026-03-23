@@ -24,6 +24,8 @@ export interface ConversationMeta {
   messageCount: number;
   createdAt: number;
   updatedAt: number;
+  /** 是否置顶（pinned 会话始终排在列表最前面） */
+  pinned?: boolean;
 }
 
 /** chrome.storage.local 键前缀 */
@@ -72,12 +74,15 @@ export function useChatStorage() {
         const result = await chrome.storage.local.get(INDEX_KEY);
         const index: ConversationMeta[] = result[INDEX_KEY] ?? [];
 
+        // 保留已有的 pinned 状态
+        const existingMeta = index.find((m) => m.id === updated.id);
         const meta: ConversationMeta = {
           id: updated.id,
           title: updated.title,
           messageCount: updated.messages.length,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt,
+          pinned: existingMeta?.pinned ?? false,
         };
 
         const existingIdx = index.findIndex((m) => m.id === updated.id);
@@ -87,8 +92,13 @@ export function useChatStorage() {
           index.unshift(meta);
         }
 
-        // 按 updatedAt 降序排列
-        index.sort((a, b) => b.updatedAt - a.updatedAt);
+        // 排序：pinned 置顶优先，组内按 updatedAt 降序
+        index.sort((a, b) => {
+          const aPinned = a.pinned ? 1 : 0;
+          const bPinned = b.pinned ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned;
+          return b.updatedAt - a.updatedAt;
+        });
         await chrome.storage.local.set({ [INDEX_KEY]: index });
 
         console.log('[useChatStorage] 会话已保存:', updated.id, updated.title);
@@ -145,10 +155,39 @@ export function useChatStorage() {
     }
   }, []);
 
+  /** 切换会话置顶状态（pinned ⇄ unpinned），持久化到 chrome.storage.local */
+  const togglePin = useCallback(async (id: string): Promise<ConversationMeta[]> => {
+    try {
+      const result = await chrome.storage.local.get(INDEX_KEY);
+      const index: ConversationMeta[] = result[INDEX_KEY] ?? [];
+
+      const target = index.find((m) => m.id === id);
+      if (target) {
+        target.pinned = !target.pinned;
+      }
+
+      // 重新排序：pinned 置顶优先，组内按 updatedAt 降序
+      index.sort((a, b) => {
+        const aPinned = a.pinned ? 1 : 0;
+        const bPinned = b.pinned ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        return b.updatedAt - a.updatedAt;
+      });
+
+      await chrome.storage.local.set({ [INDEX_KEY]: index });
+      console.log('[useChatStorage] 会话置顶已切换:', id, target?.pinned);
+      return index;
+    } catch (err) {
+      console.error('[useChatStorage] 切换置顶失败:', err);
+      return [];
+    }
+  }, []);
+
   return {
     saveConversation,
     loadConversation,
     listConversations,
     deleteConversation,
+    togglePin,
   };
 }

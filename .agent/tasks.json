@@ -1954,7 +1954,7 @@
       "id": "evo_v29_002",
       "type": "coding",
       "title": "Agent 执行进度条 — AgentProgressBar 组件 + 步骤计数协议 + 耗时 + 取消",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_005"
       ],

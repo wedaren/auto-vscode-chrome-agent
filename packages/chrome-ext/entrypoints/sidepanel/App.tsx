@@ -298,6 +298,7 @@ function AppContent({ errorLog }: AppContentProps) {
     switchConversation,
     deleteConversation,
     retryMessage,
+    togglePin,
   } = useChat({ sendMessage, onToast: handleChatToast });
   const { pageContext } = usePageContext();
 
@@ -518,6 +519,7 @@ function AppContent({ errorLog }: AppContentProps) {
           onNewConversation={createNewConversation}
           onSelectConversation={switchConversation}
           onDeleteConversation={deleteConversation}
+          onTogglePin={togglePin}
           onClose={closeSidebar}
         />
       </div>
