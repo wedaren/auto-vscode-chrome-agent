@@ -287,26 +287,12 @@ const PRESET_SKILLS: Skill[] = [
         description: '智能提取页面主内容区段落文本',
       },
       {
-        toolName: 'llm_translate',
+        toolName: 'llm_translate_progressive',
         argsTemplate: {
-          texts: '{{$prev}}',
+          paragraphs: '{{$prev}}',
           targetLanguage: '{{targetLanguage}}',
         },
-        description: '调用 LLM 批量翻译提取到的段落',
-      },
-      {
-        toolName: 'browser_inject_bilingual',
-        argsTemplate: {
-          translations: '{{$prev.translations}}',
-          mode: 'inject',
-        },
-        description: '将翻译结果以双语对照形式注入原文下方',
-      },
-      {
-        toolName: 'browser_screenshot',
-        argsTemplate: {},
-        description: '截图验证翻译效果',
-        optional: true,
+        description: '渐进式翻译+即时注入：翻译一批注入一批，首批 5 段快速出结果',
       },
     ],
   },
