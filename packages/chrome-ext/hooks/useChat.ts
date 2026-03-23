@@ -8,12 +8,15 @@ import type { BridgeMessage } from '../src/ws-client';
 import { createRootMeta, type BridgeMeta } from '../src/observability';
 import { createMessage, type Message } from '../utils/message-factory';
 import type { AgentStep } from '../components/AgentStepView';
+import type { AgentProgressInfo } from '../components/AgentProgressBar';
 import { useChatStorage, type Conversation, type ConversationMeta } from './useChatStorage';
 
 // 从 message-factory 统一导出 Message 类型
 export type { Message } from '../utils/message-factory';
 // 导出 ConversationMeta 供 ConversationList 使用
 export type { ConversationMeta } from './useChatStorage';
+// 导出 AgentProgressInfo 供 App 使用
+export type { AgentProgressInfo } from '../components/AgentProgressBar';
 
 /** 页面上下文（发送消息时附加） */
 interface ChatContext {
@@ -49,11 +52,13 @@ export interface UseChatReturn {
   conversations: ConversationMeta[];
   /** 当前流式消息 ID ref（用于 TypingIndicator 显示判断） */
   streamingMsgIdRef: React.RefObject<string | null>;
+  /** Agent/Skill 执行进度信息（null 表示无执行中） */
+  agentProgress: AgentProgressInfo | null;
   /** 发送用户消息 */
   handleSendMessage: (content: string, context?: ChatContext) => void;
   /** 取消当前流式生成 */
   handleCancel: () => void;
-  /** 处理来自 WebSocket 的聊天相关消息（chat_response / chat_response_chunk / chat_response_end / echo / agent_step / agent_complete） */
+  /** 处理来自 WebSocket 的聊天相关消息（chat_response / chat_response_chunk / chat_response_end / echo / agent_step / agent_complete / agent_progress） */
   handleChatMessage: (msg: BridgeMessage) => void;
   /** 重置流式状态（WebSocket 断连时调用，防止 UI 锁死） */
   resetStreamingState: () => void;
@@ -85,6 +90,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
   const [isStreaming, setIsStreaming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
+  const [agentProgress, setAgentProgress] = useState<AgentProgressInfo | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
 
   // --- 持久化：useChatStorage 集成 ---
@@ -269,6 +275,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           streamingMsgIdRef.current = null;
           setIsStreaming(false);
           setIsCancelling(false);
+          setAgentProgress(null);
           console.log(
             '[useChat] 流式响应结束',
             endPayload?.cancelled ? '(已取消)' : '',
@@ -356,10 +363,32 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           streamingMsgIdRef.current = null;
           setIsStreaming(false);
           setIsCancelling(false);
+          setAgentProgress(null);
           console.log(
             '[useChat] Agent 循环结束',
             completePayload?.cancelled ? '(已取消)' : '',
             completePayload?.llmDetail ? '(含 llmDetail)' : '',
+          );
+          break;
+        }
+
+        case 'agent_progress': {
+          // Agent/Skill 执行进度：更新进度条状态
+          const progressPayload = msg.payload as AgentProgressInfo;
+          if (!progressPayload) break;
+
+          if (progressPayload.status === 'complete' || progressPayload.status === 'cancelled' || progressPayload.status === 'error') {
+            // 执行结束：清除进度
+            setAgentProgress(null);
+          } else {
+            // 执行中：更新进度信息
+            setAgentProgress(progressPayload);
+          }
+          console.log(
+            '[useChat] agent_progress:',
+            progressPayload.status,
+            `${progressPayload.currentStep}/${progressPayload.totalSteps}`,
+            progressPayload.description,
           );
           break;
         }
@@ -554,6 +583,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
       streamingMsgIdRef.current = null;
       setIsStreaming(false);
       setIsCancelling(false);
+      setAgentProgress(null);
     }
   }, []);
 
@@ -564,6 +594,7 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
     conversationId: conversationIdRef.current,
     conversations,
     streamingMsgIdRef,
+    agentProgress,
     handleSendMessage,
     handleCancel,
     handleChatMessage,

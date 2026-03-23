@@ -15,6 +15,7 @@ import WelcomeScreen from '../../components/WelcomeScreen';
 import SkillPanel from '../../components/SkillPanel';
 import DebugPanel from '../../components/DebugPanel';
 import ToastContainer from '../../components/Toast';
+import AgentProgressBar from '../../components/AgentProgressBar';
 import ErrorBoundary, { type ErrorLogEntry } from '../../components/ErrorBoundary';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useChat } from '../../hooks/useChat';
@@ -288,6 +289,7 @@ function AppContent({ errorLog }: AppContentProps) {
     isCancelling,
     conversationId,
     conversations,
+    agentProgress,
     handleSendMessage: chatSend,
     handleCancel,
     handleChatMessage,
@@ -624,6 +626,9 @@ function AppContent({ errorLog }: AppContentProps) {
               )}
             </div>
           )}
+
+          {/* Agent/Skill 执行进度条（sticky 在消息区顶部） */}
+          <AgentProgressBar progress={agentProgress} onCancel={handleCancel} />
 
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

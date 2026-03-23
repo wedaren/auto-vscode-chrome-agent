@@ -340,6 +340,18 @@ export class MessageHandler {
       );
       this.llmCollector.addMessage(collectId, 'user', text);
 
+      // agent_progress: 记录执行开始时间，推送 start 进度
+      const agentStartedAt = Date.now();
+      const maxSteps = AgentLoop.MAX_STEPS;
+      this.sendAgentProgress(ws, msg, {
+        status: 'start',
+        currentStep: 0,
+        totalSteps: maxSteps,
+        description: '正在分析问题...',
+        startedAt: agentStartedAt,
+        mode: 'agent',
+      });
+
       try {
         const agentLoop = new AgentLoop(
           this.lmService,
@@ -372,6 +384,21 @@ export class MessageHandler {
                 meta: this.childMeta(msg, 'agent.step'),
               });
 
+              // agent_progress: 步骤进度推送
+              const stepDesc = step.type === 'think'
+                ? '正在思考...'
+                : step.type === 'act'
+                  ? `执行工具: ${step.toolName ?? 'unknown'}`
+                  : `观察结果: ${(step.content ?? '').slice(0, 60)}`;
+              this.sendAgentProgress(ws, msg, {
+                status: 'step',
+                currentStep: Math.ceil(step.step / 3), // think+act+observe = 1 逻辑步
+                totalSteps: maxSteps,
+                description: stepDesc,
+                startedAt: agentStartedAt,
+                mode: 'agent',
+              });
+
               // 同步追加到 Agent 循环 TreeView（→ VSCode 调试面板）
               addAgentStep(runId, step);
 
@@ -390,6 +417,16 @@ export class MessageHandler {
 
         // AgentLoop 完成，标记运行结束
         completeAgentRun(runId, 'completed');
+
+        // agent_progress: 完成
+        this.sendAgentProgress(ws, msg, {
+          status: 'complete',
+          currentStep: result.totalSteps,
+          totalSteps: result.totalSteps,
+          description: '执行完成',
+          startedAt: agentStartedAt,
+          mode: 'agent',
+        });
 
         // 结束采集：记录最终响应
         this.llmCollector.addMessage(collectId, 'assistant', result.finalAnswer);
@@ -432,6 +469,16 @@ export class MessageHandler {
           completeAgentRun(runId, 'cancelled');
           this.llmCollector.endRequest(collectId, '', undefined, true);
 
+          // agent_progress: 取消
+          this.sendAgentProgress(ws, msg, {
+            status: 'cancelled',
+            currentStep: 0,
+            totalSteps: maxSteps,
+            description: '已取消',
+            startedAt: agentStartedAt,
+            mode: 'agent',
+          });
+
           this.wsServer.send(ws, {
             type: 'agent_complete',
             payload: {
@@ -451,6 +498,16 @@ export class MessageHandler {
           const errMsg = err instanceof Error ? err.message : String(err);
           completeAgentRun(runId, 'error', errMsg);
           this.llmCollector.endRequest(collectId, '', errMsg);
+
+          // agent_progress: 错误
+          this.sendAgentProgress(ws, msg, {
+            status: 'error',
+            currentStep: 0,
+            totalSteps: maxSteps,
+            description: `错误: ${errMsg.slice(0, 80)}`,
+            startedAt: agentStartedAt,
+            mode: 'agent',
+          });
 
           this.wsServer.send(ws, {
             type: 'agent_complete',
@@ -580,6 +637,31 @@ export class MessageHandler {
   }
 
   /**
+   * 发送 agent_progress 消息到 Chrome UI（Agent/Skill 进度条协议）
+   * 统一封装，减少 handleChatAgentMode / handleSkillExecute 中的重复代码
+   */
+  private sendAgentProgress(
+    ws: WebSocket,
+    msg: BridgeMessage,
+    payload: {
+      status: 'start' | 'step' | 'complete' | 'cancelled' | 'error';
+      currentStep: number;
+      totalSteps: number;
+      description: string;
+      startedAt: number;
+      mode: 'agent' | 'skill';
+      skillName?: string;
+    },
+  ): void {
+    this.wsServer.send(ws, {
+      type: 'agent_progress',
+      payload,
+      sessionId: msg.sessionId,
+      meta: this.childMeta(msg, `agent_progress.${payload.status}`),
+    });
+  }
+
+  /**
    * 处理 cancel_chat：中断当前流式生成
    */
   private handleCancelChat(ws: WebSocket): void {
@@ -677,8 +759,21 @@ export class MessageHandler {
       `[BrowserAgent] 开始执行 Skill: ${skillName}, 参数: ${JSON.stringify(params)}${targetTabId !== undefined ? `, targetTabId: ${targetTabId}` : ''}${targetUrl ? `, targetUrl: ${targetUrl}` : ''}`,
     );
 
-    // 异步执行，通过 skill_progress 实时推送进度
+    // 异步执行，通过 skill_progress + agent_progress 实时推送进度
     void (async () => {
+      // agent_progress: Skill 执行开始
+      const skillStartedAt = Date.now();
+      const skillTotalSteps = skill.steps.length;
+      this.sendAgentProgress(ws, msg, {
+        status: 'start',
+        currentStep: 0,
+        totalSteps: skillTotalSteps,
+        description: `开始执行 ${skill.displayName}...`,
+        startedAt: skillStartedAt,
+        mode: 'skill',
+        skillName: skill.displayName,
+      });
+
       try {
         // 预设场景：如果 targetUrl 不为空，先自动导航到目标页面
         if (targetUrl && this.skillRunner) {
@@ -723,10 +818,32 @@ export class MessageHandler {
               sessionId: msg.sessionId,
               meta: this.childMeta(msg, 'skill.progress'),
             });
+
+            // agent_progress: Skill 步骤进度同步推送
+            this.sendAgentProgress(ws, msg, {
+              status: 'step',
+              currentStep: progress.stepIndex + 1,
+              totalSteps: progress.totalSteps,
+              description: progress.description,
+              startedAt: skillStartedAt,
+              mode: 'skill',
+              skillName: skill.displayName,
+            });
           },
           undefined, // token
           targetTabId,
         );
+
+        // agent_progress: Skill 完成
+        this.sendAgentProgress(ws, msg, {
+          status: 'complete',
+          currentStep: skillTotalSteps,
+          totalSteps: skillTotalSteps,
+          description: result.success ? '执行成功' : '执行失败',
+          startedAt: skillStartedAt,
+          mode: 'skill',
+          skillName: skill.displayName,
+        });
 
         // 执行完成，发送 skill_complete
         this.wsServer.send(ws, {
@@ -745,6 +862,18 @@ export class MessageHandler {
         );
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
+
+        // agent_progress: Skill 错误
+        this.sendAgentProgress(ws, msg, {
+          status: 'error',
+          currentStep: 0,
+          totalSteps: skillTotalSteps,
+          description: `错误: ${errMsg.slice(0, 80)}`,
+          startedAt: skillStartedAt,
+          mode: 'skill',
+          skillName: skill.displayName,
+        });
+
         this.wsServer.send(ws, {
           type: 'skill_complete',
           payload: {
