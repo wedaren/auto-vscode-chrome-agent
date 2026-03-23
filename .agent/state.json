@@ -1,31 +1,28 @@
 {
   "phase": "idle",
-  "current_task": "evo_v30_003",
+  "current_task": "evo_v30_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 92,
   "last_validation": {
-    "task_id": "evo_v30_003",
+    "task_id": "evo_v30_004",
     "result": "pass",
-    "score": 95,
+    "score": 92,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-23T10:15:00.000Z",
+    "validated_at": "2026-03-23T10:30:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep translate_progress 在 chrome-ext 3 个文件命中; TranslateControl.tsx 包含 TranslateProgress/translateProgress/翻译中/段落已完成",
-      "ws_protocol_doc": "PASS — ws-client.ts 注释区包含 translate_progress 消息类型文档（payload: translated, total, batchIndex, totalBatches, status）",
-      "skillpanel_listener": "PASS — SkillPanel.tsx case 'translate_progress' 监听并通过 setTranslateProgress 传递给 TranslateControl",
-      "progress_bar_component": "PASS — TranslateProgressBar 子组件含进度条 + 状态文本（翻译中/注入中/翻译完成 ✓/翻译出错）+ 批次信息 + 百分比",
-      "animation_transitions": "PASS — transition-all duration-700 ease-out + animate-pulse-subtle 自定义 keyframes + animate-pulse 处理中指示",
-      "completion_display": "PASS — 翻译完成 ✓ — N 段落已完成 提示，done 状态独立渲染",
-      "chrome_build": "PASS — pnpm build 成功 (1.942s)",
-      "vscode_build": "PASS — npm run compile 成功 (48ms)",
-      "no_external_deps": "PASS — 无外部 API key 依赖，Chrome 侧不内置模型",
-      "file_header": "PASS — TranslateControl.tsx 顶部含职责注释",
-      "vscode_lm_only": "PASS — 模型调用仅通过 vscode.lm API（LmService）"
+      "acceptance_cmd": "PASS — grep failedBatch/retryBatch/RETRY 命中; handleLlmTranslate 保留; compile 成功",
+      "throwOnError_fix": "PASS — translateBatch 新增 throwOnError 参数，progressive 模式传 true 使失败隔离逻辑真正可达",
+      "failure_isolation": "PASS — 主循环 catch 记录 failedBatches + 原文占位 + 继续后续批次",
+      "retry_logic": "PASS — 全部批次后遍历 failedBatches 重试一次，成功则替换原文+注入",
+      "still_failed_marking": "PASS — 重试仍失败的写入 stillFailedBatches，结果中 failedBatches 字段返回",
+      "original_llm_translate": "PASS — handleLlmTranslate 保留在 LLM_TOOL_REGISTRY，throwOnError 默认 false 行为不变",
+      "vscode_build": "PASS — npm run compile 成功 (45ms, 566.5kb)",
+      "chrome_build": "PASS — pnpm build 成功 (1.952s)"
     }
   },
-  "last_tick": "2026-03-23T10:15:00.000Z",
+  "last_tick": "2026-03-23T10:30:00.000Z",
   "pm_done": true
 }
