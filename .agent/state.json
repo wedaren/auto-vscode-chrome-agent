@@ -4,25 +4,28 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 93,
+  "last_score": 95,
   "last_validation": {
     "task_id": "evo_v30_003",
     "result": "pass",
-    "score": 93,
+    "score": 95,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-23T10:00:00.000Z",
+    "validated_at": "2026-03-23T10:15:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 匹配 translate_progress 在 chrome-ext 中; TranslateControl.tsx 包含 TranslateProgress/translateProgress/翻译中/段落已完成",
-      "ws_protocol_doc": "PASS — ws-client.ts 注释区包含 translate_progress 消息类型文档",
-      "skillpanel_listener": "PASS — SkillPanel.tsx case 'translate_progress' 监听并传递 translateProgress prop",
-      "progress_bar_component": "PASS — TranslateProgressBar 子组件含进度条 + 文本 + 批次信息 + 百分比",
-      "animation_transitions": "PASS — transition-all duration-700 ease-out + animate-pulse-subtle + animate-pulse",
-      "completion_display": "PASS — 翻译完成 ✓ 提示 + done 后 3 秒延迟消失",
-      "chrome_build": "PASS — pnpm build 成功 (1.972s)",
-      "vscode_build": "PASS — npm run compile 成功 (46ms)"
+      "acceptance_cmd": "PASS — grep translate_progress 在 chrome-ext 3 个文件命中; TranslateControl.tsx 包含 TranslateProgress/translateProgress/翻译中/段落已完成",
+      "ws_protocol_doc": "PASS — ws-client.ts 注释区包含 translate_progress 消息类型文档（payload: translated, total, batchIndex, totalBatches, status）",
+      "skillpanel_listener": "PASS — SkillPanel.tsx case 'translate_progress' 监听并通过 setTranslateProgress 传递给 TranslateControl",
+      "progress_bar_component": "PASS — TranslateProgressBar 子组件含进度条 + 状态文本（翻译中/注入中/翻译完成 ✓/翻译出错）+ 批次信息 + 百分比",
+      "animation_transitions": "PASS — transition-all duration-700 ease-out + animate-pulse-subtle 自定义 keyframes + animate-pulse 处理中指示",
+      "completion_display": "PASS — 翻译完成 ✓ — N 段落已完成 提示，done 状态独立渲染",
+      "chrome_build": "PASS — pnpm build 成功 (1.942s)",
+      "vscode_build": "PASS — npm run compile 成功 (48ms)",
+      "no_external_deps": "PASS — 无外部 API key 依赖，Chrome 侧不内置模型",
+      "file_header": "PASS — TranslateControl.tsx 顶部含职责注释",
+      "vscode_lm_only": "PASS — 模型调用仅通过 vscode.lm API（LmService）"
     }
   },
-  "last_tick": "2026-03-23T10:00:00.000Z",
+  "last_tick": "2026-03-23T10:15:00.000Z",
   "pm_done": true
 }

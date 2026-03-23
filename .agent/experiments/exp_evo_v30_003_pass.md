@@ -35,3 +35,15 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无。所有验收维度均通过：
+  - acceptance_cmd: PASS（translate_progress 在 chrome-ext 3 文件命中，TranslateControl.tsx 包含所有关键词）
+  - Chrome build: PASS（pnpm build 1.942s）
+  - VSCode build: PASS（npm run compile 48ms）
+  - 代码一致性：TranslateControl.tsx 顶部注释完整，TypeScript 严格模式无报错
+  - program.md 约束：模型调用仅通过 vscode.lm API，Chrome 侧无内置模型，无外部 API key 依赖
+  - 需求符合度：translate_progress 协议完整（ws-client.ts 文档 + SkillPanel 监听 + TranslateProgressBar 渲染），进度条含动画过渡、批次信息、百分比、完成/错误状态
