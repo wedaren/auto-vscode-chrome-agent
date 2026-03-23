@@ -32,3 +32,9 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无。实现完整覆盖全部 5 项验收标准，throwOnError 机制确保失败隔离逻辑真正可达，重试循环与 stillFailedBatches 标记清晰，原 llm_translate 保留兼容。TypeScript 编译零错误，无禁止依赖，符合 program.md 全部约束。
