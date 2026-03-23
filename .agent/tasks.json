@@ -2029,7 +2029,7 @@
       "id": "evo_v30_003",
       "type": "coding",
       "title": "WebSocket translate_progress 协议 + Chrome 侧翻译进度条组件",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v30_001"
       ],

@@ -354,6 +354,10 @@ async function handleLlmTranslate(
  * 3. 保持段落原有顺序
  * 4. 仅翻译，不解释、不添加内容
  */
+/**
+ * @param throwOnError 为 true 时，翻译失败直接抛出异常（供 progressive 模式的外层 catch 记录失败批次）。
+ *                     为 false（默认）时，失败降级为返回原文（保持原 llm_translate 兼容行为）。
+ */
 async function translateBatch(
   texts: string[],
   targetLanguage: string,
@@ -361,6 +365,7 @@ async function translateBatch(
   lmService: LmService,
   outputChannel: vscode.OutputChannel,
   token?: vscode.CancellationToken,
+  throwOnError = false,
 ): Promise<string[]> {
   const sourcePart = sourceLanguage ? ` from ${sourceLanguage}` : '';
   const systemPrompt = [
@@ -386,7 +391,10 @@ async function translateBatch(
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     outputChannel.appendLine(`[llm_translate] 批次翻译失败: ${errMsg}`);
-    // 降级：返回原文
+    if (throwOnError) {
+      throw err;
+    }
+    // 降级：返回原文（原 llm_translate 兼容行为）
     return texts;
   }
 }
@@ -644,6 +652,7 @@ async function executeProgressiveTranslation(
     );
 
     try {
+      // throwOnError=true: 翻译失败抛异常，由外层 catch 记录到 failedBatches
       const batchResult = await translateBatch(
         batchTexts,
         targetLanguage,
@@ -651,6 +660,7 @@ async function executeProgressiveTranslation(
         lmService,
         outputChannel,
         token,
+        true, // ← 严格模式：失败抛出，不降级返回原文
       );
 
       // 翻译成功 → 立即注入
@@ -719,6 +729,7 @@ async function executeProgressiveTranslation(
 
       const retryTexts = fb.paragraphs.map((p) => p.text);
       try {
+        // retryBatch: throwOnError=true 让重试失败也被外层 catch 捕获
         const retryResult = await translateBatch(
           retryTexts,
           targetLanguage,
@@ -726,6 +737,7 @@ async function executeProgressiveTranslation(
           lmService,
           outputChannel,
           token,
+          true, // ← 严格模式
         );
 
         // 计算原始偏移，替换 allTranslations 中对应位置
@@ -768,16 +780,17 @@ async function executeProgressiveTranslation(
     }
   }
 
-  // ── 5. 发送完成通知 ──
+  // ── 5. 发送完成通知（有残留失败批次时标记 error，否则 done） ──
+  const finalStatus = stillFailedBatches.length > 0 ? 'error' as const : 'done' as const;
   context?.sendTranslateProgress?.({
-    translated: total,
+    translated: translatedCount + retriedBatches.length, // retryBatch 成功的也计入
     total,
     batchIndex: totalBatches,
     totalBatches,
-    status: 'done',
+    status: finalStatus,
   });
 
-  // ── 6. 构建结果 ──
+  // ── 6. 构建结果（包含 failedBatches 供调试） ──
   const result = {
     translations: allTranslations,
     targetLanguage,
@@ -788,7 +801,7 @@ async function executeProgressiveTranslation(
   };
 
   outputChannel.appendLine(
-    `[llm_translate_progressive] 翻译完成: ${result.count} 段，失败 ${stillFailedBatches.length} 批`,
+    `[llm_translate_progressive] 翻译完成: ${result.count} 段，失败 ${stillFailedBatches.length} 批，重试成功 ${retriedBatches.length} 批`,
   );
 
   return {
