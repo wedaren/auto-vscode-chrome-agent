@@ -1,4 +1,5 @@
 // MessageBubble.tsx — 消息气泡组件，assistant 消息支持 Markdown 渲染 + 代码语法高亮 + 代码块复制按钮
+// 长代码块 (>15行) 默认折叠显示前 5 行 + 展开按钮；长回复 (>500字) 顶部显示 Markdown 标题导航
 // Hover 时显示操作栏：复制整条消息、重新生成（仅 assistant）；底部显示相对时间戳
 // Agent 模式消息在正文上方渲染 AgentStepView 展示 ReAct 步骤
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
@@ -9,6 +10,13 @@ import AgentStepView, { type AgentStep } from './AgentStepView';
 import SmartSuggestions from './SmartSuggestions';
 import type { MessageStatus } from '../utils/message-factory';
 import { downloadLlmDetail } from '../utils/download-llm-detail';
+
+/** 代码块折叠阈值：超过此行数的代码块默认折叠 */
+const CODE_COLLAPSE_THRESHOLD = 15;
+/** 代码块折叠后显示的行数 */
+const CODE_COLLAPSE_VISIBLE_LINES = 5;
+/** 长回复标题导航阈值：超过此字数显示标题导航 */
+const HEADING_NAV_THRESHOLD = 500;
 
 export interface MessageBubbleProps {
   role: 'user' | 'assistant';
@@ -44,6 +52,10 @@ function createMarkedInstance(): Marked {
 
   marked.use({
     renderer: {
+      heading({ text, depth }: { text: string; depth: number }) {
+        const id = `heading-${text.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '-').toLowerCase()}`;
+        return `<h${depth} id="${escapeAttr(id)}">${text}</h${depth}>`;
+      },
       image({ href, title, text }: { href: string; title?: string | null; text: string }) {
         const altAttr = text ? ` alt="${escapeAttr(text)}"` : ' alt="图片"';
         const titleAttr = title ? ` title="${escapeAttr(title)}"` : '';
@@ -55,16 +67,29 @@ function createMarkedInstance(): Marked {
           ? hljs.highlight(text, { language }).value
           : hljs.highlightAuto(text).value;
 
+        const lineCount = text.split('\n').length;
+        const isCollapsible = lineCount > CODE_COLLAPSE_THRESHOLD;
+        const collapsibleClass = isCollapsible ? ' code-collapsible code-collapsed' : '';
+        const langLabel = language || 'code';
+
         // 每个代码块包裹在相对定位容器中，右上角放置复制按钮
-        return `<div class="code-block-wrapper">
-  <button class="code-copy-btn" data-code="${escapeAttr(text)}" title="复制代码">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-    </svg>
-    <span class="code-copy-label">复制</span>
-  </button>
+        // 超过 CODE_COLLAPSE_THRESHOLD 行的代码块默认折叠
+        return `<div class="code-block-wrapper${collapsibleClass}" data-lines="${lineCount}">
+  <div class="code-block-header">
+    <span class="code-block-lang">${escapeAttr(langLabel)}</span>
+    <button class="code-copy-btn" data-code="${escapeAttr(text)}" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="code-copy-label">复制</span>
+    </button>
+  </div>
   <pre><code class="hljs${language ? ` language-${language}` : ''}">${highlighted}</code></pre>
+  ${isCollapsible ? `<button class="code-collapse-toggle" data-action="expand">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    <span>展开全部 (${lineCount} 行)</span>
+  </button>` : ''}
 </div>`;
       },
     },
@@ -110,6 +135,85 @@ function formatRelativeTime(timestamp: number): string {
 /** 全局单例 marked 实例 */
 const markedInstance = createMarkedInstance();
 
+/** 从 Markdown 文本中提取标题列表 */
+interface HeadingItem {
+  depth: number;
+  text: string;
+  id: string;
+}
+
+function extractHeadings(markdown: string): HeadingItem[] {
+  const headings: HeadingItem[] = [];
+  // 匹配 # 开头的标题行（排除代码块内的 #）
+  const lines = markdown.split('\n');
+  let inCodeBlock = false;
+  for (const line of lines) {
+    if (line.trimStart().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+    const match = line.match(/^(#{1,6})\s+(.+)$/);
+    if (match) {
+      const depth = match[1].length;
+      const text = match[2].trim();
+      const id = `heading-${text.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '-').toLowerCase()}`;
+      headings.push({ depth, text, id });
+    }
+  }
+  return headings;
+}
+
+/** 标题导航组件 — 长回复顶部显示 Markdown 标题快捷跳转 */
+function HeadingNav({ headings, containerRef }: { headings: HeadingItem[]; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const scrollToHeading = useCallback((id: string) => {
+    if (!containerRef.current) return;
+    const el = containerRef.current.querySelector(`#${CSS.escape(id)}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [containerRef]);
+
+  if (headings.length === 0) return null;
+
+  return (
+    <div className="heading-nav">
+      <button
+        className="heading-nav-toggle"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path d="M4 6h16M4 12h16M4 18h7" />
+        </svg>
+        <span>目录导航 ({headings.length})</span>
+        <svg
+          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {isExpanded && (
+        <ul className="heading-nav-list">
+          {headings.map((h, i) => (
+            <li
+              key={`${h.id}-${i}`}
+              className="heading-nav-item"
+              style={{ paddingLeft: `${(h.depth - 1) * 12}px` }}
+            >
+              <button onClick={() => scrollToHeading(h.id)}>
+                {h.text}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function MessageBubble({
   role,
   content,
@@ -134,6 +238,12 @@ export default function MessageBubble({
   const renderedHtml = useMemo(() => {
     if (role !== 'assistant') return '';
     return markedInstance.parse(content) as string;
+  }, [role, content]);
+
+  /** 提取标题列表用于长回复导航（仅 >500 字的 assistant 消息） */
+  const headings = useMemo(() => {
+    if (role !== 'assistant' || content.length <= HEADING_NAV_THRESHOLD) return [];
+    return extractHeadings(content);
   }, [role, content]);
 
   /** 复制整条消息文本到剪贴板 */
@@ -220,6 +330,43 @@ export default function MessageBubble({
     buttons.forEach((btn) => btn.addEventListener('click', handleClick));
     return () => {
       buttons.forEach((btn) => btn.removeEventListener('click', handleClick));
+    };
+  }, [role, renderedHtml]);
+
+  // 为可折叠代码块绑定展开/收起事件
+  useEffect(() => {
+    if (role !== 'assistant' || !containerRef.current) return;
+
+    const toggleBtns = containerRef.current.querySelectorAll<HTMLButtonElement>('.code-collapse-toggle');
+
+    const handleToggle = (e: Event) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const wrapper = btn.closest('.code-block-wrapper');
+      if (!wrapper) return;
+
+      const isCollapsed = wrapper.classList.contains('code-collapsed');
+      const lineCount = wrapper.getAttribute('data-lines') || '0';
+
+      if (isCollapsed) {
+        wrapper.classList.remove('code-collapsed');
+        const label = btn.querySelector('span');
+        if (label) label.textContent = '收起代码';
+        btn.setAttribute('data-action', 'collapse');
+        const svg = btn.querySelector('svg');
+        if (svg) svg.style.transform = 'rotate(180deg)';
+      } else {
+        wrapper.classList.add('code-collapsed');
+        const label = btn.querySelector('span');
+        if (label) label.textContent = `展开全部 (${lineCount} 行)`;
+        btn.setAttribute('data-action', 'expand');
+        const svg = btn.querySelector('svg');
+        if (svg) svg.style.transform = 'rotate(0deg)';
+      }
+    };
+
+    toggleBtns.forEach((btn) => btn.addEventListener('click', handleToggle));
+    return () => {
+      toggleBtns.forEach((btn) => btn.removeEventListener('click', handleToggle));
     };
   }, [role, renderedHtml]);
 
@@ -357,6 +504,11 @@ export default function MessageBubble({
       {/* Agent 步骤展示（渲染在正文上方） */}
       {hasSteps && (
         <AgentStepView steps={steps} isRunning={isRunning} />
+      )}
+
+      {/* 长回复标题导航（>500 字 + 有标题时显示） */}
+      {content && headings.length > 0 && (
+        <HeadingNav headings={headings} containerRef={containerRef} />
       )}
 
       {/* Markdown 正文（agent_complete 后才有 content） */}

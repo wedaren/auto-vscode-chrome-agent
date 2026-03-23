@@ -67,6 +67,25 @@ body {
   background: #f6f8fa;
 }
 
+/* 代码块头部栏（语言标签 + 复制按钮） */
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 4px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 28px;
+}
+
+.code-block-lang {
+  font-size: 11px;
+  color: #888;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  text-transform: lowercase;
+  user-select: none;
+}
+
 .code-block-wrapper pre {
   margin: 0;
   padding: 0.75em 1em;
@@ -80,15 +99,59 @@ body {
   padding: 0;
 }
 
-/* 代码块复制按钮 */
-.code-copy-btn {
+/* === 代码块折叠功能 === */
+
+/* 折叠状态：限制 pre 高度为 5 行（每行约 1.5 * 0.82em ≈ 1.23em，5行 ≈ 6.15em + padding） */
+.code-block-wrapper.code-collapsible.code-collapsed pre {
+  max-height: calc(5 * 1.5em * 0.82 + 1.5em);
+  overflow: hidden;
+  position: relative;
+}
+
+/* 折叠时底部渐隐遮罩 */
+.code-block-wrapper.code-collapsible.code-collapsed pre::after {
+  content: '';
   position: absolute;
-  top: 6px;
-  right: 6px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2.5em;
+  background: linear-gradient(transparent, #f6f8fa);
+  pointer-events: none;
+}
+
+/* 展开/收起按钮 */
+.code-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  color: #6b7280;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.code-collapse-toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #374151;
+}
+
+.code-collapse-toggle svg {
+  transition: transform 0.2s;
+}
+
+/* 代码块复制按钮 — 现在在 header 内，不需要 absolute */
+.code-copy-btn {
   display: flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
@@ -106,6 +169,67 @@ body {
 .code-copy-btn:hover {
   background: rgba(255, 255, 255, 1);
   color: #333;
+}
+
+/* === 长回复标题导航 === */
+
+.heading-nav {
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: #f0f4f8;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.heading-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.heading-nav-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #374151;
+}
+
+.heading-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 6px;
+}
+
+.heading-nav-item {
+  margin: 0;
+}
+
+.heading-nav-item button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #4b5563;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heading-nav-item button:hover {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
 }
 
 /* 分割线 */

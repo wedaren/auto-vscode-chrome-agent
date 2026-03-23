@@ -1978,7 +1978,7 @@
       "id": "evo_v29_004",
       "type": "coding",
       "title": "斜杠命令扩展 — /skill 快捷触发 + /template prompt 模板 + Skill 名称自动补全",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v28_005"
       ],
