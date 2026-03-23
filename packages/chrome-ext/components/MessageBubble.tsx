@@ -6,6 +6,7 @@ import { Marked } from 'marked';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import AgentStepView, { type AgentStep } from './AgentStepView';
+import SmartSuggestions from './SmartSuggestions';
 import type { MessageStatus } from '../utils/message-factory';
 import { downloadLlmDetail } from '../utils/download-llm-detail';
 
@@ -28,6 +29,10 @@ export interface MessageBubbleProps {
   onRetry?: () => void;
   /** LLM 请求完整细节数据（assistant 消息可选，有值时激活下载按钮） */
   llmDetail?: Record<string, unknown>;
+  /** 智能跟进建议（AI 回复后由 LLM 异步生成，2-3 条上下文相关建议） */
+  suggestions?: string[];
+  /** 点击跟进建议芯片回调（将建议文本作为下一条消息发送） */
+  onSuggestionClick?: (suggestion: string) => void;
 }
 
 /** 创建配置了 highlight.js 的 marked 实例 */
@@ -116,6 +121,8 @@ export default function MessageBubble({
   onRegenerate,
   onRetry,
   llmDetail,
+  suggestions,
+  onSuggestionClick,
 }: MessageBubbleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -384,6 +391,15 @@ export default function MessageBubble({
           </button>
         )}
       </div>
+
+      {/* 智能跟进建议芯片（AI 回复完成后异步出现） */}
+      {suggestions && suggestions.length > 0 && onSuggestionClick && (
+        <SmartSuggestions
+          suggestions={suggestions}
+          onSuggestionClick={onSuggestionClick}
+          disabled={isRunning}
+        />
+      )}
 
       {/* Lightbox overlay — Markdown 内联图片全屏预览 */}
       {lightboxSrc && (

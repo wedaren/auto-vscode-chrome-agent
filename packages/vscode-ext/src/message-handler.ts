@@ -412,6 +412,19 @@ export class MessageHandler {
         this.outputChannel.appendLine(
           `[BrowserAgent] AgentLoop 完成: ${result.totalSteps} 步, 答案长度 ${result.finalAnswer.length}`,
         );
+
+        // 异步生成智能跟进建议（不阻塞主响应）
+        const chatPayloadForSuggestions = msg.payload as {
+          text?: string;
+          context?: { url?: string; title?: string };
+        };
+        this.generateFollowUpSuggestions(
+          ws,
+          msg,
+          text,
+          result.finalAnswer,
+          chatPayloadForSuggestions?.context,
+        );
       } catch (err) {
         const isCancelled = cts.token.isCancellationRequested;
         if (isCancelled) {
@@ -518,6 +531,19 @@ export class MessageHandler {
           sessionId: msg.sessionId,
           meta: this.childMeta(msg, 'chat.stream.end'),
         });
+
+        // 异步生成智能跟进建议（不阻塞主响应）
+        const chatPayloadForSuggestions = msg.payload as {
+          text?: string;
+          context?: { url?: string; title?: string };
+        };
+        this.generateFollowUpSuggestions(
+          ws,
+          msg,
+          text,
+          fullText,
+          chatPayloadForSuggestions?.context,
+        );
       } catch (err) {
         const isCancelled = cts.token.isCancellationRequested;
         const errMsg = isCancelled ? '' : (err instanceof Error ? err.message : String(err));
@@ -731,6 +757,75 @@ export class MessageHandler {
         });
         this.outputChannel.appendLine(
           `[BrowserAgent] Skill "${skillName}" 执行异常: ${errMsg}`,
+        );
+      }
+    })();
+  }
+
+  /**
+   * 异步生成智能跟进建议（2-3 条上下文相关的后续问题/操作建议）
+   * 在 AI 回复完成后调用，不阻塞主响应，失败时静默忽略
+   */
+  private generateFollowUpSuggestions(
+    ws: WebSocket,
+    msg: BridgeMessage,
+    userMessage: string,
+    assistantResponse: string,
+    context?: { url?: string; title?: string },
+  ): void {
+    // 空回复或取消场景不生成建议
+    if (!assistantResponse || assistantResponse.length < 10) return;
+
+    void (async () => {
+      try {
+        const contextHint = context?.url
+          ? `\n用户当前页面: ${context.url}${context.title ? ` (${context.title})` : ''}`
+          : '';
+
+        const prompt = `基于以下对话，生成 2-3 个简短的跟进建议（每个不超过 20 个字）。建议应与对话上下文和页面内容相关，帮助用户继续探索或深入了解。${contextHint}
+
+用户消息: ${userMessage.slice(0, 500)}
+
+AI 回复摘要: ${assistantResponse.slice(0, 800)}
+
+请直接输出 JSON 数组格式，不要任何解释。示例: ["深入分析性能瓶颈","查看相关API文档","对比其他方案"]`;
+
+        const result = await this.lmService.sendMessage(prompt);
+
+        // 解析 JSON 数组
+        const jsonMatch = result.match(/\[[\s\S]*?\]/);
+        if (!jsonMatch) {
+          this.outputChannel.appendLine(
+            '[BrowserAgent] 跟进建议解析失败：未找到 JSON 数组',
+          );
+          return;
+        }
+
+        const suggestions: string[] = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(suggestions) || suggestions.length === 0) return;
+
+        // 截取前 3 条，过滤空串和过长建议
+        const filtered = suggestions
+          .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+          .map((s) => s.trim().slice(0, 50))
+          .slice(0, 3);
+
+        if (filtered.length === 0) return;
+
+        this.wsServer.send(ws, {
+          type: 'follow_up_suggestions',
+          payload: { suggestions: filtered },
+          sessionId: msg.sessionId,
+          meta: this.childMeta(msg, 'follow_up.suggestions'),
+        });
+
+        this.outputChannel.appendLine(
+          `[BrowserAgent] 已发送 ${filtered.length} 条跟进建议`,
+        );
+      } catch (err) {
+        // 跟进建议生成失败不影响主流程，静默记录日志
+        this.outputChannel.appendLine(
+          `[BrowserAgent] 跟进建议生成失败 (非阻塞): ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     })();

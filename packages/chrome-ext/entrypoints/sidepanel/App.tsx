@@ -652,6 +652,8 @@ function AppContent({ errorLog }: AppContentProps) {
                         : undefined
                     }
                     llmDetail={msg.llmDetail}
+                    suggestions={msg.suggestions}
+                    onSuggestionClick={!isStreaming ? handleSendMessage : undefined}
                   />
                 ))}
                 {isStreaming && (() => {

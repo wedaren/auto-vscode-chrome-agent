@@ -22,6 +22,8 @@ export interface Message {
   isAgentMode?: boolean;
   /** LLM 请求完整细节数据（由 VSCode 侧 LlmRequestCollector 采集，通过 WebSocket 推送） */
   llmDetail?: Record<string, unknown>;
+  /** 智能跟进建议（AI 回复完成后由 VSCode 侧 LLM 异步生成，2-3 条上下文相关建议） */
+  suggestions?: string[];
 }
 
 /**

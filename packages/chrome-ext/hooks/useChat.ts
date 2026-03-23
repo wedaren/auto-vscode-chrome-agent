@@ -363,6 +363,41 @@ export function useChat({ sendMessage, onToast }: UseChatOptions): UseChatReturn
           );
           break;
         }
+
+        case 'follow_up_suggestions': {
+          // 智能跟进建议：VSCode 侧 LLM 异步生成后推送，挂载到最后一条 assistant 消息
+          const sugPayload = msg.payload as {
+            suggestions?: string[];
+            targetMessageId?: string;
+          };
+          const suggestions = sugPayload?.suggestions;
+          if (!suggestions || suggestions.length === 0) break;
+
+          setMessages((prev) => {
+            // 优先匹配 targetMessageId，否则挂载到最后一条 assistant 消息
+            const targetMsgId = sugPayload?.targetMessageId;
+            if (targetMsgId) {
+              return prev.map((m) =>
+                m.id === targetMsgId ? { ...m, suggestions } : m,
+              );
+            }
+            // fallback: 找到最后一条 assistant 消息
+            const lastAssistantIdx = prev.reduce(
+              (acc, m, i) => (m.role === 'assistant' ? i : acc),
+              -1,
+            );
+            if (lastAssistantIdx < 0) return prev;
+            return prev.map((m, i) =>
+              i === lastAssistantIdx ? { ...m, suggestions } : m,
+            );
+          });
+          console.log(
+            '[useChat] 收到跟进建议:',
+            suggestions.length,
+            '条',
+          );
+          break;
+        }
       }
     } catch (err) {
       console.error('[useChat] handleChatMessage 处理消息时出错:', err, '消息类型:', msg.type);

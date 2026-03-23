@@ -74,3 +74,4 @@
 - [~] 不考虑时间，使用最优解，优化 chrome skill，提供预设场景执行，用户点击预设场景执行，不需要填写任何内容，skill 会进入预设的场景页面等执行，让用户感受 skill 的的能力；skill 执行也要提供方便的 debug 体验（已拆解为 evo_v26_001, evo_v26_002, evo_v26_003, evo_v26_004, evo_v26_005 — 预设场景一键执行：PresetScenario 数据模型 + Chrome 场景展示 UI + 自动导航执行流 + ExecutionOverlay Debug 增强 + 日志导出）
 - [~] 不考虑时间，使用最优解，当前沉浸式翻译体验不好；当前效果：/Users/wedaren/Desktop/效果不好.png；期待效果：/Users/wedaren/Desktop/沉浸式.png；（已拆解为 evo_v27_001, evo_v27_002, evo_v27_003, evo_v27_004, evo_v27_005 — 沉浸式翻译体验升级：智能叶节点提取 + 表格布局注入适配 + 纯文本沉浸式样式 + 全链路验证）
 - [~] 不考虑时间，使用最优解，结合日志分析/Users/wedaren/Downloads/debug-log-2026-03-22T06-26-33-177Z.json，优化用户体验；（已拆解为 evo_v28_001, evo_v28_002, evo_v28_003, evo_v28_004, evo_v28_005 — CSP 安全页面度量工具 + batch_screenshot 升级 + 长截图合成下载 + Agent 语言一致性）
+- [~] 不考虑时间，使用最优解，优化用户体验（已拆解为 evo_v29_001, evo_v29_002, evo_v29_003, evo_v29_004, evo_v29_005 — 全方位 UX 优化：智能跟进建议 + Agent 执行进度条 + 会话搜索置顶 + 斜杠命令扩展 + 长回复增强）

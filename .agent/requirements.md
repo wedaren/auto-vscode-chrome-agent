@@ -23,6 +23,7 @@
 | R-13 | 一键预设场景执行 | P2 | 🔄 进行中 | 预设场景无需额外输入即可自动导航并执行完整 Skill 流程 |
 | R-14 | 沉浸式翻译体验升级 | P0 | 🔄 进行中 | 提取/注入/样式全链路升级，支持表格布局，达到专业沉浸式翻译效果 |
 | R-15 | CSP 安全工具 + 长截图合成下载 + 语言一致性 | P0 | 🔄 进行中 | CSP 安全的页面度量工具 + batch_screenshot 升级 + 长图拼接下载 + Agent 语言一致性 |
+| R-16 | 全方位用户体验优化 | P0 | 🔄 进行中 | 智能跟进建议 + Agent 执行进度条 + 会话搜索置顶 + 斜杠命令扩展 + 长回复增强 |
 
 ---
 
@@ -222,6 +223,19 @@
 | 验收 | ① 在 CSP 严格页面调用 `browser_get_page_info` 正常返回页面尺寸；② batch_screenshot 技能在 HN 上不因 CSP 终止；③ 多张截图可合成一张长图并触发浏览器下载；④ 用户用中文提问时 Agent 全程中文回复（含 think 步骤） |
 | 影响范围 | chrome-ext（action-executor.ts 新 action + background.ts 截图合成）/ vscode-ext（browser-tools.ts 工具注册 + skill-registry.ts 技能升级 + agent-loop.ts prompt 修改） |
 | 备注 | 不修改 `browser_evaluate` 本身，保持其在非 CSP 页面的完整能力；新工具专注页面度量场景 |
+
+### R-16 全方位用户体验优化
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + 28 轮迭代后的系统性 UX 审计 |
+| 优先级 | P0 |
+| 状态 | 🔄 进行中 |
+| 描述 | 针对 Chrome 侧核心交互链路的 5 项体验短板进行系统性升级：① 智能跟进建议（AI 回复后动态生成 2-3 个上下文相关的跟进 prompt 芯片）；② Agent 执行进度条（全局步骤计数 + 当前步骤描述 + 耗时 + 取消）；③ 会话搜索与置顶（ConversationList 增加搜索框 + pin 能力）；④ 斜杠命令扩展（新增 /skill、/template 命令 + 自动补全）；⑤ 长回复增强（代码块折叠 + 长回复标题导航）。 |
+| 用户价值 | 降低"不知道下一步该做什么"的迷茫感；多步任务执行时有清晰进度反馈；快速找到历史对话；从输入框一键触达 Skill 和模板；长回复高效阅读 |
+| 验收 | ① AI 回复后出现 2-3 个动态建议芯片，点击可直接发送；② Agent 多步执行时显示进度条（步骤计数 + 描述 + 耗时），可取消；③ 会话列表有搜索框可过滤，可置顶且置顶持久化；④ 输入 `/skill ` 弹出 Skill 列表自动补全，选择后触发执行；⑤ 超过 15 行的代码块默认折叠，点击可展开 |
+| 影响范围 | chrome-ext（新组件 SmartSuggestions + AgentProgressBar；增强 ConversationList + ChatInput + MessageBubble）/ vscode-ext（message-handler.ts 生成跟进建议 + ws 协议扩展 follow_up_suggestions） |
+| 备注 | 跟进建议由 VSCode 侧 LLM 生成（在 chat_response_end 后追加一次轻量 LLM 调用），延迟不可接受时降级为 Chrome 侧规则匹配 |
 
 ---
 
