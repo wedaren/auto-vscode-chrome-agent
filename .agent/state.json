@@ -4,22 +4,22 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 92,
+  "last_score": 100,
   "last_validation": {
     "task_id": "evo_v30_001",
     "result": "pass",
-    "score": 92,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "out/extension.js 566.6kb; Done in 76ms; PASS",
-    "validated_at": "2026-03-23T09:00:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 43ms\nPASS",
+    "validated_at": "2026-03-23T09:10:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep matches for llm_translate_progressive, handleLlmTranslateProgressive, translate_progress, FIRST_BATCH_SIZE, PROGRESSIVE_BATCH_SIZE all found; npm run compile succeeded",
-      "typescript_build": "PASS — vscode-ext compiled in 76ms (no TS errors)",
-      "top_comment": "PASS — llm-tools.ts top comment updated to reflect new tool",
-      "no_forbidden_deps": "PASS — no external API key imports",
-      "program_md_constraints": "PASS — all LLM calls via vscode.lm (LmService)"
+      "acceptance_cmd": "PASS — grep 匹配 llm_translate_progressive, handleLlmTranslateProgressive, translate_progress, FIRST_BATCH_SIZE, PROGRESSIVE_BATCH_SIZE 全部命中; npm run compile 成功 (43ms)",
+      "typescript_build": "PASS — vscode-ext 编译无 TS 错误",
+      "top_comment": "PASS — llm-tools.ts 顶部注释已更新，包含 llm_translate_progressive 描述",
+      "no_forbidden_deps": "PASS — 仅导入 vscode 和本地模块，无外部 API key 依赖",
+      "program_md_constraints": "PASS — 所有 LLM 调用通过 LmService (vscode.lm API); Chrome 插件不内置模型; CancellationToken 支持完整; 原 llm_translate 保留兼容"
     }
   },
-  "last_tick": "2026-03-23T09:00:00.000Z",
+  "last_tick": "2026-03-23T09:10:00.000Z",
   "pm_done": true
 }
