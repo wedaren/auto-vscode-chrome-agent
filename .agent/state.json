@@ -1,28 +1,31 @@
 {
   "phase": "idle",
-  "current_task": "evo_v30_004",
+  "current_task": "evo_v31_001",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
-    "task_id": "evo_v30_004",
+    "task_id": "evo_v31_001",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 42ms\nPASS",
-    "validated_at": "2026-03-23T10:45:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 44ms\nPASS",
+    "validated_at": "2026-03-24T16:05:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep failedBatch/retryBatch/RETRY 命中; handleLlmTranslate 保留; npm run compile 成功 (42ms)",
-      "failure_isolation": "PASS — FailedBatch 接口定义; 主循环 catch 记录 failedBatches + throwOnError=true 使 catch 可达",
-      "retry_logic": "PASS — RETRY 循环遍历 failedBatches 重试一次; 成功计入 retriedBatches",
-      "still_failed_marking": "PASS — 重试仍失败写入 stillFailedBatches; 结果 failedBatches 字段返回; finalStatus 据此决定 error/done",
-      "original_llm_translate": "PASS — handleLlmTranslate 保留在 LLM_TOOL_REGISTRY (line 79); throwOnError 默认 false 行为不变",
-      "typescript_strict": "PASS — npm run compile 零错误",
-      "no_forbidden_deps": "PASS — 无外部 API key 依赖; 仅通过 vscode.lm API 调用模型",
-      "program_md_constraints": "PASS — 模型调用仅走 vscode.lm; Chrome 插件未内置模型; 无需外部 API key"
+      "acceptance_cmd": "PASS — grep 关键词 follower/leader/_role/tryPromote/onDidChangeRole ≥5 命中; 无 showErrorMessage EADDRINUSE 模式; npm run compile 成功 (39ms)",
+      "role_type": "PASS — WsServerRole 类型定义 'leader' | 'follower' | 'idle'; _role 初始为 'idle'",
+      "leader_on_listen": "PASS — 'listening' 事件中 _role='leader' 并 fire onDidChangeRole",
+      "follower_on_eaddrinuse": "PASS — EADDRINUSE 分支 _role='follower' + showInformationMessage + resolve(不 reject)",
+      "try_promote": "PASS — tryPromote() 先试探绑定再正式重建 wss，成功设 role='leader' 并绑 connection handlers",
+      "bind_connection_handlers": "PASS — bindConnectionHandlers() 提取连接处理逻辑供 tryPromote 复用",
+      "on_did_change_role": "PASS — EventEmitter<WsServerRole> 暴露为 onDidChangeRole 公共事件",
+      "dispose_cleanup": "PASS — dispose() 重置 _role='idle' 并 dispose _onDidChangeRole emitter",
+      "typescript_strict": "PASS — npm run compile 零错误 (39ms)",
+      "no_forbidden_deps": "PASS — 未引入额外外部依赖",
+      "program_md_constraints": "PASS — 无模型直调, 无外部 API key 依赖"
     }
   },
-  "last_tick": "2026-03-24T15:32:19.614919Z",
+  "last_tick": "2026-03-24T16:05:00.000Z",
   "pm_done": true
 }
