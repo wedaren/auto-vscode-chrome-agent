@@ -25,6 +25,7 @@
 | R-15 | CSP 安全工具 + 长截图合成下载 + 语言一致性 | P0 | 🔄 进行中 | CSP 安全的页面度量工具 + batch_screenshot 升级 + 长图拼接下载 + Agent 语言一致性 |
 | R-16 | 全方位用户体验优化 | P0 | 🔄 进行中 | 智能跟进建议 + Agent 执行进度条 + 会话搜索置顶 + 斜杠命令扩展 + 长回复增强 |
 | R-17 | 沉浸式翻译渐进式体验 | P0 | 🔄 进行中 | 翻译一批注入一批，首批 3-5s 可见，段落级进度展示 |
+| R-18 | 多 Workspace WebSocket 端口冲突修复 | P0 | 🔄 进行中 | Leader/Follower 模式解决多窗口 EADDRINUSE + 自动竞选 |
 
 ---
 
@@ -250,6 +251,19 @@
 | 验收 | ① 触发沉浸式翻译后 5 秒内页面出现首批翻译；② Chrome 侧显示"翻译中: N/M 段落"实时进度；③ 全部翻译完成后进度消失，显示完成状态；④ 单批失败不阻断整体翻译；⑤ 翻译质量与原串行流一致（相同 prompt、相同 batch 翻译逻辑） |
 | 影响范围 | vscode-ext（`llm-tools.ts` 新增渐进式工具 + `skill-registry.ts` 更新 Skill 定义 + `ws-server.ts` 进度推送）/ chrome-ext（`TranslateControl.tsx` 进度条 + `action-executor.ts` 增量注入已支持） |
 | 备注 | `injectBilingual` 已支持按 `data-imt-id` 增量注入，不需要修改注入逻辑。核心改动在 VSCode 侧新工具和 Chrome 侧进度展示。 |
+
+### R-18 多 Workspace WebSocket 端口冲突修复
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 — 用户反馈安装插件后打开多个 workspace 导致 EADDRINUSE |
+| 优先级 | P0 |
+| 状态 | 🔄 进行中 |
+| 描述 | VSCode 插件 `activationEvents: ["*"]` 导致每个 workspace 窗口独立激活，各自尝试在端口 7777 启动 WebSocket 服务器。第二个窗口 EADDRINUSE 后弹出错误对话框且整个插件不可用。需要改为 Leader/Follower 模式：① WsServer 检测到 EADDRINUSE 时进入 follower 模式（信息通知替代错误弹窗）；② Extension 在 follower 模式下跳过 MessageHandler 注册；③ Follower 定时（10s）检测端口可用性，leader 窗口关闭后自动竞选为新 leader；④ 竞选成功后完整初始化 MessageHandler 及下游依赖；⑤ ConnectionTree 和 StatusBar 展示当前角色。 |
+| 用户价值 | 用户可以放心打开多个 workspace 窗口，不再看到令人困惑的错误弹窗；关闭活跃窗口后另一个窗口自动接管服务 |
+| 验收 | ① 打开第二个 workspace 不弹出 EADDRINUSE 错误对话框；② StatusBar 或 ConnectionTree 正确显示 leader/follower 角色；③ 关闭 leader 窗口后 follower 在 15 秒内自动升级为 leader 并启动 WS 服务；④ 升级后 Chrome 可正常连接并通信；⑤ 双端编译通过 |
+| 影响范围 | vscode-ext（`ws-server.ts` EADDRINUSE 处理逻辑 + `extension.ts` 激活流程 + `connection-tree.ts` 状态展示） |
+| 备注 | Chrome 侧无需改动，始终连接固定端口。不引入进程间通信或 lock file，利用端口绑定本身作为 leader 选举机制。 |
 
 ---
 

@@ -52,6 +52,9 @@ interface PendingRequest {
  * WsServer 封装 WebSocket 服务端逻辑。
  * 在 VSCode 插件 activate() 中创建，deactivate() 时自动关闭。
  */
+/** WsServer 角色：leader 拥有端口监听，follower 端口被占时的被动模式，idle 未启动 */
+export type WsServerRole = 'leader' | 'follower' | 'idle';
+
 export class WsServer {
   private wss: WebSocketServer | null = null;
   /** 当前唯一活跃客户端（单客户端模式：新连接到达时踢掉旧连接） */
@@ -59,6 +62,9 @@ export class WsServer {
   private outputChannel: vscode.OutputChannel;
   private _port: number;
   private _listening = false;
+
+  /** 当前角色：leader（成功绑定端口）/ follower（端口被占）/ idle（未启动） */
+  private _role: WsServerRole = 'idle';
 
   /**
    * 待响应的请求 Map：requestId → PendingRequest
@@ -84,6 +90,11 @@ export class WsServer {
   /** 状态变更事件，当 listening / clientCount 变化时触发 */
   private readonly _onDidChangeState = new vscode.EventEmitter<void>();
   readonly onDidChangeState = this._onDidChangeState.event;
+
+  /** 角色变更事件，当 _role 从 follower ↔ leader 切换时触发 */
+  private readonly _onDidChangeRole = new vscode.EventEmitter<WsServerRole>();
+  readonly onDidChangeRole = this._onDidChangeRole.event;
+
   private observabilityStore: ObservabilityStore | null = null;
 
   private shouldRecordObservedMessage(msgType: string): boolean {
@@ -137,6 +148,11 @@ export class WsServer {
     return this._listening;
   }
 
+  /** 当前角色：leader / follower / idle */
+  get role(): WsServerRole {
+    return this._role;
+  }
+
   /** 已连接客户端数（单客户端模式：0 或 1） */
   get clientCount(): number {
     return this.activeClient && this.activeClient.readyState === WebSocket.OPEN ? 1 : 0;
@@ -159,14 +175,16 @@ export class WsServer {
 
       this.wss.on('listening', () => {
         this._listening = true;
+        this._role = 'leader';
         this.outputChannel.appendLine(
-          `[WsServer] WebSocket 服务端已在端口 ${this._port} 上监听`,
+          `[WsServer] WebSocket 服务端已在端口 ${this._port} 上监听 (role=leader)`,
         );
         vscode.window.showInformationMessage(
           `Browser Agent WebSocket listening on port ${this._port}`,
         );
         this.startHeartbeat();
         this._onDidChangeState.fire();
+        this._onDidChangeRole.fire(this._role);
         resolve();
       });
 
@@ -267,15 +285,23 @@ export class WsServer {
 
       this.wss.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') {
-          const msg = `端口 ${this._port} 已被占用，请修改 browserAgent.port 设置`;
+          // 优雅降级：端口被占时进入 follower 模式，而非报错弹窗
+          this._role = 'follower';
+          this.wss = null; // 绑定失败的 wss 不再可用
+          const msg = `端口 ${this._port} 已被其他窗口占用，当前窗口进入 follower 模式`;
           this.outputChannel.appendLine(`[WsServer] ${msg}`);
-          vscode.window.showErrorMessage(`Browser Agent: ${msg}`);
+          vscode.window.showInformationMessage(
+            `Browser Agent: ${msg}`,
+          );
+          this._onDidChangeState.fire();
+          this._onDidChangeRole.fire(this._role);
+          resolve(); // 不 reject，允许插件正常激活
         } else {
           this.outputChannel.appendLine(
             `[WsServer] 服务端错误: ${err.message}`,
           );
+          reject(err);
         }
-        reject(err);
       });
     });
   }
@@ -546,6 +572,160 @@ export class WsServer {
   }
 
   /**
+   * 尝试从 follower 提升为 leader（重新绑定端口）。
+   * 如果端口已释放（原 leader 窗口关闭），则成功绑定并切换为 leader。
+   * 如果端口仍被占用，静默保持 follower 状态。
+   * @returns Promise<boolean> — true 表示成功提升为 leader
+   */
+  tryPromote(): Promise<boolean> {
+    if (this._role === 'leader') {
+      return Promise.resolve(true); // 已经是 leader
+    }
+    if (this._disposed) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      const testWss = new WebSocketServer({ port: this._port });
+
+      testWss.on('listening', () => {
+        // 端口绑定成功，关闭测试用的 wss，用正式的 start 流程重建
+        testWss.close(() => {
+          // 端口确认可用，执行完整启动
+          this.wss = new WebSocketServer({ port: this._port });
+
+          this.wss.on('listening', () => {
+            this._listening = true;
+            this._role = 'leader';
+            this.outputChannel.appendLine(
+              `[WsServer] tryPromote 成功：已提升为 leader (port=${this._port})`,
+            );
+            vscode.window.showInformationMessage(
+              `Browser Agent: 已接管端口 ${this._port}，切换为 leader 模式`,
+            );
+            this.startHeartbeat();
+            this._onDidChangeState.fire();
+            this._onDidChangeRole.fire(this._role);
+            // 绑定 connection 等事件处理
+            this.bindConnectionHandlers();
+            resolve(true);
+          });
+
+          this.wss.on('error', () => {
+            // 极端情况：端口在关闭测试 wss 和重新绑定之间被抢占
+            this.wss = null;
+            resolve(false);
+          });
+        });
+      });
+
+      testWss.on('error', () => {
+        // 端口仍被占用，静默保持 follower
+        testWss.close();
+        resolve(false);
+      });
+    });
+  }
+
+  /**
+   * 绑定 connection 事件处理逻辑（tryPromote 成功后调用，复用 start 中的连接处理逻辑）
+   */
+  private bindConnectionHandlers(): void {
+    if (!this.wss) { return; }
+
+    this.wss.on('connection', (ws: WebSocket) => {
+      // 单客户端模式：新连接到达时踢掉旧连接
+      const replacedPrevious = !!(this.activeClient && (this.activeClient.readyState === WebSocket.OPEN || this.activeClient.readyState === WebSocket.CONNECTING));
+      if (replacedPrevious) {
+        this.outputChannel.appendLine(
+          '[WsServer] 新连接到达，踢掉旧客户端 (replaced by new connection)',
+        );
+        this.activeClient!.close(4001, 'replaced by new connection');
+      }
+
+      this.activeClient = ws;
+      this.isClientAlive = true;
+      this.outputChannel.appendLine(
+        '[WsServer] 新客户端连接 (单客户端模式)',
+      );
+      this._onDidChangeState.fire();
+
+      // welcome 握手
+      this.send(ws, {
+        type: 'welcome',
+        payload: { replacedPrevious },
+        sessionId: '',
+      });
+      this.outputChannel.appendLine(
+        `[WsServer] 已发送 welcome 握手 (replacedPrevious=${replacedPrevious})`,
+      );
+
+      ws.on('pong', () => {
+        this.isClientAlive = true;
+      });
+
+      ws.on('message', (data: Buffer) => {
+        try {
+          const rawMsg = JSON.parse(data.toString()) as Partial<BridgeMessage>;
+          const msg: BridgeMessage = {
+            type: rawMsg.type ?? 'unknown',
+            payload: rawMsg.payload,
+            sessionId: rawMsg.sessionId ?? this.activeSessionId ?? '',
+            meta: normalizeMeta(rawMsg.meta, {
+              sessionId: rawMsg.sessionId ?? this.activeSessionId ?? '',
+              source: 'chrome-ws',
+              event: `bridge.${rawMsg.type ?? 'unknown'}`,
+            }),
+          };
+          const sanitizedPayload = sanitizeForLogging(msg.payload);
+          if (this.shouldRecordObservedMessage(msg.type)) {
+            this.logObserved(
+              'debug',
+              msg.meta?.source ?? 'chrome-ws',
+              'bridge.receive',
+              `${msg.type} · ${summarizePayload(sanitizedPayload)}`,
+              msg.meta,
+              { payload: sanitizedPayload },
+            );
+          }
+
+          if (msg.sessionId && msg.sessionId !== this.activeSessionId) {
+            this.activeSessionId = msg.sessionId;
+            this.outputChannel.appendLine(
+              `[WsServer] 记录客户端 sessionId=${msg.sessionId}`,
+            );
+          }
+
+          captureMessage('receive', msg);
+          this.handleMessage(ws, msg);
+        } catch (err) {
+          this.outputChannel.appendLine(
+            `[WsServer] 消息解析失败: ${String(err)}`,
+          );
+        }
+      });
+
+      ws.on('close', () => {
+        if (this.activeClient === ws) {
+          this.activeClient = null;
+          this.isClientAlive = false;
+          this.activeSessionId = null;
+        }
+        this.outputChannel.appendLine(
+          '[WsServer] 客户端断开',
+        );
+        this._onDidChangeState.fire();
+      });
+
+      ws.on('error', (err: Error) => {
+        this.outputChannel.appendLine(
+          `[WsServer] 客户端错误: ${err.message}`,
+        );
+      });
+    });
+  }
+
+  /**
    * 关闭服务端和所有连接
    */
   dispose(): void {
@@ -571,6 +751,8 @@ export class WsServer {
       this._onDidChangeState.fire();
       this.outputChannel.appendLine('[WsServer] 服务端已关闭');
     }
+    this._role = 'idle';
     this._onDidChangeState.dispose();
+    this._onDidChangeRole.dispose();
   }
 }

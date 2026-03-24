@@ -23,6 +23,6 @@
       "program_md_constraints": "PASS — 模型调用仅走 vscode.lm; Chrome 插件未内置模型; 无需外部 API key"
     }
   },
-  "last_tick": "2026-03-23T10:30:00.000Z",
+  "last_tick": "2026-03-24T15:32:19.614919Z",
   "pm_done": true
 }

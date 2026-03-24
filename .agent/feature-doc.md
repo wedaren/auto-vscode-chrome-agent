@@ -113,6 +113,7 @@
 | 调试与稳定性 | 已实现 | 已有错误兜底、日志、调试面板和请求详情下载 |
 | 正式使用文档 | 已实现 | `docs/` 已覆盖项目总览、双端指南和用例 |
 | CSP 安全工具 + 长截图体验 | 进行中 | evaluate 在 CSP 严格页面失败，需新增安全工具 + 图片拼接下载 |
+| 多 Workspace 端口冲突 | 进行中 | 多窗口 EADDRINUSE 修复，Leader/Follower 自动竞选 |
 
 ---
 
@@ -378,6 +379,71 @@
 - `llm_translate` 内部分批但不返回中间结果
 - Chrome 侧只有 Skill 步骤级进度，无翻译段落级进度
 - `injectBilingual` 已支持增量调用（技术可行性已具备）
+
+---
+
+## 多 Workspace 窗口 WebSocket 端口冲突修复（evo_v31）
+
+### 文档目标
+
+说明当用户打开多个 VSCode workspace 窗口时，Browser Agent WebSocket 服务因端口冲突导致启动失败的问题，以及 Leader/Follower 模式的解决方案。
+
+### 当前结论
+
+#### 已确定
+
+- VSCode 插件的 `activationEvents: ["*"]` 使每个打开的 workspace 窗口都独立执行 `activate()`，各自尝试在同一端口（默认 7777）启动 WebSocket 服务器。
+- 第二个及后续窗口的 `wsServer.start()` 必定触发 `EADDRINUSE` 错误，当前处理逻辑是弹出错误对话框（`vscode.window.showErrorMessage`）并标记 `wsServerHealthy = false`，导致 MessageHandler 不注册、整个插件在该窗口不可用。
+- Chrome 侧只连接固定端口（默认 7777），不感知哪个 VSCode 窗口是服务端。
+- `WsServer.dispose()` 在 `deactivate()` 中被正确调用，关闭窗口时端口会释放。
+
+#### 合理假设
+
+- 采用 **Leader/Follower** 模式是最简方案：成功绑定端口的窗口为 leader，失败的窗口进入 follower（passive）模式，不报错、不弹窗。
+- Follower 窗口应有定时重试机制（如每 10 秒检测），当 leader 窗口关闭后自动竞选为新 leader。
+- 竞选成功后需完整初始化 MessageHandler，恢复 Chrome 侧通信能力。
+- StatusBar 和 ConnectionTree 应展示当前窗口的角色（leader/follower），帮助用户理解系统状态。
+
+#### 待确认
+
+- Follower 的重试间隔（当前按 10 秒设计）是否合适，可能需要根据实际使用场景微调。
+- 是否需要在 follower 窗口提供"手动竞选"命令（当前仅自动竞选，不提供手动入口）。
+
+### 用户与场景
+
+- 用户日常打开多个 VSCode workspace 窗口（不同项目或同一项目的不同分支）
+- 安装 Browser Agent 插件后，每个窗口都会尝试启动 WS 服务
+- 期望：只有一个窗口运行服务器，其他窗口安静等待；关闭活跃窗口后，另一个窗口自动接管
+- 不期望：看到令人困惑的错误弹窗，或需要手动修改端口配置
+
+### 功能范围
+
+#### 本次要做
+
+- WsServer EADDRINUSE 处理从"报错弹窗"改为"进入 follower 模式 + 信息通知"
+- Extension 适配 follower 模式：跳过 MessageHandler 注册、标记状态
+- 定时竞选机制：follower 周期性尝试绑定端口，成功后升级为 leader
+- Leader 升级后完整初始化 MessageHandler 及下游依赖
+- ConnectionTree 和 StatusBar 展示当前角色状态
+
+#### 本次不做
+
+- 多窗口间的进程通信或共享状态（不引入 IPC/lock file 等复杂机制）
+- Chrome 侧适配多端口连接（保持只连接固定端口）
+- 让 follower 窗口也能处理消息（follower 就是不运行 WS 的安静角色）
+
+### 关键体验
+
+1. 用户打开第一个 workspace 窗口 → Browser Agent WS 服务正常启动（leader）
+2. 打开第二个窗口 → 不弹错误对话框，StatusBar 显示"follower"状态，通知"另一个窗口已启动 WebSocket 服务"
+3. 关闭第一个窗口 → 10 秒内第二个窗口自动竞选为 leader，WS 服务启动，Chrome 可正常连接
+4. 调试视图清楚显示当前窗口角色：🟢 Leader / 🔵 Follower
+
+### 当前状态
+
+- EADDRINUSE 处理为错误弹窗 + wsServerHealthy = false，用户体验差
+- 无 leader/follower 概念，无自动竞选机制
+- 多窗口场景下用户只能手动改端口或关闭多余窗口
 
 ---
 
