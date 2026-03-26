@@ -8,9 +8,9 @@
   "last_validation": {
     "task_id": "evo_v33_005",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "① setAttribute data-imt-id: PASS\n② parent.insertBefore/appendChild: PASS (无翻译注入用途)\n③ ensureImtStyle → Overlay: PASS (all:initial + contain:content)\n④ insertTranslationElement: 清除, IMT_INLINE_LEAF_TAGS: @deprecated\n⑤ tsc --noEmit: PASS (chrome-ext 0, vscode-ext 0)\nFinal: PASS"
+    "acceptance_cmd_output": "acceptance_cmd: PASS\n① setAttribute data-imt-id: 无匹配 → PASS\n② parent.insertBefore/appendChild: 无翻译注入用途匹配 → PASS\n③ imt-overlay.ts: all:initial + contain:content 确认 → PASS\n④ IMT_INLINE_LEAF_TAGS / extractInlineLeafNodes: @deprecated 标记确认 → PASS\n⑤ chrome-ext tsc --noEmit: exit 0; vscode-ext tsc --noEmit: exit 0 → PASS\n⑥ program.md 约束: 无外部 API key 依赖, Chrome 不内置模型 → PASS\nFinal: PASS"
   },
   "last_tick": "2026-03-27T00:00:01.000Z",
   "pm_done": true
