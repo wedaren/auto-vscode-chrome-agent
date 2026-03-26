@@ -2192,7 +2192,7 @@
       "id": "evo_v33_001",
       "type": "coding",
       "title": "ImtElementRegistry 内存元素注册表 — 替代 data-imt-id 属性标记",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v32_003"
       ],
