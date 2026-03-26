@@ -1,32 +1,29 @@
 {
   "phase": "idle",
-  "current_task": "evo_v35_003",
+  "current_task": "evo_v35_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 92,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v35_003",
+    "task_id": "evo_v35_004",
     "result": "pass",
-    "score": 92,
+    "score": 95,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-27T00:00:00.000Z",
-    "revalidated_at": "2026-03-27T00:01:00.000Z",
+    "validated_at": "2026-03-27T00:05:00.000Z",
     "details": {
-      "acceptance_cmd": "PASS — ResearchPanel 文件存在 + npm run build 零错误",
-      "criteria_1": "ResearchPanel 组件 — components/ResearchPanel.tsx 含 TopicInput/PlanEditor/ProgressIndicator/ThinkingStream/ReportRenderer 5 个子组件",
-      "criteria_2": "研究计划编辑 — PlanEditor 支持子问题增删改 + 搜索策略增删改 + 确认/取消按钮",
-      "criteria_3": "实时思考流 — ThinkingStream 正序展示 ThinkingEntry + 自动滚动 + 时间戳/引用数",
-      "criteria_4": "进度指示器 — ProgressIndicator 显示阶段图标/标签 + citationCount + 思考步骤数 + 实时计时器",
-      "criteria_5": "报告 Markdown 渲染 — ReportRenderer 使用 marked + hljs + citation-link 可点击跳转参考文献",
-      "criteria_6": "useResearch hook — hooks/useResearch.ts 管理 ResearchPhase 状态机 + 处理 6 种 deep_research_* 消息",
-      "criteria_7": "App.tsx 集成 — Research Tab 按钮 + ResearchPanel 渲染",
-      "criteria_8": "CSS 样式 — .research-report 报告样式 + .citation-link 引用标注样式",
-      "criteria_9": "构建通过 — npm run build 零错误",
-      "constraints": "无外部 API key 依赖; Chrome 不内置模型; 模型调用走 WebSocket 至 VSCode vscode.lm API"
+      "acceptance_cmd": "PASS — grep exportReport/export.*md/html 匹配成功 + npm run build 零错误",
+      "criteria_1": "报告模板结构 — LLM 生成结构化 Markdown（# 标题 + ## 目录 + ## 摘要 + ## 分主题论述 + ## 结论 + ## 参考文献），exportReportAsMarkdown 自动补参考文献段落",
+      "criteria_2": "行内引用标注 — [N] citation-link 可点击，smooth-scroll 跳转到 citation-ref-N 条目 + 2s bg-yellow-100 高亮",
+      "criteria_3": "参考文献列表 — citation-ref-N 锚点，含标题/URL/摘要（excerpt）",
+      "criteria_4": "Markdown 导出 — exportReportAsMarkdown() 保留结构化报告 + 自动补参考文献 + 元数据尾注 → .md 下载",
+      "criteria_5": "HTML 导出 — exportReportAsHtml() 自包含 HTML（内嵌 CSS + citation-link 锚点跳转 + @media print 打印友好）→ .html 下载",
+      "criteria_6": "导出按钮 UI — ResearchPanel 报告完成视图含 .md / .html 两个下载按钮，report-export-btn 样式",
+      "criteria_7": "双端编译通过 — chrome-ext build 零错误 + vscode-ext compile 零 TS 错误",
+      "constraints": "无外部 API key 依赖; report-export.ts 仅 import 本地类型; Chrome 不内置模型; 模型调用走 WebSocket 至 VSCode vscode.lm API"
     }
   },
-  "last_tick": "2026-03-27T00:00:03.000Z",
+  "last_tick": "2026-03-27T00:05:00.000Z",
   "pm_done": true
 }
