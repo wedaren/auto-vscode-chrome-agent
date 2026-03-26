@@ -2104,7 +2104,7 @@
       "id": "evo_v31_004",
       "type": "coding",
       "title": "ConnectionTree + StatusBar 多窗口角色状态展示",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v31_003"
       ],
@@ -2116,7 +2116,7 @@
       "id": "evo_v31_005",
       "type": "validation",
       "title": "多 Workspace 端口冲突全量验收 — 编译通过 + 角色切换流程完整",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v31_001",
         "evo_v31_002",
