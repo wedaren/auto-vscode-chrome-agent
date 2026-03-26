@@ -63,7 +63,7 @@ const TOOL_MAPPINGS: Record<string, ToolMapping> = {
   browser_get_links: { actionType: 'getLinks', argMapping: { limit: 'maxCount' } },
   // ── evo_v19_001: 沉浸式翻译工具 ──
   browser_extract_paragraphs: { actionType: 'extractParagraphs', argMapping: { scope: 'scopeSelector', limit: 'maxCount' } },
-  browser_inject_bilingual: { actionType: 'injectBilingual', argMapping: { mode: 'injectMode' } },
+  browser_inject_bilingual: { actionType: 'injectBilingual', argMapping: { mode: 'injectMode', displayMode: 'displayMode' } },
   // ── evo_v28_001: CSP 安全的页面度量工具 ──
   browser_get_page_info: { actionType: 'getPageInfo' },
   // ── evo_v28_003: 截图合成下载 ──
@@ -276,19 +276,25 @@ const BROWSER_TOOLS: BrowserToolDef[] = [
   },
   {
     name: 'browser_inject_bilingual',
-    description: 'Inject translated text below original paragraphs as bilingual display, or toggle/clear existing translations. Each translated paragraph is styled with .imt-translation class (light blue left border, subtle background). Modes: "inject" inserts translations, "toggle" shows/hides existing translations, "clear" removes all injected translations.',
+    description: 'Inject translated text below original paragraphs as bilingual display, toggle/clear existing translations, or switch display mode between bilingual/original/translated views. Modes: "inject" inserts translations, "toggle" shows/hides existing translations, "clear" removes all injected translations, "setDisplayMode" switches the display mode for all existing translations (requires displayMode parameter).',
     inputSchema: {
       type: 'object',
       properties: {
         mode: {
           type: 'string',
-          description: 'Operation mode: "inject" to insert translations, "toggle" to show/hide, "clear" to remove all',
-          enum: ['inject', 'toggle', 'clear'],
+          description: 'Operation mode: "inject" to insert translations, "toggle" to show/hide, "clear" to remove all, "setDisplayMode" to switch display mode (bilingual/original/translated)',
+          enum: ['inject', 'toggle', 'clear', 'setDisplayMode'],
           default: 'inject',
         },
         translations: {
           type: 'string',
           description: 'JSON-encoded array of { id: string, translated: string } objects. Required for "inject" mode. The id must match the data-imt-id from browser_extract_paragraphs output.',
+        },
+        displayMode: {
+          type: 'string',
+          description: 'Target display mode when mode is "setDisplayMode". "bilingual" shows original + translated side by side (default), "original" hides translations and shows only original text, "translated" overlays translations on top of original text.',
+          enum: ['bilingual', 'original', 'translated'],
+          default: 'bilingual',
         },
       },
       required: ['mode'],

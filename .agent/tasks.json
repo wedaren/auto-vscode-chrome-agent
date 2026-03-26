@@ -2277,7 +2277,7 @@
       "id": "evo_v34_003",
       "type": "coding",
       "title": "TranslateControl.tsx — 三模式分段控制器 UI 替换 toggle 按钮",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v34_002"
       ],
