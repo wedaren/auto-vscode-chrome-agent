@@ -4,13 +4,13 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
     "task_id": "evo_v33_003",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "PASS"
+    "acceptance_cmd_output": "setAttribute.*data-imt-id: 0 matches (PASS)\nImtElementRegistry|imtRegistry|imt-registry: 13 matches (PASS)\ntsc --noEmit: clean, no errors (PASS)\nFinal: PASS"
   },
   "last_tick": "2026-03-27T00:00:01.000Z",
   "pm_done": true
