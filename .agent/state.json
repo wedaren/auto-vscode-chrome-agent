@@ -1,31 +1,27 @@
 {
   "phase": "idle",
-  "current_task": "evo_v31_001",
+  "current_task": "evo_v31_002",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v31_001",
+    "task_id": "evo_v31_002",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 44ms\nPASS",
-    "validated_at": "2026-03-24T16:05:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 62ms\nPASS",
+    "validated_at": "2026-03-26T13:30:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 关键词 follower/leader/_role/tryPromote/onDidChangeRole ≥5 命中; 无 showErrorMessage EADDRINUSE 模式; npm run compile 成功 (39ms)",
-      "role_type": "PASS — WsServerRole 类型定义 'leader' | 'follower' | 'idle'; _role 初始为 'idle'",
-      "leader_on_listen": "PASS — 'listening' 事件中 _role='leader' 并 fire onDidChangeRole",
-      "follower_on_eaddrinuse": "PASS — EADDRINUSE 分支 _role='follower' + showInformationMessage + resolve(不 reject)",
-      "try_promote": "PASS — tryPromote() 先试探绑定再正式重建 wss，成功设 role='leader' 并绑 connection handlers",
-      "bind_connection_handlers": "PASS — bindConnectionHandlers() 提取连接处理逻辑供 tryPromote 复用",
-      "on_did_change_role": "PASS — EventEmitter<WsServerRole> 暴露为 onDidChangeRole 公共事件",
-      "dispose_cleanup": "PASS — dispose() 重置 _role='idle' 并 dispose _onDidChangeRole emitter",
-      "typescript_strict": "PASS — npm run compile 零错误 (39ms)",
-      "no_forbidden_deps": "PASS — 未引入额外外部依赖",
-      "program_md_constraints": "PASS — 无模型直调, 无外部 API key 依赖"
+      "acceptance_cmd": "PASS — grep role===leader/follower/follower模式 ≥2 命中; npm run compile 成功 (62ms)",
+      "no_showErrorMessage_eaddrinuse": "PASS — extension.ts 和 ws-server.ts 中无 showErrorMessage+EADDRINUSE 模式",
+      "role_based_messagehandler": "PASS — extension.ts 行153: leader 时注册 MessageHandler; 行160: follower 跳过并记录日志",
+      "wsServerHealthy_role_linkage": "PASS — leader+listening → healthy=true (行136); follower → healthy=false 非 error (行140)",
+      "follower_no_error": "PASS — catch 块仅记录日志不弹 showErrorMessage; ws-server EADDRINUSE 用 showInformationMessage+resolve",
+      "typescript_strict": "PASS — npm run compile 零错误",
+      "note": "evo_v31_001 已完整覆盖本任务需求，无需额外代码变更"
     }
   },
-  "last_tick": "2026-03-24T16:05:00.000Z",
+  "last_tick": "2026-03-26T13:30:00.000Z",
   "pm_done": true
 }

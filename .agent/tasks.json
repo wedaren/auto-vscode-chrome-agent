@@ -2068,8 +2068,10 @@
       "id": "evo_v31_001",
       "type": "coding",
       "title": "WsServer EADDRINUSE 优雅降级 — 端口被占时进入 follower 模式而非报错弹窗",
-      "status": "pending",
-      "depends_on": ["evo_v30_005"],
+      "status": "done",
+      "depends_on": [
+        "evo_v30_005"
+      ],
       "acceptance": "ws-server.ts 中 EADDRINUSE 处理逻辑从 showErrorMessage + reject 改为：设置 _role = 'follower'、showInformationMessage 通知用户、resolve（不 reject）；新增 role 属性（'leader' | 'follower' | 'idle'）和 onDidChangeRole 事件；start() 方法成功绑定时设置 _role = 'leader'；新增 tryPromote() 方法供外部调用尝试重新绑定端口",
       "acceptance_cmd": "cd packages/vscode-ext && grep -E '(follower|leader|_role|tryPromote|onDidChangeRole)' src/ws-server.ts | wc -l | xargs -I{} test {} -ge 5 && grep -v 'showErrorMessage.*EADDRINUSE\\|showErrorMessage.*端口.*已被占用' src/ws-server.ts > /dev/null && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "修复多 workspace 窗口 WebSocket 端口冲突"
@@ -2078,8 +2080,10 @@
       "id": "evo_v31_002",
       "type": "coding",
       "title": "Extension 多窗口生命周期适配 — follower 模式跳过 MessageHandler + 状态标记",
-      "status": "pending",
-      "depends_on": ["evo_v31_001"],
+      "status": "done",
+      "depends_on": [
+        "evo_v31_001"
+      ],
       "acceptance": "extension.ts 中 wsServer.start() 失败处理不再弹 showErrorMessage；根据 wsServer.role 判断是否注册 MessageHandler：leader 注册、follower 跳过并记录日志；wsServerHealthy 标记与 role 联动：leader+listening = healthy，follower = not healthy but not error",
       "acceptance_cmd": "cd packages/vscode-ext && grep -E '(role.*===.*leader|role.*===.*follower|follower.*模式|passive)' src/extension.ts | wc -l | xargs -I{} test {} -ge 2 && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "修复多 workspace 窗口 WebSocket 端口冲突"
@@ -2089,7 +2093,9 @@
       "type": "coding",
       "title": "定时端口竞选机制 — follower 窗口周期性尝试获取 leader 角色",
       "status": "pending",
-      "depends_on": ["evo_v31_002"],
+      "depends_on": [
+        "evo_v31_002"
+      ],
       "acceptance": "extension.ts 中 follower 模式下启动 setInterval（10 秒间隔）调用 wsServer.tryPromote()；tryPromote 成功后：停止定时器、设置 role = 'leader'、完整初始化 MessageHandler 及下游依赖（lmService/mcpClient/browserToolProvider/skillRunner）；tryPromote 失败时静默继续等待下一轮；deactivate 时清理定时器",
       "acceptance_cmd": "cd packages/vscode-ext && grep -E '(setInterval|tryPromote|promotionTimer|竞选|promote)' src/extension.ts | wc -l | xargs -I{} test {} -ge 3 && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "修复多 workspace 窗口 WebSocket 端口冲突"
@@ -2099,7 +2105,9 @@
       "type": "coding",
       "title": "ConnectionTree + StatusBar 多窗口角色状态展示",
       "status": "pending",
-      "depends_on": ["evo_v31_003"],
+      "depends_on": [
+        "evo_v31_003"
+      ],
       "acceptance": "connection-tree.ts 在连接状态树中展示当前角色：🟢 Leader（端口 7777）或 🔵 Follower（等待中）；StatusBar 新增或复用现有 item 显示角色状态；wsServer.onDidChangeRole 触发时 TreeView 和 StatusBar 同步刷新",
       "acceptance_cmd": "cd packages/vscode-ext && grep -E '(Leader|Follower|leader|follower)' src/connection-tree.ts | wc -l | xargs -I{} test {} -ge 2 && npm run compile 2>&1 | tail -1 && echo PASS || echo FAIL",
       "evolution_goal": "修复多 workspace 窗口 WebSocket 端口冲突"
@@ -2109,10 +2117,76 @@
       "type": "validation",
       "title": "多 Workspace 端口冲突全量验收 — 编译通过 + 角色切换流程完整",
       "status": "pending",
-      "depends_on": ["evo_v31_001", "evo_v31_002", "evo_v31_003", "evo_v31_004"],
+      "depends_on": [
+        "evo_v31_001",
+        "evo_v31_002",
+        "evo_v31_003",
+        "evo_v31_004"
+      ],
       "acceptance": "双端编译通过；ws-server.ts 包含 leader/follower 角色状态和 tryPromote 方法；extension.ts 包含 follower 模式判断和定时竞选逻辑；connection-tree.ts 展示角色信息；EADDRINUSE 不再触发 showErrorMessage 错误弹窗",
       "acceptance_cmd": "cd packages/vscode-ext && npm run compile 2>&1 | tail -1 && grep -q 'tryPromote' src/ws-server.ts && grep -q 'follower' src/extension.ts && grep -qE '(Leader|Follower)' src/connection-tree.ts && ! grep -q 'showErrorMessage.*端口.*已被占用' src/ws-server.ts && cd ../../packages/chrome-ext && pnpm build 2>&1 | tail -5 && echo PASS || echo FAIL",
       "evolution_goal": "修复多 workspace 窗口 WebSocket 端口冲突"
+    },
+    {
+      "id": "evo_v32_001",
+      "type": "coding",
+      "title": "VSCode 侧 browser-runtime-contract.ts — 浏览器智能层共享 TypeScript 类型定义",
+      "status": "pending",
+      "depends_on": [
+        "evo_v31_001"
+      ],
+      "acceptance": "browser-runtime-contract.ts 定义 DomSnapshotNode、NodeAnchor、SemanticPageModel（interface stub）、DomPatchPlan（interface stub）、PatchTarget、SnapshotOptions 等类型，VSCode 编译通过",
+      "acceptance_cmd": "test -f packages/vscode-ext/src/browser-runtime-contract.ts && cd packages/vscode-ext && npx tsc --noEmit 2>&1 | tail -5 && echo PASS || echo FAIL",
+      "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 共享类型基础"
+    },
+    {
+      "id": "evo_v32_002",
+      "type": "coding",
+      "title": "Chrome 侧 dom-snapshot.ts — 结构化 DOM Snapshot 采集器",
+      "status": "pending",
+      "depends_on": [
+        "evo_v32_001"
+      ],
+      "acceptance": "dom-snapshot.ts 导出 buildDomSnapshot(root, options) 函数，返回 DomSnapshotNode 树；支持深度限制（默认12）、节点数限制（默认3000）、visibility/interactivity/rect/textPreview/selectorHint 字段；不依赖 eval，CSP 安全；Chrome 编译通过",
+      "acceptance_cmd": "test -f packages/chrome-ext/utils/dom-snapshot.ts && cd packages/chrome-ext && npx tsc --noEmit 2>&1 | tail -5 && echo PASS || echo FAIL",
+      "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 DOM Snapshot 核心采集"
+    },
+    {
+      "id": "evo_v32_003",
+      "type": "coding",
+      "title": "Chrome 侧 anchor-resolver.ts — 稳定锚点构建与重定位解析",
+      "status": "pending",
+      "depends_on": [
+        "evo_v32_001"
+      ],
+      "acceptance": "anchor-resolver.ts 导出 buildNodeAnchor(element) 函数，返回 NodeAnchor（含 cssSelector、textQuote、textContextBefore/After、parentSignature）；导出 resolveAnchor(anchor, root) 函数，按优先级依次尝试多路锚点定位节点；Chrome 编译通过",
+      "acceptance_cmd": "test -f packages/chrome-ext/utils/anchor-resolver.ts && cd packages/chrome-ext && npx tsc --noEmit 2>&1 | tail -5 && echo PASS || echo FAIL",
+      "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 稳定锚点系统"
+    },
+    {
+      "id": "evo_v32_004",
+      "type": "coding",
+      "title": "browser_snapshot 工具注册 — VSCode browser-tools.ts + Chrome action-executor.ts 联通",
+      "status": "pending",
+      "depends_on": [
+        "evo_v32_002",
+        "evo_v32_003"
+      ],
+      "acceptance": "BrowserToolProvider.listTools() 包含 browser_snapshot 工具定义（含 inputSchema：maxDepth、maxNodes、scopeSelector 参数）；action-executor.ts 新增 snapshot ActionType，调用 buildDomSnapshot + buildNodeAnchor；WebSocket tool_execute/tool_result 正常传输 Snapshot 数据；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && npx tsc --noEmit 2>&1 | tail -3 && cd ../chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 工具注册与联通"
+    },
+    {
+      "id": "evo_v32_005",
+      "type": "coding",
+      "title": "AgentLoop 集成 — system prompt 更新 + Snapshot 工具使用说明 + 全量验收",
+      "status": "pending",
+      "depends_on": [
+        "evo_v32_004"
+      ],
+      "acceptance": "AgentLoop 的 buildAgentSystemPrompt 中包含 browser_snapshot 工具的使用说明和场景指引（如\"在需要了解页面结构时先调用 browser_snapshot\"）；Agent 可正确调用该工具并在 observe 步骤中获得 Snapshot 数据；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q \"browser_snapshot\" src/agent-loop.ts && npx tsc --noEmit 2>&1 | tail -3 && cd ../chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 全链路集成验收"
     }
   ]
 }
