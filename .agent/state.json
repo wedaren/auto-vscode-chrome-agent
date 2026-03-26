@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v33_004",
+  "current_task": "evo_v33_005",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v33_004",
+    "task_id": "evo_v33_005",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "! grep insertTranslationElement: PASS (not found)\ngrep ImmersiveOverlay|immersiveOverlay|imt-overlay: PASS (14 matches)\ntsc --noEmit: PASS (zero errors)\nFinal: PASS"
+    "acceptance_cmd_output": "① setAttribute data-imt-id: PASS\n② parent.insertBefore/appendChild: PASS (无翻译注入用途)\n③ ensureImtStyle → Overlay: PASS (all:initial + contain:content)\n④ insertTranslationElement: 清除, IMT_INLINE_LEAF_TAGS: @deprecated\n⑤ tsc --noEmit: PASS (chrome-ext 0, vscode-ext 0)\nFinal: PASS"
   },
   "last_tick": "2026-03-27T00:00:01.000Z",
   "pm_done": true
