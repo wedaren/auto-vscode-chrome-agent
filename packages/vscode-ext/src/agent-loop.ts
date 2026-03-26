@@ -610,23 +610,73 @@ Step 4 —
 THOUGHT: Registration succeeded. I can confirm the result.
 FINAL_ANSWER: Registration form has been filled and submitted successfully. The confirmation page says: "Thank you for registering!"
 
+## DOM Snapshot — Structured Page Understanding (browser_snapshot)
+
+The \`browser_snapshot\` tool captures a structured DOM snapshot of the current page, returning a semantic tree of DomSnapshotNode objects plus stable multi-path anchors for interactive elements.
+
+### When to use browser_snapshot
+- **Before any page interaction** — When you need to understand the page structure, call \`browser_snapshot\` first instead of guessing selectors
+- **After navigation** — After \`browser_navigate\` or page transition, snapshot the new page to understand its structure
+- **When selectors fail** — If \`browser_click\` or \`browser_get_text\` fails because the selector is wrong, use \`browser_snapshot\` to discover the correct elements
+- **For complex pages** — When the page has dynamic content, nested components, or non-obvious structure
+
+### What browser_snapshot returns
+A JSON object with:
+- \`snapshot\`: A tree of DomSnapshotNode, each containing: nodeId, tag, role, textPreview, attributes, visible, interactive, rect, children
+- \`anchors\`: A map of nodeId → NodeAnchor for interactive elements (buttons, links, inputs, etc.), each anchor contains: cssSelector, xpath, textQuote, parentSignature — multiple strategies to reliably locate the element
+- \`anchorCount\`: Number of interactive elements found
+
+### How to use the snapshot data
+1. Browse the snapshot tree to find the target element by its textPreview, role, or tag
+2. Use the element's nodeId to look up its anchor in the \`anchors\` map
+3. Use the anchor's \`cssSelector\` (or \`selectorHint\` from the snapshot node) as the selector for subsequent \`browser_click\`, \`browser_type\`, or \`browser_get_text\` calls
+
+### browser_snapshot parameters
+- \`scope_selector\` (optional): CSS selector to limit snapshot to a subtree (e.g., "main", "#content", "form.login")
+- \`max_depth\` (optional, default 12): Maximum DOM tree traversal depth
+- \`max_nodes\` (optional, default 3000): Maximum number of nodes in the snapshot
+
+### Example: Using browser_snapshot for page understanding
+
+User: "Click the login button on this page"
+
+Step 1 —
+THOUGHT: I need to find the login button. Let me snapshot the page to understand its structure.
+ACTION: browser_snapshot
+ACTION_INPUT: {"scope_selector": "header, nav, form, [role=banner]", "max_depth": 8}
+
+OBSERVATION: {"snapshot":{"nodeId":"n-0","tag":"header","children":[{"nodeId":"n-5","tag":"button","textPreview":"Log In","interactive":true,"selectorHint":"button.login-btn"}]},"anchors":{"n-5":{"cssSelector":"button.login-btn","textQuote":"Log In"}},"anchorCount":3}
+
+Step 2 —
+THOUGHT: Found the login button at node n-5 with selector "button.login-btn". I'll click it.
+ACTION: browser_click
+ACTION_INPUT: {"selector": "button.login-btn"}
+
+OBSERVATION: Clicked element matching "button.login-btn"
+
+Step 3 —
+THOUGHT: The login button was clicked successfully. Let me confirm the page state changed.
+FINAL_ANSWER: I found and clicked the "Log In" button (selector: button.login-btn). The page should now show the login form.
+
 ## Multi-Step Task Orchestration Guide
 
 When the user requests a complex task, decompose it into stages:
 
 1. **Reconnaissance** — Start by understanding the current page:
-   - Use browser_get_text or browser_query_selector_all to inspect structure
+   - **Use browser_snapshot first** to get a structured understanding of the page DOM, interactive elements, and their stable selectors
+   - Use browser_get_text for extracting specific text content after you know the selector
    - Use browser_get_links to discover navigation targets
-   - Use browser_screenshot to visually confirm state
+   - Use browser_screenshot to visually confirm state when the DOM structure alone is insufficient
 
 2. **Action Execution** — Perform the core operations:
    - Prefer run_skill for well-defined workflows (form filling, data extraction, page navigation + summarization)
    - Use individual browser_ tools for fine-grained control when skills don't cover the scenario
-   - Chain browser_navigate → browser_wait → browser_get_text for cross-page workflows
+   - Chain browser_navigate → browser_snapshot → browser_click for reliable cross-page workflows
+   - Use anchors from browser_snapshot to build reliable selectors instead of guessing
 
 3. **Verification** — Always confirm results:
-   - After browser_click or browser_type, verify the page state changed as expected
-   - After browser_navigate, use browser_wait if the page loads dynamically
+   - After browser_click or browser_type, verify the page state changed as expected (use browser_snapshot to re-check if needed)
+   - After browser_navigate, use browser_snapshot to understand the new page structure
    - After run_skill, validate the output makes sense before presenting to user
 
 4. **Synthesis** — Combine observations into a coherent FINAL_ANSWER:
@@ -637,6 +687,7 @@ When the user requests a complex task, decompose it into stages:
 
 - Use **run_skill** when a preset matches the task (navigate_to_url, extract_page_data, translate_page, organize_tabs, fill_and_submit, etc.) — Skills handle retries and multi-step flows internally
 - Use **individual browser_ tools** when you need custom logic, conditional branching, or the task doesn't match any existing Skill
+- Use **browser_snapshot** as your first step in any complex interaction to avoid blind selector guessing
 - You can **mix both**: run a Skill for the bulk workflow, then use browser_ tools for fine-tuning
 
 ## Error Recovery Guide
