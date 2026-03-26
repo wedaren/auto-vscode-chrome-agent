@@ -16,6 +16,7 @@ import { LlmRequestCollector, LlmRequestDetail } from './llm-request-collector';
 import { createChildMeta } from './observability';
 import type { LlmToolContext } from './llm-tools';
 import type { ObservabilityStore } from './observability-store';
+import { DeepResearchEngine, DeepResearchConfig } from './deep-research-engine';
 import {
   smartTruncate,
   estimateTokens,
@@ -42,6 +43,7 @@ export class MessageHandler {
   private readonly skillRegistry?: SkillRegistry;
   private readonly skillRunner?: SkillRunner;
   private readonly observabilityStore?: ObservabilityStore;
+  private readonly deepResearchEngine?: DeepResearchEngine;
   private readonly outputChannel: vscode.OutputChannel;
 
   /** LLM 请求细节采集器，记录每次 chat/agent 请求的完整链路数据 */
@@ -74,6 +76,7 @@ export class MessageHandler {
     skillRegistry?: SkillRegistry,
     skillRunner?: SkillRunner,
     observabilityStore?: ObservabilityStore,
+    deepResearchEngine?: DeepResearchEngine,
   ) {
     this.lmService = lmService;
     this.wsServer = wsServer;
@@ -83,6 +86,7 @@ export class MessageHandler {
     this.skillRegistry = skillRegistry;
     this.skillRunner = skillRunner;
     this.observabilityStore = observabilityStore;
+    this.deepResearchEngine = deepResearchEngine;
   }
 
   private childMeta(msg: BridgeMessage, event: string, requestId?: string) {
@@ -167,6 +171,12 @@ export class MessageHandler {
       case 'observability_get_stats':
         this.handleObservabilityGetStats(ws, msg);
         break;
+      case 'deep_research_start':
+        this.handleDeepResearchStart(ws, msg);
+        break;
+      case 'deep_research_plan_confirm':
+        this.handleDeepResearchPlanConfirm(ws, msg);
+        break;
       default:
         this.outputChannel.appendLine(
           `[BrowserAgent] 未处理的消息类型: ${msg.type}`,
@@ -184,6 +194,131 @@ export class MessageHandler {
       payload: { stats },
       sessionId: msg.sessionId,
       meta: this.childMeta(msg, 'observability.stats.result'),
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // 深度调研协议 — deep_research_start / deep_research_plan_confirm
+  // 出站消息类型：deep_research_start / deep_research_plan / deep_research_thinking /
+  //               deep_research_progress / deep_research_report
+  // ────────────────────────────────────────────────────────────────
+
+  /**
+   * 处理 deep_research_start：Chrome 侧发起深度调研请求
+   * 路由到 DeepResearchEngine.generate()，引擎内部通过 WsServer.broadcast 推送
+   * deep_research_thinking / deep_research_progress / deep_research_plan / deep_research_report
+   */
+  private handleDeepResearchStart(ws: WebSocket, msg: BridgeMessage): void {
+    if (!this.deepResearchEngine) {
+      this.wsServer.send(ws, {
+        type: 'deep_research_progress',
+        payload: {
+          status: 'error',
+          phase: 'init',
+          message: '深度调研引擎未初始化',
+          citationCount: 0,
+        },
+        sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'deep_research.error'),
+      });
+      this.outputChannel.appendLine(
+        '[BrowserAgent] deep_research_start 但 DeepResearchEngine 未初始化',
+      );
+      return;
+    }
+
+    const payload = msg.payload as {
+      topic?: string;
+      startUrl?: string;
+      pageContext?: string;
+      maxIterations?: number;
+      maxPages?: number;
+    };
+
+    const topic = payload?.topic ?? '';
+    if (!topic) {
+      this.wsServer.send(ws, {
+        type: 'deep_research_progress',
+        payload: {
+          status: 'error',
+          phase: 'init',
+          message: '调研主题不能为空',
+          citationCount: 0,
+        },
+        sessionId: msg.sessionId,
+        meta: this.childMeta(msg, 'deep_research.error'),
+      });
+      return;
+    }
+
+    this.outputChannel.appendLine(
+      `[BrowserAgent] 开始深度调研：topic="${topic}", startUrl="${payload?.startUrl ?? '无'}"`,
+    );
+
+    const config: DeepResearchConfig = {
+      topic,
+      startUrl: payload?.startUrl,
+      pageContext: payload?.pageContext,
+      sessionId: msg.sessionId,
+      maxIterations: payload?.maxIterations,
+      maxPages: payload?.maxPages,
+    };
+
+    // 异步执行，进度通过引擎内部 broadcast 推送
+    void (async () => {
+      try {
+        const result = await this.deepResearchEngine!.generate(config);
+        this.outputChannel.appendLine(
+          `[BrowserAgent] 深度调研完成：${result.totalPages} 页, ${result.citations.length} 条引用, ${result.totalIterations} 轮迭代`,
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.outputChannel.appendLine(
+          `[BrowserAgent] 深度调研失败: ${errMsg}`,
+        );
+        // 引擎内部已推送 error progress，这里只记录日志
+      }
+    })();
+  }
+
+  /**
+   * 处理 deep_research_plan_confirm：Chrome 侧确认或修改研究计划
+   * 用户在 Chrome ResearchPanel 编辑子问题/搜索策略后点击确认按钮
+   */
+  private handleDeepResearchPlanConfirm(ws: WebSocket, msg: BridgeMessage): void {
+    if (!this.deepResearchEngine) {
+      this.outputChannel.appendLine(
+        '[BrowserAgent] deep_research_plan_confirm 但 DeepResearchEngine 未初始化',
+      );
+      return;
+    }
+
+    const payload = msg.payload as {
+      confirmed?: boolean;
+      editedPlan?: {
+        subQuestions?: { id: string; question: string }[];
+        searchStrategies?: { query: string; rationale: string }[];
+      };
+    };
+
+    const confirmed = payload?.confirmed ?? true;
+    this.outputChannel.appendLine(
+      `[BrowserAgent] 研究计划${confirmed ? '已确认' : '已拒绝'}`,
+    );
+
+    this.deepResearchEngine.confirmPlan(confirmed, payload?.editedPlan);
+
+    // 回复确认状态
+    this.wsServer.send(ws, {
+      type: 'deep_research_thinking',
+      payload: {
+        thought: confirmed ? '研究计划已确认，开始执行研究...' : '研究计划已取消',
+        status: confirmed ? 'searching' : 'idle',
+        timestamp: Date.now(),
+        citationCount: 0,
+      },
+      sessionId: msg.sessionId,
+      meta: this.childMeta(msg, 'deep_research.plan_confirm'),
     });
   }
 

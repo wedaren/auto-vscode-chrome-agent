@@ -232,6 +232,46 @@ export class DeepResearchEngine {
     return this._status;
   }
 
+  /** 活跃的研究计划（等待用户确认时缓存） */
+  private pendingPlan: ResearchPlan | null = null;
+  /** 等待用户确认的回调 */
+  private pendingPlanResolve: ((confirmed: boolean) => void) | null = null;
+  /** 当前会话 ID（用于 thinking 推送） */
+  private activeSessionId: string | null = null;
+
+  /**
+   * 确认/修改研究计划（用户在 Chrome 侧编辑后确认）
+   */
+  confirmPlan(confirmed: boolean, editedPlan?: { subQuestions?: { id: string; question: string }[]; searchStrategies?: { query: string; rationale: string }[] }): void {
+    if (!this.pendingPlan || !this.pendingPlanResolve) {
+      this.log('confirmPlan 调用时无待确认计划');
+      return;
+    }
+
+    if (confirmed && editedPlan) {
+      // 用户编辑了计划，应用修改
+      if (editedPlan.subQuestions) {
+        this.pendingPlan.subQuestions = editedPlan.subQuestions.map((sq, idx) => ({
+          id: sq.id || `sq_${idx + 1}`,
+          question: sq.question,
+          status: 'pending' as SubQuestionStatus,
+          findings: [],
+        }));
+      }
+      if (editedPlan.searchStrategies) {
+        this.pendingPlan.searchStrategies = editedPlan.searchStrategies.map((s) => ({
+          query: s.query,
+          rationale: s.rationale,
+          executed: false,
+        }));
+      }
+      this.log(`研究计划已被用户编辑：${this.pendingPlan.subQuestions.length} 个子问题`);
+    }
+
+    this.pendingPlanResolve(confirmed);
+    this.pendingPlanResolve = null;
+  }
+
   /**
    * 启动深度调研（主入口）
    */
@@ -242,16 +282,23 @@ export class DeepResearchEngine {
 
     this.cancellationSource = new vscode.CancellationTokenSource();
     this.citationTracker.reset();
+    this.activeSessionId = config.sessionId;
 
     const maxIterations = config.maxIterations ?? 3;
     const maxPages = config.maxPages ?? 15;
 
     try {
+      // 通知调研开始
+      this.notifyStart(config.sessionId, config.topic);
+
       // ── Phase 1: 制定研究计划 ──
       this._status = 'planning';
+      this.notifyThinking(config.sessionId, `正在分析主题 "${config.topic}"，分解为可研究的子问题...`);
       this.notifyProgress(config.sessionId, 'planning', '正在分析主题，制定研究计划...');
       const plan = await this.createResearchPlan(config, maxIterations, maxPages);
+      this.pendingPlan = plan;
       this.notifyPlan(config.sessionId, plan);
+      this.notifyThinking(config.sessionId, `已生成研究计划：${plan.subQuestions.length} 个子问题，${plan.searchStrategies.length} 个搜索策略。等待用户确认...`);
       this.log(`研究计划已制定：${plan.subQuestions.length} 个子问题，${plan.searchStrategies.length} 个搜索策略`);
 
       // ── Phase 2-5: 迭代式研究循环 ──
@@ -259,6 +306,7 @@ export class DeepResearchEngine {
         this.checkCancellation();
 
         this.log(`=== 迭代 ${plan.iteration}/${plan.maxIterations} 开始 ===`);
+        this.notifyThinking(config.sessionId, `开始第 ${plan.iteration}/${plan.maxIterations} 轮研究迭代...`);
 
         // Search: 执行搜索策略，发现新 URL
         this._status = 'searching';
@@ -267,11 +315,16 @@ export class DeepResearchEngine {
           'searching',
           `迭代 ${plan.iteration}: 正在搜索相关页面...`,
         );
+        const pendingStrategies = plan.searchStrategies.filter((s) => !s.executed);
+        this.notifyThinking(config.sessionId, `正在执行 ${pendingStrategies.length} 个搜索策略，寻找相关信息源...`);
         const urls = await this.executeSearchStrategies(plan);
+        this.notifyThinking(config.sessionId, `搜索发现 ${urls.length} 个待阅读页面`);
 
         // Read: 逐页阅读，提取内容
         this._status = 'reading';
+        this.notifyThinking(config.sessionId, `开始逐页阅读 ${urls.length} 个页面，提取关键信息...`);
         const explorations = await this.readPages(plan, urls, config.sessionId);
+        this.notifyThinking(config.sessionId, `已阅读 ${explorations.length} 个页面，总计 ${plan.pagesExplored}/${plan.maxPages} 页`);
         this.log(`本轮阅读了 ${explorations.length} 个页面`);
 
         // Reason: 分析发现，为子问题绑定结论
@@ -281,7 +334,11 @@ export class DeepResearchEngine {
           'reasoning',
           `迭代 ${plan.iteration}: 正在分析 ${explorations.length} 个页面的内容...`,
         );
+        this.notifyThinking(config.sessionId, `正在分析 ${explorations.length} 个页面的内容，关联到各个子问题...`);
         await this.reasonAboutFindings(plan, explorations);
+
+        const answeredCount = plan.subQuestions.filter((sq) => sq.status === 'answered').length;
+        this.notifyThinking(config.sessionId, `分析完成：${answeredCount}/${plan.subQuestions.length} 个子问题已回答`);
 
         // Gap-detect: 检测信息差距
         this._status = 'gap_detecting';
@@ -290,14 +347,22 @@ export class DeepResearchEngine {
           'gap_detecting',
           `迭代 ${plan.iteration}: 检测信息差距...`,
         );
+        this.notifyThinking(config.sessionId, '正在检测信息差距，评估哪些子问题还需要更多研究...');
         const hasGaps = await this.detectGaps(plan);
 
         if (!hasGaps || plan.iteration >= plan.maxIterations || plan.pagesExplored >= plan.maxPages) {
+          const reason = !hasGaps
+            ? '所有子问题已充分回答'
+            : plan.iteration >= plan.maxIterations
+              ? `已达最大迭代次数 ${plan.maxIterations}`
+              : `已达页面上限 ${plan.maxPages}`;
+          this.notifyThinking(config.sessionId, `研究循环结束：${reason}`);
           this.log(`迭代结束：hasGaps=${hasGaps}, iteration=${plan.iteration}, pagesExplored=${plan.pagesExplored}`);
           break;
         }
 
         // Re-plan: 为下一轮生成新搜索策略
+        this.notifyThinking(config.sessionId, '存在信息差距，正在生成新的搜索策略...');
         this.log('存在信息差距，生成新搜索策略...');
         await this.replan(plan);
         plan.iteration += 1;
@@ -306,6 +371,7 @@ export class DeepResearchEngine {
       // ── Phase 6: 生成结构化报告 ──
       this._status = 'generating';
       this.notifyProgress(config.sessionId, 'generating', '正在生成深度调研报告...');
+      this.notifyThinking(config.sessionId, `正在整合 ${this.citationTracker.count} 条引用，生成结构化调研报告...`);
       const report = await this.generateStructuredReport(plan);
 
       // 完成
@@ -841,6 +907,34 @@ Output ONLY the Markdown report.`;
   // ────────────────────────────────────────────────────────────────
   // WebSocket 通知方法
   // ────────────────────────────────────────────────────────────────
+
+  /** 通知调研开始 */
+  private notifyStart(sessionId: string, topic: string): void {
+    this.wsServer.broadcast({
+      type: 'deep_research_start',
+      payload: {
+        topic,
+        status: 'started',
+        timestamp: Date.now(),
+      },
+      sessionId,
+    });
+  }
+
+  /** 推送实时思考流（Agent 当前推理/动作描述） */
+  private notifyThinking(sessionId: string, thought: string): void {
+    this.wsServer.broadcast({
+      type: 'deep_research_thinking',
+      payload: {
+        thought,
+        status: this._status,
+        timestamp: Date.now(),
+        citationCount: this.citationTracker.count,
+      },
+      sessionId,
+    });
+    this.log(`[thinking] ${thought}`);
+  }
 
   /** 通知进度 */
   private notifyProgress(sessionId: string, phase: string, message: string): void {

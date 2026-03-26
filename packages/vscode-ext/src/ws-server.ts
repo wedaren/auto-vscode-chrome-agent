@@ -394,8 +394,29 @@ export class WsServer {
         }
         break;
       }
+      // ── 深度调研协议（deep_research_*）────────────────────
+      // 入站消息（Chrome → VSCode）：
+      //   deep_research_start          — 发起深度调研请求
+      //   deep_research_plan_confirm   — 确认/修改研究计划
+      // 出站消息（VSCode → Chrome，由 DeepResearchEngine broadcast）：
+      //   deep_research_start          — 调研开始确认
+      //   deep_research_plan           — 推送研究计划
+      //   deep_research_thinking       — 实时思考流（Agent 推理过程）
+      //   deep_research_progress       — 阶段进度更新
+      //   deep_research_report         — 最终调研报告
+      case 'deep_research_start':
+      case 'deep_research_plan_confirm':
+        // 委托给 MessageHandler 路由到 DeepResearchEngine
+        if (this.externalHandler) {
+          this.externalHandler(ws, msg);
+        } else {
+          this.outputChannel.appendLine(
+            `[WsServer] 收到 ${msg.type} 但无外部处理器`,
+          );
+        }
+        break;
       default:
-        // 后续任务会扩展更多消息类型处理
+        // 其他未识别的消息类型
         this.outputChannel.appendLine(
           `[WsServer] 未处理的消息类型: ${msg.type}`,
         );

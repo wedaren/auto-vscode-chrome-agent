@@ -2314,7 +2314,7 @@
       "id": "evo_v35_001",
       "type": "coding",
       "title": "DeepResearchEngine 核心引擎 — 迭代式研究循环 + 研究计划 + 引用追踪",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v33_005"
       ],

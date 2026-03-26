@@ -190,7 +190,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (wsServerHealthy && wsServer!.role === 'leader') {
       const messageHandler = new MessageHandler(
         lmService!, wsServer!, mcpClient!, outputChannel,
-        browserToolProvider!, skillRegistry, skillRunner, observabilityStore,
+        browserToolProvider!, skillRegistry, skillRunner, observabilityStore, deepResearchEngine,
       );
       wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
       outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（role=leader, wsServer healthy）');
@@ -219,7 +219,7 @@ export function activate(context: vscode.ExtensionContext): void {
               // 完整初始化 MessageHandler 及下游依赖（lmService/mcpClient/browserToolProvider/skillRunner）
               const messageHandler = new MessageHandler(
                 lmService!, wsServer!, mcpClient!, outputChannel,
-                browserToolProvider!, skillRegistry, skillRunner, observabilityStore,
+                browserToolProvider!, skillRegistry, skillRunner, observabilityStore, deepResearchEngine,
               );
               wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
               outputChannel.appendLine(
