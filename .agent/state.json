@@ -1,27 +1,27 @@
 {
   "phase": "idle",
-  "current_task": "evo_v31_002",
+  "current_task": "evo_v31_003",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v31_002",
+    "task_id": "evo_v31_003",
     "result": "pass",
     "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 43ms\nPASS",
-    "validated_at": "2026-03-26T14:00:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 42ms\nPASS",
+    "validated_at": "2026-03-26T15:00:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep 命中 7 行 (≥2); npm run compile 成功 (43ms, 569.8kb)",
-      "no_showErrorMessage_eaddrinuse": "PASS — extension.ts 和 ws-server.ts 中无 showErrorMessage+EADDRINUSE 组合",
-      "role_based_messagehandler": "PASS — extension.ts 行153: leader 时注册 MessageHandler; 行160: follower 跳过并记录日志",
-      "wsServerHealthy_role_linkage": "PASS — leader+listening → healthy=true (行136); follower → healthy=false 非 error (行140)",
-      "follower_no_error": "PASS — catch 块仅记录日志不弹 showErrorMessage; ws-server.ts 行293 EADDRINUSE 用 showInformationMessage+resolve",
-      "typescript_strict": "PASS — npm run compile 零错误，esbuild production 构建成功",
-      "program_md_constraints": "PASS — 模型调用仅通过 vscode.lm API; Chrome 不内置模型; 无外部 API key 依赖"
+      "acceptance_cmd": "PASS — grep 命中 22 行 (≥3); npm run compile 成功 (42ms)",
+      "setInterval_follower": "PASS — follower 分支中启动 setInterval（10s 间隔）调用 tryPromote()",
+      "tryPromote_success_flow": "PASS — 竞选成功后 clearInterval 停止定时器、wsServerHealthy=true、创建 MessageHandler 注册 onMessage",
+      "tryPromote_failure_silent": "PASS — tryPromote 返回 false 时无操作静默继续等待",
+      "deactivate_cleanup": "PASS — deactivate 顶部 clearInterval(promotionTimer) 清理定时器",
+      "downstream_deps_init": "PASS — MessageHandler 构造时注入 lmService/mcpClient/browserToolProvider/skillRunner/observabilityStore",
+      "typescript_strict": "PASS — npm run compile 零错误"
     }
   },
-  "last_tick": "2026-03-26T14:00:00.000Z",
+  "last_tick": "2026-03-26T15:00:00.000Z",
   "pm_done": true
 }
