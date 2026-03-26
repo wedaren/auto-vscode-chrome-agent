@@ -2143,7 +2143,7 @@
       "id": "evo_v32_002",
       "type": "coding",
       "title": "Chrome 侧 dom-snapshot.ts — 结构化 DOM Snapshot 采集器",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v32_001"
       ],
