@@ -2,6 +2,9 @@
 // 定义 BrowserAction 接口与所有支持的 DOM 操作类型，
 // 在 content script 上下文中执行 click/type/scroll/querySelector 等操作
 
+import { buildDomSnapshot, type SnapshotOptions, type DomSnapshotNode } from './dom-snapshot';
+import { buildNodeAnchor, type NodeAnchor } from './anchor-resolver';
+
 /** 支持的浏览器操作类型枚举 */
 export type ActionType =
   | 'click'
@@ -22,7 +25,8 @@ export type ActionType =
   | 'extractParagraphs'
   | 'injectBilingual'
   | 'getPageInfo'
-  | 'compositeDownload';
+  | 'compositeDownload'
+  | 'domSnapshot';
 
 /** 滚动模式 */
 export type ScrollMode = 'to-top' | 'to-bottom' | 'by-pixels' | 'to-element';
@@ -69,6 +73,16 @@ export interface BrowserAction {
   screenshots?: string;
   /** compositeDownload: 下载文件名（默认 composite-screenshot.png） */
   fileName?: string;
+  /** domSnapshot: DOM 树最大遍历深度（默认 12） */
+  maxDepth?: number;
+  /** domSnapshot: 快照中包含的最大节点数（默认 3000） */
+  maxNodes?: number;
+  /** domSnapshot: 是否采集节点边界矩形（默认 true） */
+  includeRect?: boolean;
+  /** domSnapshot: 是否采集不可见节点（默认 false） */
+  includeHidden?: boolean;
+  /** domSnapshot: 文本预览最大字符数（默认 120） */
+  textPreviewMaxLength?: number;
 }
 
 /** 操作执行结果 */
@@ -1172,6 +1186,95 @@ function executeGetPageInfo(): ActionResult {
   };
 }
 
+// ── evo_v32_004: DOM Snapshot 工具 ──
+
+/**
+ * 从 DomSnapshotNode 树中收集可交互节点的 selectorHint + nodeId，
+ * 用于后续构建稳定锚点。最多收集 maxAnchors 个。
+ */
+function collectInteractiveNodes(
+  node: DomSnapshotNode,
+  result: Array<{ nodeId: string; selectorHint: string }>,
+  maxAnchors: number,
+): void {
+  if (result.length >= maxAnchors) return;
+
+  if (node.interactive && node.selectorHint) {
+    result.push({ nodeId: node.nodeId, selectorHint: node.selectorHint });
+  }
+
+  if (node.children) {
+    for (const child of node.children) {
+      if (result.length >= maxAnchors) break;
+      collectInteractiveNodes(child, result, maxAnchors);
+    }
+  }
+}
+
+/**
+ * 执行 domSnapshot 操作
+ * 调用 buildDomSnapshot 采集结构化 DOM 快照树，
+ * 调用 buildNodeAnchor 为可交互节点构建稳定多路锚点，
+ * 返回紧凑的 DomSnapshotNode 树 + 锚点映射供 Agent 消费。
+ */
+function executeDomSnapshot(action: BrowserAction): ActionResult {
+  try {
+    const options: SnapshotOptions = {};
+    if (action.scopeSelector !== undefined) { options.scopeSelector = action.scopeSelector; }
+    if (action.maxDepth !== undefined) { options.maxDepth = action.maxDepth; }
+    if (action.maxNodes !== undefined) { options.maxNodes = action.maxNodes; }
+    if (action.includeRect !== undefined) { options.includeRect = action.includeRect; }
+    if (action.includeHidden !== undefined) { options.includeHidden = action.includeHidden; }
+    if (action.textPreviewMaxLength !== undefined) { options.textPreviewMaxLength = action.textPreviewMaxLength; }
+
+    const root = action.scopeSelector
+      ? document.querySelector(action.scopeSelector) || document.body
+      : document.body;
+
+    const snapshot = buildDomSnapshot(root, options);
+
+    if (!snapshot) {
+      return {
+        success: false,
+        error: `DOM Snapshot 采集失败${action.scopeSelector ? `（scopeSelector "${action.scopeSelector}" 未匹配到可见元素）` : ''}`,
+      };
+    }
+
+    // ── 构建稳定锚点：为可交互节点生成多路定位信息 ──
+    // 收集快照中的可交互节点，通过 selectorHint 定位回 DOM 元素，
+    // 调用 buildNodeAnchor 构建稳定多路锚点，供后续操作复用。
+    const interactiveNodes: Array<{ nodeId: string; selectorHint: string }> = [];
+    const MAX_ANCHORS = 50; // 限制锚点数量，避免大页面性能问题
+    collectInteractiveNodes(snapshot, interactiveNodes, MAX_ANCHORS);
+
+    const anchors: Record<string, NodeAnchor> = {};
+    for (const { nodeId, selectorHint } of interactiveNodes) {
+      try {
+        const el = document.querySelector(selectorHint);
+        if (el) {
+          anchors[nodeId] = buildNodeAnchor(el, nodeId);
+        }
+      } catch {
+        // 选择器匹配失败，跳过该节点的锚点构建
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        snapshot,
+        anchors,
+        anchorCount: Object.keys(anchors).length,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `domSnapshot 执行失败: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 export async function executeAction(action: BrowserAction): Promise<ActionResult> {
   try {
     switch (action.type) {
@@ -1240,6 +1343,10 @@ export async function executeAction(action: BrowserAction): Promise<ActionResult
       // ── evo_v28_003: 截图合成下载 ──
       case 'compositeDownload':
         return executeCompositeDownload(action);
+
+      // ── evo_v32_004: 结构化 DOM Snapshot ──
+      case 'domSnapshot':
+        return executeDomSnapshot(action);
 
       default:
         return { success: false, error: `不支持的操作类型: ${(action as BrowserAction).type}` };

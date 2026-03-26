@@ -78,3 +78,7 @@
 - [~] 当前沉浸式翻译体验不好，不考虑时间，使用最优解，优化体验，希望做到避免长时间等等，能快速先翻译一部分，当然，翻译质量还是需要保证的；（已拆解为 evo_v30_001, evo_v30_002, evo_v30_003, evo_v30_004, evo_v30_005 — 渐进式翻译：翻译一批注入一批 + 自适应批量 + translate_progress 进度推送 + Chrome 进度条 + 批次失败隔离重试）
 - [~] 修复问题安装插件后，打开了多个 workspace 后； Browser Agent WebSocket 启动失败，消息通道不可用: listen EADDRINUSE: address already in use :::7777（已拆解为 evo_v31_001, evo_v31_002, evo_v31_003, evo_v31_004, evo_v31_005 — Leader/Follower 模式：EADDRINUSE 优雅降级 + 定时竞选 + 角色状态展示）
 - [x] 不考虑时间，使用最优解，按照 browser-intelligence-architecture.md 实现浏览器智能层；当前页面上下文太轻、操作缺乏验证、注入不够稳定，需要从工具集合升级为结构化的页面理解与变更平台（已拆解为 evo_v32_001, evo_v32_002, evo_v32_003, evo_v32_004, evo_v32_005 — 阶段1 DOM Snapshot：共享类型定义 + DOM Snapshot 采集器 + 稳定锚点系统 + browser_snapshot 工具注册 + AgentLoop 集成）
+- [~] 不考虑时间，使用最优解，优化 沉浸式翻译，避免篡改原有的 html 布局（已拆解为 evo_v33_001, evo_v33_002, evo_v33_003, evo_v33_004, evo_v33_005 — 零 DOM 篡改：ImtElementRegistry 内存注册表 + ImmersiveOverlay 绝对定位层 + extractParagraphs 零属性提取 + injectBilingual Overlay 注入 + 全链路验收）
+- [ ] 不考虑时间，使用最优解，沉浸式翻译能提供原文版与翻译版，或者混合版
+- [ ] 不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研
+- [ ] 不考虑时间，使用最优解，希望能通过对话与执行记录，一键生成合适的 skill

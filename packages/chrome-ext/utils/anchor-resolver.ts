@@ -132,7 +132,7 @@ function buildCssSelector(el: Element): string {
 
     // 计算 nth-of-type 索引
     let nthIndex = 1;
-    const parent = current.parentElement;
+    const parent: Element | null = current.parentElement;
     if (parent) {
       const siblings = parent.children;
       for (let i = 0; i < siblings.length; i++) {
@@ -713,7 +713,7 @@ function resolveByRectHint(anchor: NodeAnchor, root: Element): Element | null {
     null,
   );
 
-  let node = walker.currentNode as Element;
+  let node: Element | null = walker.currentNode as Element;
   while (node) {
     const rect = node.getBoundingClientRect();
     // 跳过零尺寸元素

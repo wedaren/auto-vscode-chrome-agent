@@ -68,6 +68,8 @@ const TOOL_MAPPINGS: Record<string, ToolMapping> = {
   browser_get_page_info: { actionType: 'getPageInfo' },
   // ── evo_v28_003: 截图合成下载 ──
   browser_composite_download: { actionType: 'compositeDownload', argMapping: { screenshots: 'screenshots', file_name: 'fileName' } },
+  // ── evo_v32_004: 结构化 DOM Snapshot ──
+  browser_snapshot: { actionType: 'domSnapshot', argMapping: { scope_selector: 'scopeSelector', max_depth: 'maxDepth', max_nodes: 'maxNodes', include_rect: 'includeRect', include_hidden: 'includeHidden', text_preview_max_length: 'textPreviewMaxLength' } },
 };
 
 /** 完整的工具定义列表 */
@@ -319,6 +321,29 @@ const BROWSER_TOOLS: BrowserToolDef[] = [
         },
       },
       required: ['screenshots'],
+    },
+  },
+  // ── evo_v32_004: 结构化 DOM Snapshot ──
+  {
+    name: 'browser_snapshot',
+    description: 'Capture a structured DOM snapshot of the current page. Returns a tree of DomSnapshotNode objects containing tag, ARIA role, visibility, interactivity, bounding rect, text preview, CSS selector hints, and key HTML attributes for each element. Much more compact and informative than raw HTML — ideal for understanding page structure, finding interactive elements, and planning DOM mutations. Use this tool when you need to understand the page layout before performing actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scope_selector: {
+          type: 'string',
+          description: 'Optional CSS selector to limit snapshot to a specific subtree (e.g. "#main-content", ".article-body"). Default: entire document.body.',
+        },
+        max_depth: {
+          type: 'number',
+          description: 'Maximum DOM tree traversal depth (default: 12). Reduce for shallow overview, increase for deep inspection.',
+        },
+        max_nodes: {
+          type: 'number',
+          description: 'Maximum number of nodes to include in the snapshot (default: 3000). Reduce for large pages to keep response size manageable.',
+        },
+      },
+      required: [],
     },
   },
 ];

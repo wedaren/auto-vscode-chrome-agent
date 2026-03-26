@@ -115,6 +115,7 @@
 | CSP 安全工具 + 长截图体验 | 进行中 | evaluate 在 CSP 严格页面失败，需新增安全工具 + 图片拼接下载 |
 | 多 Workspace 端口冲突 | 进行中 | 多窗口 EADDRINUSE 修复，Leader/Follower 自动竞选 |
 | 浏览器智能层 — 阶段1 DOM Snapshot | 未开始 | 结构化 DOM Snapshot + 稳定锚点 + browser_snapshot 工具 + AgentLoop 集成 |
+| 沉浸式翻译零 DOM 篡改 | 未开始 | Overlay 绝对定位层 + 内存注册表替代属性标记，原始 DOM 零修改 |
 
 ---
 
@@ -515,6 +516,78 @@
 - Agent 工具调用靠 LLM 自行猜测 selector，无预检
 - 注入操作无验证、无回滚
 - 浏览器智能层架构文档已完成（`docs/browser-intelligence-architecture.md`），但零实现
+
+---
+
+## 沉浸式翻译零 DOM 篡改优化（evo_v33）
+
+### 文档目标
+
+说明当前沉浸式翻译对原始 HTML 的修改方式及其导致的布局破坏问题，以及通过 Overlay 绝对定位架构实现零 DOM 篡改的解决方案。
+
+### 当前结论
+
+#### 已确定
+
+- 当前沉浸式翻译在注入时会修改原始 DOM：① 给原始元素添加 `data-imt-id` 属性用于标记和回查；② 在原始元素旁插入 `<div>` 或 `<span>` 兄弟节点作为翻译容器。
+- 这两种修改在以下场景会破坏原始页面布局：
+  - **Flex/Grid 容器**：插入兄弟节点变为新的 flex/grid item，改变布局排列和间距
+  - **CSS 选择器依赖**：`:nth-child`、`+` 相邻兄弟选择器、`>` 直接子选择器因新增元素而失效或错位
+  - **复杂表格嵌套**：虽然 v27 做了表格适配，但深层嵌套表格仍有边界情况
+  - **属性污染**：`data-imt-id` 属性可能与页面自身的属性选择器或 JavaScript 逻辑冲突
+- 行业标杆（沉浸式翻译 Chrome 扩展）使用类似 Overlay 方案，翻译元素不直接修改原始 DOM 结构。
+
+#### 合理假设
+
+- 采用 **Overlay 绝对定位层** 是避免 DOM 篡改的最优解：将所有翻译元素放入一个独立的绝对定位容器中，通过 `getBoundingClientRect()` 计算位置，与原始 DOM 完全解耦。
+- 使用 **内存元素注册表**（`Map<string, Element>`）替代 `data-imt-id` 属性，在 content script 生命周期内维护元素映射，无需修改原始元素。
+- Overlay 容器使用 `position: absolute`（相对于 body）而非 `position: fixed`，翻译元素随页面自然滚动，无需额外滚动监听。
+- 需要 `ResizeObserver` + `requestAnimationFrame` 在窗口大小变化时重新计算翻译元素位置。
+
+#### 待确认
+
+- 极端动态页面（频繁 DOM 变更的 SPA）中 Overlay 位置同步的性能表现是否可接受。
+- 是否需要为 Overlay 添加 Shadow DOM 实现完全的样式隔离（当前先用 scoped CSS + `all: initial` 重置）。
+
+### 用户与场景
+
+- 用户在 Flex/Grid 布局页面（现代 SPA、Dashboard、Tailwind/Bootstrap 站点）使用沉浸式翻译，不希望翻译破坏精心设计的布局
+- 用户在 Hacker News 等表格布局页面翻译，不希望表格结构因注入节点而变形
+- 用户在使用 `:nth-child` 等选择器做样式控制的页面翻译，不希望因插入元素导致奇偶行颜色错乱
+- 用户期望翻译"浮现"在原文下方，而非"嵌入"到 DOM 中
+
+### 功能范围
+
+#### 本次要做
+
+- 新增 `imt-registry.ts`：内存元素注册表，替代 `data-imt-id` 属性标记
+- 新增 `imt-overlay.ts`：Overlay 绝对定位容器，翻译元素在独立层中渲染
+- 重构 `extractParagraphs`：使用注册表存储元素引用，不修改原始元素
+- 重构 `injectBilingual`：翻译元素创建在 Overlay 中，通过坐标定位到原文下方
+- 适配 toggle/clear 到 Overlay 架构
+- 添加 ResizeObserver 窗口变化时重新定位
+- CSS 隔离防止样式泄漏
+
+#### 本次不做
+
+- Shadow DOM 完全隔离（后续视实际需求追加）
+- Overlay 内翻译元素的拖拽或位置调整
+- 跨 iframe 翻译注入
+
+### 关键体验
+
+1. 用户触发沉浸式翻译后，翻译文本出现在原文下方，视觉效果与之前一致
+2. 打开浏览器 DevTools 检查 DOM，原始元素无任何新增属性（无 `data-imt-id`）或新增兄弟节点
+3. Flex/Grid 布局页面翻译后布局完全不变，`:nth-child` 等选择器不受影响
+4. 翻译文本随页面自然滚动，不需要额外同步
+5. toggle/clear 功能正常工作，clear 后 Overlay 容器被移除
+
+### 当前状态
+
+- 翻译通过 sibling 插入 + `data-imt-id` 属性标记，会修改原始 DOM
+- 在 Flex/Grid 容器中插入兄弟节点会破坏布局排列
+- CSS 选择器（如 `:nth-child`）因新增元素而失效
+- 基础翻译流程（提取→翻译→注入）和渐进式翻译已稳定可用
 
 ---
 

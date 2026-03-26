@@ -27,6 +27,7 @@
 | R-17 | 沉浸式翻译渐进式体验 | P0 | 🔄 进行中 | 翻译一批注入一批，首批 3-5s 可见，段落级进度展示 |
 | R-18 | 多 Workspace WebSocket 端口冲突修复 | P0 | 🔄 进行中 | Leader/Follower 模式解决多窗口 EADDRINUSE + 自动竞选 |
 | R-19 | 浏览器智能层 — 阶段 1：结构化 DOM Snapshot | P0 | ⬚ 未开始 | Chrome 侧 DOM Snapshot 采集 + 稳定锚点 + 共享类型 + browser_snapshot 工具 + AgentLoop 集成 |
+| R-20 | 沉浸式翻译零 DOM 篡改 | P0 | ⬚ 未开始 | Overlay 绝对定位层 + 内存注册表替代属性标记，零修改原始 DOM |
 
 ---
 
@@ -278,6 +279,19 @@
 | 验收 | ① `browser_snapshot` 工具在普通页面和 CSP 严格页面均返回有效 DomSnapshotNode 树；② Snapshot 节点包含 tag、role、visible、interactive、textPreview、rect 字段；③ 关键节点携带 NodeAnchor 信息；④ Snapshot 深度限制 12 层、节点上限 3000；⑤ AgentLoop system prompt 包含 `browser_snapshot` 工具说明；⑥ 双端编译通过 |
 | 影响范围 | chrome-ext（新增 `dom-snapshot.ts` + `anchor-resolver.ts` + action-executor.ts 扩展）/ vscode-ext（新增 `browser-runtime-contract.ts` + browser-tools.ts 扩展 + agent-loop.ts prompt 更新） |
 | 备注 | 本阶段是架构文档五阶段演进的基础，不涉及语义模型、Patch DSL、专职 Agent 或视觉验证。Snapshot 通过工具调用获取（非自动附加），避免不必要的性能开销。 |
+
+### R-20 沉浸式翻译零 DOM 篡改
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + R-06/R-14 沉浸式翻译迭代反馈 |
+| 优先级 | P0 |
+| 状态 | ⬚ 未开始 |
+| 描述 | 当前沉浸式翻译通过修改原始 DOM（添加 `data-imt-id` 属性 + 插入兄弟节点）注入翻译，在 Flex/Grid/复杂 CSS 布局页面会破坏原始布局。需要重构为 Overlay 绝对定位层架构：所有翻译元素在独立容器中渲染，通过坐标计算定位到原文下方，原始 DOM 零修改。内存元素注册表替代属性标记，ResizeObserver 处理布局变化。 |
+| 用户价值 | 在任何页面布局类型（Flex/Grid/Table/Block）上使用沉浸式翻译都不会破坏原始页面结构和视觉效果 |
+| 验收 | ① 翻译注入后原始元素无新增属性（无 `data-imt-id`）；② 原始元素无新增兄弟/子节点；③ Flex/Grid 布局页面翻译后布局不变；④ 翻译文本正确定位在原文下方且随页面自然滚动；⑤ toggle/clear 功能正常；⑥ 双端编译通过 |
+| 影响范围 | chrome-ext（`action-executor.ts` 提取+注入逻辑重构 + 新增 `imt-overlay.ts` Overlay 模块 + 新增 `imt-registry.ts` 元素注册表） |
+| 备注 | 属于 R-06/R-14 的进一步升级，核心改动全在 Chrome 侧 content script 层，VSCode 侧和 WebSocket 协议无需变更 |
 
 ---
 

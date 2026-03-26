@@ -2155,7 +2155,7 @@
       "id": "evo_v32_003",
       "type": "coding",
       "title": "Chrome 侧 anchor-resolver.ts — 稳定锚点构建与重定位解析",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v32_001"
       ],
@@ -2187,6 +2187,67 @@
       "acceptance": "AgentLoop 的 buildAgentSystemPrompt 中包含 browser_snapshot 工具的使用说明和场景指引（如\"在需要了解页面结构时先调用 browser_snapshot\"）；Agent 可正确调用该工具并在 observe 步骤中获得 Snapshot 数据；双端编译通过",
       "acceptance_cmd": "cd packages/vscode-ext && grep -q \"browser_snapshot\" src/agent-loop.ts && npx tsc --noEmit 2>&1 | tail -3 && cd ../chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
       "evolution_goal": "按照 browser-intelligence-architecture.md 实现浏览器智能层 — 阶段1 全链路集成验收"
+    },
+    {
+      "id": "evo_v33_001",
+      "type": "coding",
+      "title": "ImtElementRegistry 内存元素注册表 — 替代 data-imt-id 属性标记",
+      "status": "pending",
+      "depends_on": [
+        "evo_v32_003"
+      ],
+      "acceptance": "新增 packages/chrome-ext/utils/imt-registry.ts，导出 ImtElementRegistry 类，提供 register(id, element)、get(id)、getIdByElement(el)、has(id)、clear()、size、entries() 方法；使用 Map<string, Element> + WeakMap<Element, string> 双向映射；不依赖任何 DOM 属性；Chrome 编译通过",
+      "acceptance_cmd": "test -f packages/chrome-ext/utils/imt-registry.ts && cd packages/chrome-ext && grep -q 'ImtElementRegistry' utils/imt-registry.ts && grep -q 'Map' utils/imt-registry.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
+    },
+    {
+      "id": "evo_v33_002",
+      "type": "coding",
+      "title": "ImmersiveOverlay 绝对定位容器模块 — 独立渲染层基础设施",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_001"
+      ],
+      "acceptance": "新增 packages/chrome-ext/utils/imt-overlay.ts，导出 ImmersiveOverlay 类；提供 createOverlay()（创建绝对定位容器追加到 body 末尾）、addTranslation(id, text, originalElement)（根据 getBoundingClientRect 计算位置并创建翻译元素）、removeAll()（移除整个容器）、toggleAll()（CSS 切换 visibility）、recalculatePositions()（重新计算所有翻译位置）方法；Overlay 容器使用 position:absolute + pointer-events:none + 高 z-index；内含 ResizeObserver 监听窗口变化自动重新定位；Chrome 编译通过",
+      "acceptance_cmd": "test -f packages/chrome-ext/utils/imt-overlay.ts && cd packages/chrome-ext && grep -q 'ImmersiveOverlay' utils/imt-overlay.ts && grep -q 'getBoundingClientRect' utils/imt-overlay.ts && grep -q 'ResizeObserver' utils/imt-overlay.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
+    },
+    {
+      "id": "evo_v33_003",
+      "type": "coding",
+      "title": "重构 extractParagraphs — 使用 ImtElementRegistry 零属性标记提取",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_001"
+      ],
+      "acceptance": "action-executor.ts 中 executeExtractParagraphs 函数不再调用 setAttribute('data-imt-id', ...)；改为使用 ImtElementRegistry.register(id, element) 存储映射；提取结果格式不变（{ id, tag, text }[]）；兼容渐进式翻译流（llm_translate_progressive 的回调仍可通过 id 查找元素）；Chrome 编译通过",
+      "acceptance_cmd": "cd packages/chrome-ext && ! grep -q 'setAttribute.*data-imt-id' utils/action-executor.ts && grep -q 'ImtElementRegistry\\|imtRegistry\\|imt-registry' utils/action-executor.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
+    },
+    {
+      "id": "evo_v33_004",
+      "type": "coding",
+      "title": "重构 injectBilingual + toggle + clear — 使用 Overlay 注入替代 DOM 兄弟插入",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_002",
+        "evo_v33_003"
+      ],
+      "acceptance": "action-executor.ts 中 executeInjectBilingual 的 inject 模式使用 ImmersiveOverlay.addTranslation() 在 Overlay 层创建翻译元素，不再调用 parent.insertBefore / parent.appendChild 向原始 DOM 插入节点；toggle 模式使用 ImmersiveOverlay.toggleAll()；clear 模式使用 ImmersiveOverlay.removeAll() + ImtElementRegistry.clear()；insertTranslationElement 函数被替换或移除；auto-remark fallback 改为重建注册表而非重新标记 DOM；Chrome 编译通过",
+      "acceptance_cmd": "cd packages/chrome-ext && ! grep -q 'insertTranslationElement' utils/action-executor.ts && grep -q 'ImmersiveOverlay\\|immersiveOverlay\\|imt-overlay' utils/action-executor.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
+    },
+    {
+      "id": "evo_v33_005",
+      "type": "coding",
+      "title": "全链路验收 — 零 DOM 篡改验证 + CSS 隔离 + 双端编译",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_004"
+      ],
+      "acceptance": "① action-executor.ts 中无任何 setAttribute('data-imt-id') 调用；② 无任何 parent.insertBefore / parent.appendChild 用于翻译节点插入（Overlay 内部除外）；③ ensureImtStyle 更新为 Overlay 内部样式（含 all:initial 重置 + contain:content）；④ 旧的 insertTranslationElement / IMT_INLINE_LEAF_TAGS 注入辅助逻辑被清理或标记为 deprecated；⑤ Chrome 和 VSCode 双端 tsc --noEmit 通过",
+      "acceptance_cmd": "cd packages/chrome-ext && ! grep -q 'setAttribute.*data-imt-id' utils/action-executor.ts && npx tsc --noEmit 2>&1 | tail -3 && cd ../vscode-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
     }
   ]
 }
