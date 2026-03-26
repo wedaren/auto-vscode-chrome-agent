@@ -1,16 +1,16 @@
 {
   "phase": "idle",
-  "current_task": "evo_v33_003",
+  "current_task": "evo_v33_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 100,
   "last_validation": {
-    "task_id": "evo_v33_003",
+    "task_id": "evo_v33_004",
     "result": "pass",
     "score": 100,
     "issues": [],
-    "acceptance_cmd_output": "setAttribute.*data-imt-id: 0 matches (PASS)\nImtElementRegistry|imtRegistry|imt-registry: 13 matches (PASS)\ntsc --noEmit: clean, no errors (PASS)\nFinal: PASS"
+    "acceptance_cmd_output": "! grep insertTranslationElement: PASS (not found)\ngrep ImmersiveOverlay|immersiveOverlay|imt-overlay: PASS (14 matches)\ntsc --noEmit: PASS (zero errors)\nFinal: PASS"
   },
   "last_tick": "2026-03-27T00:00:01.000Z",
   "pm_done": true
