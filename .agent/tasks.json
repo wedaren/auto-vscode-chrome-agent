@@ -2289,7 +2289,7 @@
       "id": "evo_v34_004",
       "type": "coding",
       "title": "VSCode browser-tools.ts — browser_inject_bilingual Schema 扩展 displayMode",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v34_002"
       ],

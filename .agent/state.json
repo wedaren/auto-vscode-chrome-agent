@@ -4,21 +4,21 @@
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 100,
   "last_validation": {
     "task_id": "evo_v34_005",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
     "acceptance_cmd_output": "PASS",
     "validated_at": "2026-03-27T00:00:00.000Z",
     "details": {
       "acceptance_cmd": "PASS — chrome-ext tsc ✓, vscode-ext tsc ✓",
-      "criteria_1": "Chrome 侧 tsc --noEmit 通过",
-      "criteria_2": "VSCode 侧 tsc --noEmit 通过",
-      "criteria_3": "ImmersiveOverlay CSS 含 bilingual(默认)/original(hidden)/translated(覆盖) 三模式",
-      "criteria_4": "TranslateControl 无 toggleAll 直接调用，全部走 setDisplayMode",
-      "criteria_5": "action-executor setDisplayMode case 正确调用 immersiveOverlay.setDisplayMode()"
+      "criteria_1": "Chrome 侧 tsc --noEmit 通过（零错误）",
+      "criteria_2": "VSCode 侧 tsc --noEmit 通过（零错误）",
+      "criteria_3": "ImmersiveOverlay CSS 含 bilingual(默认)/original(hidden)/translated(覆盖) 三模式，_applyDisplayMode() 互斥切换",
+      "criteria_4": "TranslateControl 无 toggleAll 直接调用（grep=空），模式切换全部走 executeInjectBilingual('setDisplayMode', mode)",
+      "criteria_5": "action-executor setDisplayMode case(行907-929) 正确调用 immersiveOverlay.setDisplayMode() + 合法值校验"
     }
   },
   "last_tick": "2026-03-27T00:00:03.000Z",
