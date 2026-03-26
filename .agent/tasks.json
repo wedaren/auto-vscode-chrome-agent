@@ -2265,7 +2265,7 @@
       "id": "evo_v34_002",
       "type": "coding",
       "title": "action-executor.ts — executeInjectBilingual 扩展 setDisplayMode 操作",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v34_001"
       ],

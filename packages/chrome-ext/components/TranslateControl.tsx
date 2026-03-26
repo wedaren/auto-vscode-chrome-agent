@@ -1,7 +1,9 @@
 // TranslateControl.tsx — 沉浸式翻译 UI 控制组件
-// 职责：为 immersive_translate skill 提供专属 UI：翻译图标 + 目标语言快选 + toggle/clear 操作按钮
+// 职责：为 immersive_translate skill 提供专属 UI：翻译图标 + 目标语言快选 + 三模式分段控制器 + clear 操作
 //       + 实时翻译进度条（监听 translate_progress WebSocket 消息，显示 N/M 段落已完成）
-// toggle 按钮调用 browser_inject_bilingual(mode:'toggle')，clear 按钮调用 browser_inject_bilingual(mode:'clear')
+// evo_v34_003: 三模式分段控制器（原文 / 双语 / 译文）替代原 toggle 按钮
+//   点击每个段触发 executeInjectBilingual('setDisplayMode', mode)
+//   默认活跃模式为 bilingual；清除翻译后控制器隐藏
 // 翻译状态持久化在组件 state 中（已翻译/未翻译/已隐藏）
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -12,6 +14,16 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 
 /** 翻译状态 */
 type TranslateState = 'idle' | 'running' | 'translated' | 'hidden' | 'error';
+
+/** 三种显示模式（与 imt-overlay.ts DisplayMode 对齐） */
+type DisplayMode = 'bilingual' | 'original' | 'translated';
+
+/** 分段控制器配置 */
+const DISPLAY_MODE_SEGMENTS: { mode: DisplayMode; label: string }[] = [
+  { mode: 'original', label: '原文' },
+  { mode: 'bilingual', label: '双语' },
+  { mode: 'translated', label: '译文' },
+];
 
 /** evo_v30_003: translate_progress 消息 payload（与 VSCode 侧 TranslateProgressPayload 对齐） */
 export interface TranslateProgressInfo {
@@ -68,13 +80,25 @@ interface ActionResult {
   error?: string;
 }
 
-async function executeInjectBilingual(mode: 'toggle' | 'clear'): Promise<ActionResult> {
+/**
+ * 执行 injectBilingual 操作。
+ * 支持 toggle / clear / setDisplayMode 三种模式。
+ * setDisplayMode 模式需要额外传入 displayMode 参数。
+ */
+async function executeInjectBilingual(
+  mode: 'toggle' | 'clear' | 'setDisplayMode',
+  displayMode?: DisplayMode,
+): Promise<ActionResult> {
   return new Promise<ActionResult>((resolve) => {
     try {
+      const payload: Record<string, unknown> = { type: 'injectBilingual', injectMode: mode };
+      if (mode === 'setDisplayMode' && displayMode) {
+        payload.displayMode = displayMode;
+      }
       chrome.runtime.sendMessage(
         {
           type: 'EXECUTE_ACTION',
-          payload: { type: 'injectBilingual', injectMode: mode },
+          payload,
         },
         (response) => {
           if (chrome.runtime.lastError) {
@@ -98,6 +122,46 @@ async function executeInjectBilingual(mode: 'toggle' | 'clear'): Promise<ActionR
       });
     }
   });
+}
+
+// ────────────────────────────────────────────────────────────────
+// evo_v34_003: 三模式分段控制器子组件
+// ────────────────────────────────────────────────────────────────
+
+function DisplayModeSegments({
+  activeMode,
+  onModeChange,
+}: {
+  activeMode: DisplayMode;
+  onModeChange: (mode: DisplayMode) => void;
+}) {
+  return (
+    <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
+      {DISPLAY_MODE_SEGMENTS.map(({ mode, label }) => {
+        const isActive = activeMode === mode;
+        return (
+          <button
+            key={mode}
+            onClick={() => onModeChange(mode)}
+            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+              isActive
+                ? 'bg-white text-blue-600 shadow-sm border border-blue-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+            title={
+              mode === 'original'
+                ? '仅显示原文'
+                : mode === 'bilingual'
+                  ? '双语对照显示'
+                  : '仅显示译文'
+            }
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -213,6 +277,9 @@ export default function TranslateControl({
   const [selectedLang, setSelectedLang] = useState<string>('zh-CN');
   const [lastError, setLastError] = useState<string>('');
 
+  // evo_v34_003: 当前活跃显示模式，默认 bilingual
+  const [activeDisplayMode, setActiveDisplayMode] = useState<DisplayMode>('bilingual');
+
   // 上次完成信号的时间戳，用于去重
   const lastCompletionTs = useRef<number>(0);
 
@@ -252,21 +319,26 @@ export default function TranslateControl({
     if (disabled || !isConnected) return;
     setTranslateState('running');
     setLastError('');
+    // evo_v34_003: 翻译完成后默认进入 bilingual 模式
+    setActiveDisplayMode('bilingual');
     onExecute({ targetLanguage: selectedLang });
   }, [disabled, isConnected, onExecute, selectedLang]);
 
-  // ── Toggle 翻译显示/隐藏 ──
-  const handleToggle = useCallback(async () => {
-    const result = await executeInjectBilingual('toggle');
+  // ── evo_v34_003: 切换显示模式（替代原 toggle） ──
+  const handleDisplayModeChange = useCallback(async (mode: DisplayMode) => {
+    const result = await executeInjectBilingual('setDisplayMode', mode);
     if (result.success) {
-      const data = result.data as { newState?: string } | undefined;
-      if (data?.newState === 'hidden') {
+      setActiveDisplayMode(mode);
+      // 更新 translateState 以匹配语义：
+      // original 模式相当于 "隐藏翻译"，bilingual/translated 模式相当于 "已翻译"
+      if (mode === 'original') {
         setTranslateState('hidden');
       } else {
         setTranslateState('translated');
       }
+      setLastError('');
     } else {
-      setLastError(result.error || '切换失败');
+      setLastError(result.error || '切换模式失败');
     }
   }, []);
 
@@ -276,13 +348,12 @@ export default function TranslateControl({
     if (result.success) {
       setTranslateState('idle');
       setLastError('');
+      // evo_v34_003: 清除后重置为默认 bilingual 模式
+      setActiveDisplayMode('bilingual');
     } else {
       setLastError(result.error || '清除失败');
     }
   }, []);
-
-  // ── 外部通知执行完成（由 SkillPanel 调用） ──
-  // 通过 key prop 或 useEffect 在 SkillPanel 中同步
 
   const isTranslated = translateState === 'translated' || translateState === 'hidden';
   const isRunning = translateState === 'running';
@@ -390,53 +461,30 @@ export default function TranslateControl({
         </div>
       )}
 
-      {/* 翻译后操作按钮：toggle + clear */}
+      {/* evo_v34_003: 翻译完成后显示三模式分段控制器 + 清除按钮（替代原 toggle + clear） */}
       {isTranslated && (
-        <div className="px-3 pb-3 pt-0.5">
-          <div className="flex gap-2">
-            {/* Toggle 按钮 */}
-            <button
-              onClick={handleToggle}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center justify-center gap-1.5 ${
-                translateState === 'hidden'
-                  ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                  : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-              }`}
-              title={translateState === 'hidden' ? '显示翻译' : '隐藏翻译'}
-            >
-              {translateState === 'hidden' ? (
-                <>
-                  {/* Eye icon - show */}
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  显示翻译
-                </>
-              ) : (
-                <>
-                  {/* Eye-off icon - hide */}
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                  隐藏翻译
-                </>
-              )}
-            </button>
-
-            {/* Clear 按钮 */}
-            <button
-              onClick={handleClear}
-              className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center gap-1.5"
-              title="清除所有翻译"
-            >
-              {/* Trash icon */}
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              清除翻译
-            </button>
+        <div className="px-3 pb-3 pt-0.5 space-y-2">
+          {/* 三模式分段控制器：原文 / 双语 / 译文 */}
+          <div>
+            <label className="block text-[10px] text-gray-400 mb-1">显示模式</label>
+            <DisplayModeSegments
+              activeMode={activeDisplayMode}
+              onModeChange={handleDisplayModeChange}
+            />
           </div>
+
+          {/* Clear 按钮 */}
+          <button
+            onClick={handleClear}
+            className="w-full px-3 py-1.5 text-xs font-medium rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center gap-1.5"
+            title="清除所有翻译"
+          >
+            {/* Trash icon */}
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            清除翻译
+          </button>
         </div>
       )}
 
@@ -454,7 +502,7 @@ export default function TranslateControl({
         <span>{skill.steps.length} 个步骤</span>
         {isTranslated && (
           <span className="text-green-500 font-medium">
-            {translateState === 'hidden' ? '已隐藏' : '已翻译'}
+            {activeDisplayMode === 'original' ? '仅原文' : activeDisplayMode === 'translated' ? '仅译文' : '双语对照'}
           </span>
         )}
       </div>
