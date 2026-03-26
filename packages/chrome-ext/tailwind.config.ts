@@ -5,6 +5,7 @@ export default {
   content: [
     './entrypoints/**/*.{html,tsx,ts}',
     './components/**/*.{tsx,ts}',
+    './hooks/**/*.{tsx,ts}',
   ],
   theme: {
     extend: {

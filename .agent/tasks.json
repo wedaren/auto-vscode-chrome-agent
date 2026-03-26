@@ -2326,7 +2326,7 @@
       "id": "evo_v35_002",
       "type": "coding",
       "title": "WebSocket 深度调研协议扩展 + MessageHandler 集成",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v35_001"
       ],
