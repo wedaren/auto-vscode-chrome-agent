@@ -1,29 +1,28 @@
 {
   "phase": "idle",
-  "current_task": "evo_v35_004",
+  "current_task": "evo_v35_005",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 95,
+  "last_score": 92,
   "last_validation": {
-    "task_id": "evo_v35_004",
+    "task_id": "evo_v35_005",
     "result": "pass",
-    "score": 95,
+    "score": 92,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-27T00:05:00.000Z",
+    "validated_at": "2026-03-27T01:00:00.000Z",
     "details": {
-      "acceptance_cmd": "PASS — grep exportReport/export.*md/html 匹配成功 + npm run build 零错误",
-      "criteria_1": "报告模板结构 — LLM 生成结构化 Markdown（# 标题 + ## 目录 + ## 摘要 + ## 分主题论述 + ## 结论 + ## 参考文献），exportReportAsMarkdown 自动补参考文献段落",
-      "criteria_2": "行内引用标注 — [N] citation-link 可点击，smooth-scroll 跳转到 citation-ref-N 条目 + 2s bg-yellow-100 高亮",
-      "criteria_3": "参考文献列表 — citation-ref-N 锚点，含标题/URL/摘要（excerpt）",
-      "criteria_4": "Markdown 导出 — exportReportAsMarkdown() 保留结构化报告 + 自动补参考文献 + 元数据尾注 → .md 下载",
-      "criteria_5": "HTML 导出 — exportReportAsHtml() 自包含 HTML（内嵌 CSS + citation-link 锚点跳转 + @media print 打印友好）→ .html 下载",
-      "criteria_6": "导出按钮 UI — ResearchPanel 报告完成视图含 .md / .html 两个下载按钮，report-export-btn 样式",
-      "criteria_7": "双端编译通过 — chrome-ext build 零错误 + vscode-ext compile 零 TS 错误",
-      "constraints": "无外部 API key 依赖; report-export.ts 仅 import 本地类型; Chrome 不内置模型; 模型调用走 WebSocket 至 VSCode vscode.lm API"
+      "acceptance_cmd": "PASS — deep_research grep 匹配 + vscode-ext compile 零 TS 错误 + chrome-ext build 零错误 + /research grep 匹配",
+      "criteria_1": "SkillRegistry 含 deep_research 预设 Skill — PRESET_SKILLS[21] name='deep_research' category='preset' enabled=true，5 步工具流程（search→links→navigate→text→screenshot），含 topic/maxIterations/maxPages 参数",
+      "criteria_2": "/research 斜杠命令 — ChatInput slashCommands 含 name='research' category='工具'，handleSubmit 拦截 /research <topic>（自动启动）和 /research（切换 Tab）",
+      "criteria_3": "initialTopic 自动启动 — App.tsx pendingResearchTopic 状态 → ResearchPanel initialTopic prop → useEffect 自动消费并调用 startResearch()",
+      "criteria_4": "追问迭代优化 — ReportRenderer 新增追问输入区（textarea + 发送按钮），handleFollowUp 将前报告摘要作为 pageContext 传入新一轮调研",
+      "criteria_5": "预设场景 — PRESET_SCENARIOS 新增 scenario_deep_research_ai 调研场景",
+      "criteria_6": "双端编译通过 — vscode-ext compile 零 TS 错误 + chrome-ext build 零错误",
+      "constraints": "无外部 API key 依赖; 模型调用走 WebSocket 至 VSCode vscode.lm API; ChatInput 不直接发 WebSocket 消息（通过 App 层回调）"
     }
   },
-  "last_tick": "2026-03-27T00:05:00.000Z",
+  "last_tick": "2026-03-27T01:00:00.000Z",
   "pm_done": true
 }

@@ -1,10 +1,11 @@
 // ResearchPanel.tsx — 深度调研面板组件
 // 职责：提供完整的深度调研 UI，包含：
-//   1. 研究主题输入（idle 阶段）
+//   1. 研究主题输入（idle 阶段）+ /research 斜杠命令 initialTopic 自动启动
 //   2. 研究计划编辑视图 — 子问题列表可增删改 + 搜索策略编辑 + 确认/取消按钮
 //   3. 实时思考流面板 — 流式展示 Agent 当前动作和发现
 //   4. 进度指示器 — 页面数/阶段/耗时
 //   5. 报告 Markdown 渲染 — 含可点击引用标注 [N]
+//   6. 追问输入 — 报告完成后用户可追问进行迭代优化
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
@@ -75,6 +76,10 @@ interface ResearchPanelProps {
   sendMessage: (type: string, payload: unknown, meta?: Partial<BridgeMeta>) => boolean;
   onMessage: (handler: (msg: BridgeMessage) => void) => () => void;
   isConnected: boolean;
+  /** 由 /research <主题> 斜杠命令传入的初始主题（自动启动调研） */
+  initialTopic?: string | null;
+  /** 初始主题被消费后的回调（清除 pending 状态） */
+  onInitialTopicConsumed?: () => void;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -477,9 +482,13 @@ function ThinkingStream({ entries }: ThinkingStreamProps) {
 interface ReportRendererProps {
   report: ResearchReport;
   onNewResearch: () => void;
+  /** 追问回调：用户在报告完成后输入追问，触发新一轮调研 */
+  onFollowUp?: (followUpTopic: string) => void;
 }
 
-function ReportRenderer({ report, onNewResearch }: ReportRendererProps) {
+function ReportRenderer({ report, onNewResearch, onFollowUp }: ReportRendererProps) {
+  const [followUpText, setFollowUpText] = useState('');
+  const followUpRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const renderedHtml = useMemo(
@@ -625,6 +634,49 @@ function ReportRenderer({ report, onNewResearch }: ReportRendererProps) {
           </div>
         </div>
       )}
+
+      {/* 追问输入区：报告完成后用户可输入追问进行迭代优化 */}
+      {onFollowUp && (
+        <div className="px-4 py-4 border-t border-gray-200 bg-white sticky bottom-0">
+          <div className="flex items-start gap-2">
+            <textarea
+              ref={followUpRef}
+              value={followUpText}
+              onChange={(e) => setFollowUpText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  const trimmed = followUpText.trim();
+                  if (trimmed) {
+                    onFollowUp(trimmed);
+                    setFollowUpText('');
+                  }
+                }
+              }}
+              placeholder="追问：深入某个方面、换个角度分析、补充更多细节..."
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              rows={2}
+            />
+            <button
+              onClick={() => {
+                const trimmed = followUpText.trim();
+                if (trimmed) {
+                  onFollowUp(trimmed);
+                  setFollowUpText('');
+                }
+              }}
+              disabled={!followUpText.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors flex-shrink-0"
+              title="基于当前报告进行追问迭代"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1.5 ml-1">按 Enter 发送追问，Shift+Enter 换行。追问将在当前报告基础上发起新一轮调研。</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -684,7 +736,7 @@ function ErrorView({ error, onRetry }: ErrorViewProps) {
 // 主组件：ResearchPanel
 // ────────────────────────────────────────────────────────────────
 
-export default function ResearchPanel({ sendMessage, onMessage, isConnected }: ResearchPanelProps) {
+export default function ResearchPanel({ sendMessage, onMessage, isConnected, initialTopic, onInitialTopicConsumed }: ResearchPanelProps) {
   const {
     phase,
     plan,
@@ -698,6 +750,34 @@ export default function ResearchPanel({ sendMessage, onMessage, isConnected }: R
     rejectPlan,
     reset,
   } = useResearch({ sendMessage, onMessage });
+
+  /** 记录最近一次消费的 initialTopic，防止重复触发 */
+  const consumedTopicRef = useRef<string | null>(null);
+
+  // 自动消费 initialTopic（由 /research <主题> 斜杠命令传入）
+  useEffect(() => {
+    if (
+      initialTopic &&
+      initialTopic !== consumedTopicRef.current &&
+      isConnected &&
+      (phase === 'idle' || phase === 'done' || phase === 'error')
+    ) {
+      consumedTopicRef.current = initialTopic;
+      startResearch(initialTopic);
+      onInitialTopicConsumed?.();
+    }
+  }, [initialTopic, isConnected, phase, startResearch, onInitialTopicConsumed]);
+
+  /** 追问回调：以当前报告为上下文发起新一轮调研 */
+  const handleFollowUp = useCallback((followUpText: string) => {
+    if (!report) return;
+    // 构建追问主题：原始报告摘要 + 追问方向
+    const originalTopic = plan?.topic ?? '上一次调研';
+    const combinedTopic = `基于「${originalTopic}」的调研报告，进一步研究：${followUpText}`;
+    // 将上一次报告摘要作为 pageContext 传递，让引擎在新调研中参考
+    const reportSummary = report.report.slice(0, 2000);
+    startResearch(combinedTopic, undefined, `## 前一次调研报告摘要\n\n${reportSummary}`);
+  }, [report, plan, startResearch]);
 
   return (
     <div className="flex flex-col h-full">
@@ -726,9 +806,9 @@ export default function ResearchPanel({ sendMessage, onMessage, isConnected }: R
         </>
       )}
 
-      {/* 阶段：完成 — 报告渲染 */}
+      {/* 阶段：完成 — 报告渲染 + 追问输入 */}
       {phase === 'done' && report && (
-        <ReportRenderer report={report} onNewResearch={reset} />
+        <ReportRenderer report={report} onNewResearch={reset} onFollowUp={handleFollowUp} />
       )}
 
       {/* 阶段：错误 */}

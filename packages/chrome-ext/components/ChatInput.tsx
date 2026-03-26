@@ -1,6 +1,7 @@
 // ChatInput.tsx — 对话输入框组件，支持斜杠命令菜单、Skill 快捷触发、Prompt 模板、键盘导航
 // 斜杠命令：/new（新建会话）、/clear（清空当前会话）、/models（切换模型）
 // 扩展命令：/skill（Skill 快捷触发 + 名称自动补全）、/template（Prompt 模板选择）
+// 深度调研：/research（切换到调研面板）、/research <主题>（直接启动深度调研）
 // 菜单支持分类显示和模糊搜索过滤
 // 快捷键：Cmd/Ctrl+Shift+O 新建会话、Cmd/Ctrl+L 清空会话
 // 上箭头：输入框为空时填入上一条用户消息（方便重新编辑发送）
@@ -156,6 +157,8 @@ interface ChatInputProps {
   onExecuteSkill?: (skillName: string) => void;
   /** 切换到 Skills Tab 回调 */
   onSwitchToSkills?: () => void;
+  /** 深度调研：切换到 Research Tab 并可选自动启动（/research 斜杠命令） */
+  onStartResearch?: (topic?: string) => void;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -425,6 +428,7 @@ export default function ChatInput({
   skills = [],
   onExecuteSkill,
   onSwitchToSkills,
+  onStartResearch,
 }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [showCommandMenu, setShowCommandMenu] = useState(false);
@@ -466,6 +470,13 @@ export default function ChatInput({
         category: '工具',
         action: () => {}, // 由 executeSlashCommand 特殊处理
       },
+      {
+        name: 'research',
+        description: '深度调研（/research <主题> 直接启动）',
+        icon: 'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418',
+        category: '工具',
+        action: () => onStartResearch?.(), // 无参数时仅切换到 Research Tab
+      },
       // 模板
       {
         name: 'template',
@@ -475,7 +486,7 @@ export default function ChatInput({
         action: () => {}, // 由 executeSlashCommand 特殊处理
       },
     ],
-    [onNewConversation, onClearConversation, onToggleModels],
+    [onNewConversation, onClearConversation, onToggleModels, onStartResearch],
   );
 
   // ── 菜单模式：根据 value 自动切换 ──
@@ -543,13 +554,40 @@ export default function ChatInput({
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
+
+    // 拦截 /research <topic> 命令：直接启动深度调研
+    const researchMatch = trimmed.match(/^\/research\s+(.+)$/i);
+    if (researchMatch) {
+      const topic = researchMatch[1].trim();
+      if (topic) {
+        onStartResearch?.(topic);
+        setValue('');
+        setShowCommandMenu(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        return;
+      }
+    }
+
+    // 拦截 /research（无参数）：切换到 Research Tab
+    if (/^\/research$/i.test(trimmed)) {
+      onStartResearch?.();
+      setValue('');
+      setShowCommandMenu(false);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      return;
+    }
+
     onSend(trimmed);
     setValue('');
     setShowCommandMenu(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, disabled, onSend]);
+  }, [value, disabled, onSend, onStartResearch]);
 
   // ── 执行斜杠命令 ──
   const executeSlashCommand = useCallback(

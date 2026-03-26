@@ -2350,7 +2350,7 @@
       "id": "evo_v35_004",
       "type": "coding",
       "title": "结构化报告模板 + 引用渲染 + 一键导出（.md / .html）",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v35_003"
       ],

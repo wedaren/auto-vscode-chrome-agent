@@ -193,6 +193,15 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
     targetUrl: 'https://www.producthunt.com/',
     prefilledParams: { scope: 'body', maxLinks: '100' },
   },
+  {
+    id: 'scenario_deep_research_ai',
+    skillName: 'deep_research',
+    displayName: '调研 AI 趋势',
+    description: '深度调研 2024 年 AI 领域最新趋势和突破性进展',
+    icon: '🔬',
+    targetUrl: 'https://www.google.com/search?q=AI+trends+2024+breakthroughs',
+    prefilledParams: { topic: '2024 年 AI 领域最新趋势和突破性进展', maxIterations: '3', maxPages: '15' },
+  },
 ];
 
 // ────────────────────────────────────────────────────────────────
@@ -1114,6 +1123,64 @@ const PRESET_SKILLS: Skill[] = [
         toolName: 'take_screenshot',
         argsTemplate: {},
         description: '截取页面视觉截图，与 DOM 快照配对存档',
+      },
+    ],
+  },
+
+  // 21. 深度调研 — 多轮迭代搜索 + 阅读 + 推理 + 结构化报告
+  {
+    name: 'deep_research',
+    displayName: '深度调研',
+    description: '对指定主题进行多轮迭代式深度调研：自动搜索 → 阅读页面 → 分析推理 → 检测信息缺口 → 再搜索，最终生成带引用标注的结构化 Markdown 报告。建议通过 Research 面板或 /research 斜杠命令触发完整调研流程',
+    category: 'preset',
+    enabled: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: '调研主题（如：2024 年大语言模型在医疗领域的应用现状与挑战）',
+        },
+        maxIterations: {
+          type: 'string',
+          description: '最大迭代轮数（默认 3）',
+          default: '3',
+        },
+        maxPages: {
+          type: 'string',
+          description: '最大探索页面数（默认 15）',
+          default: '15',
+        },
+      },
+      required: ['topic'],
+    },
+    steps: [
+      {
+        toolName: 'browser_navigate',
+        argsTemplate: { url: 'https://www.google.com/search?q={{topic}}' },
+        description: '搜索引擎检索调研主题',
+      },
+      {
+        toolName: 'browser_get_links',
+        argsTemplate: { selector: '#search a[href]', limit: '10' },
+        description: '采集搜索结果页链接',
+      },
+      {
+        toolName: 'browser_navigate',
+        argsTemplate: { url: '{{$prev.0.url}}' },
+        description: '导航到第一个搜索结果页面',
+        optional: true,
+      },
+      {
+        toolName: 'browser_get_text',
+        argsTemplate: { selector: 'article, main, [role="main"], body' },
+        description: '提取页面正文内容（用于分析和引用）',
+      },
+      {
+        toolName: 'browser_screenshot',
+        argsTemplate: {},
+        description: '截取当前研究页面快照作为调研记录',
+        optional: true,
       },
     ],
   },

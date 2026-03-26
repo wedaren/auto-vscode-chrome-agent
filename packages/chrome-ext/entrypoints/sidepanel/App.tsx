@@ -503,6 +503,22 @@ function AppContent({ errorLog }: AppContentProps) {
     setActiveTab('skills');
   }, []);
 
+  // --- /research 命令：切换到 Research Tab 并可选自动启动 ---
+  const [pendingResearchTopic, setPendingResearchTopic] = useState<string | null>(null);
+
+  /** /research 命令：切换到 Research Tab，可选附带主题自动启动 */
+  const handleStartResearch = useCallback((topic?: string) => {
+    setActiveTab('research');
+    if (topic) {
+      setPendingResearchTopic(topic);
+    }
+  }, []);
+
+  /** ResearchPanel 消费 pendingResearchTopic 后清除 */
+  const handleResearchTopicConsumed = useCallback(() => {
+    setPendingResearchTopic(null);
+  }, []);
+
   /** 提取用户消息历史（供 ChatInput ArrowUp 使用） */
   const userMessages = useMemo(
     () => messages.filter((m) => m.role === 'user').map((m) => m.content),
@@ -739,6 +755,7 @@ function AppContent({ errorLog }: AppContentProps) {
             skills={chatSkills}
             onExecuteSkill={handleExecuteSkill}
             onSwitchToSkills={handleSwitchToSkills}
+            onStartResearch={handleStartResearch}
           />
         </>
       )}
@@ -758,6 +775,8 @@ function AppContent({ errorLog }: AppContentProps) {
           sendMessage={sendMessage}
           onMessage={onMessage}
           isConnected={isConnected}
+          initialTopic={pendingResearchTopic}
+          onInitialTopicConsumed={handleResearchTopicConsumed}
         />
       )}
 
