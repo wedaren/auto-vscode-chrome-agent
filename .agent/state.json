@@ -1,28 +1,11 @@
 {
   "phase": "idle",
-  "current_task": "evo_v31_003",
+  "current_task": "evo_v31_004",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
   "last_score": 95,
-  "last_validation": {
-    "task_id": "evo_v31_003",
-    "result": "pass",
-    "score": 95,
-    "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 43ms\nPASS",
-    "validated_at": "2026-03-26T15:01:00.000Z",
-    "checks": {
-      "acceptance_cmd": "PASS — grep 命中 22 行 (≥3); npm run compile 成功 (43ms)",
-      "setInterval_follower": "PASS — L171: promotionTimer = setInterval(..., PROMOTION_INTERVAL_MS=10000)",
-      "tryPromote_success_flow": "PASS — L174: await wsServer.tryPromote(); L177-180: clearInterval; L182: wsServerHealthy=true; L188-192: new MessageHandler 注入全部下游依赖",
-      "tryPromote_failure_silent": "PASS — L197: tryPromote 返回 false 时无操作静默继续等待下一轮",
-      "deactivate_cleanup": "PASS — L367-370: deactivate 顶部 clearInterval(promotionTimer) 清理定时器",
-      "downstream_deps_init": "PASS — MessageHandler(lmService, wsServer, mcpClient, outputChannel, browserToolProvider, skillRegistry, skillRunner, observabilityStore)",
-      "typescript_strict": "PASS — npm run compile 零错误，产物 570.5kb",
-      "program_md_constraints": "PASS — 无外部 API key 依赖；模型调用通过 LmService(vscode.lm)；Chrome 插件不内置模型"
-    }
-  },
-  "last_tick": "2026-03-26T15:00:00.000Z",
+  "last_validation": null,
+  "last_tick": "2026-03-26T16:00:00.000Z",
   "pm_done": true
 }
