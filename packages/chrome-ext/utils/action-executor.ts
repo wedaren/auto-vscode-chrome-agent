@@ -4,6 +4,7 @@
 
 import { buildDomSnapshot, type SnapshotOptions, type DomSnapshotNode } from './dom-snapshot';
 import { buildNodeAnchor, type NodeAnchor } from './anchor-resolver';
+import { imtRegistry } from './imt-registry';
 
 /** 支持的浏览器操作类型枚举 */
 export type ActionType =
@@ -620,7 +621,8 @@ function extractInlineLeafNodes(container: Element): Element[] {
 
 /**
  * 执行 extractParagraphs 操作
- * 智能提取页面段落，为每个段落设置 data-imt-id，返回结构化数据
+ * 智能提取页面段落，使用 ImtElementRegistry 内存注册表存储 id↔element 映射，
+ * 零 DOM 属性篡改，返回结构化数据 { id, tag, text }[]
  */
 function executeExtractParagraphs(action: BrowserAction): ActionResult {
   const scope = action.scopeSelector
@@ -669,7 +671,7 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
             const leafText = (leaf.textContent || '').trim();
             if (leafText.length >= 2) {
               const id = `imt-${idCounter++}`;
-              leaf.setAttribute('data-imt-id', id);
+              imtRegistry.register(id, leaf);
               paragraphs.push({
                 id,
                 tag: leaf.tagName.toLowerCase(),
@@ -682,7 +684,7 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
 
         // 无叶节点 → 整段提取（原逻辑）
         const id = `imt-${idCounter++}`;
-        node.setAttribute('data-imt-id', id);
+        imtRegistry.register(id, node);
         paragraphs.push({ id, tag, text: text.slice(0, 2000) });
       }
       return; // 不再向下递归，避免重复提取
@@ -837,25 +839,21 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
 
       ensureImtStyle();
 
-      // ── evo_v23_003 + evo_v27_004: 自动重标记兜底（兼容叶节点提取策略）──
-      // 当 data-imt-id 元素全部缺失时（SPA 重渲染 / tab 切换导致 DOM 重建），
-      // 自动重新调用 extractParagraphs 标记段落，再按索引配对注入翻译。
-      // evo_v27_004: 重标记后按索引重映射 items[].id → 新提取的段落 ID，
-      // 确保 <a> 叶节点的 data-imt-id 与翻译结果正确配对。
+      // ── evo_v33_003: 使用 ImtElementRegistry 替代 DOM 属性查找 ──
+      // 当注册表为空时（SPA 重渲染 / tab 切换导致注册表与 DOM 不同步），
+      // 自动重新调用 extractParagraphs 重建注册表，再按索引配对注入翻译。
       let autoRemarkDone = false;
-      const existingMarked = document.querySelectorAll('[data-imt-id]').length;
-      if (existingMarked === 0 && items.length > 0) {
-        console.log('[imt] 自动重标记：data-imt-id 元素全部缺失，重新提取段落并标记');
+      const existingRegistered = imtRegistry.size;
+      if (existingRegistered === 0 && items.length > 0) {
+        console.log('[imt] 自动重建注册表：ImtElementRegistry 为空，重新提取段落并注册');
         const reExtractResult = executeExtractParagraphs({ type: 'extractParagraphs' });
         if (reExtractResult.success && reExtractResult.data) {
           const reData = reExtractResult.data as { totalExtracted: number; paragraphs: Array<{ id: string; tag: string; text: string }> };
-          console.log(`[imt] 自动重标记完成：重新标记了 ${reData.totalExtracted} 个段落`);
+          console.log(`[imt] 注册表重建完成：注册了 ${reData.totalExtracted} 个段落`);
           autoRemarkDone = true;
 
-          // ── evo_v27_004: ID 重映射 ──
-          // 重标记后，items 中的旧 ID 可能与新提取的 ID 不一致。
-          // 按索引将 items[i].id 重映射为 reData.paragraphs[i].id，
-          // 保证 <a>/<span> 等叶节点的 data-imt-id 与翻译正确配对。
+          // ID 重映射：重建后 items 中的旧 ID 可能与新注册的 ID 不一致，
+          // 按索引将 items[i].id 重映射为 reData.paragraphs[i].id。
           const newParagraphs = reData.paragraphs;
           for (let i = 0; i < items.length && i < newParagraphs.length; i++) {
             const oldId = items[i].id;
@@ -866,7 +864,7 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           }
           console.log(`[imt] ID 重映射完成：${Math.min(items.length, newParagraphs.length)} 项已对齐`);
         } else {
-          console.warn('[imt] 自动重标记失败：', reExtractResult.error);
+          console.warn('[imt] 注册表重建失败：', reExtractResult.error);
         }
       }
 
@@ -879,7 +877,8 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           continue;
         }
 
-        const original = document.querySelector(`[data-imt-id="${item.id}"]`);
+        // evo_v33_003: 优先通过 ImtElementRegistry 查找元素，回退 DOM 查询以兼容旧流程
+        const original = imtRegistry.get(item.id) ?? document.querySelector(`[data-imt-id="${item.id}"]`);
         if (!original) {
           skipped++;
           continue;
@@ -918,16 +917,16 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           );
           suggestedActions.push('重新执行完整翻译流程（extractParagraphs → translate → injectBilingual）');
         } else {
-          // 未触发自动重标记 → data-imt-id 存在但 item.id / item.translated 可能为空
-          const markedCount = document.querySelectorAll('[data-imt-id]').length;
-          if (markedCount > 0) {
+          // 未触发自动重建 → 注册表有条目但 item.id / item.translated 可能为空
+          const registeredCount = imtRegistry.size;
+          if (registeredCount > 0) {
             possibleCauses.push(
-              `页面存在 ${markedCount} 个已标记段落，但翻译数据中的 id/translated 字段可能缺失或格式不正确`,
+              `注册表存在 ${registeredCount} 个已注册段落，但翻译数据中的 id/translated 字段可能缺失或格式不正确`,
             );
             suggestedActions.push('检查 translations 数据格式：每项需包含 { id: "imt-N", translated: "翻译文本" }');
           } else {
-            possibleCauses.push('Tab 切换导致工具执行到了不同页面，目标页面无 data-imt-id 标记');
-            possibleCauses.push('SPA 页面重渲染导致之前标记的 DOM 节点被替换');
+            possibleCauses.push('Tab 切换导致工具执行到了不同页面，注册表为空');
+            possibleCauses.push('SPA 页面重渲染导致之前注册的 DOM 节点已失效');
             suggestedActions.push('确保翻译期间不要切换浏览器标签页');
             suggestedActions.push('重新执行完整翻译流程（extractParagraphs → translate → injectBilingual）');
           }
@@ -1012,10 +1011,9 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
         el.remove();
       });
 
-      // 移除 data-imt-id 属性（覆盖所有元素类型：<p>/<td>/<a>/<span> 等叶节点）
-      const tagged = document.querySelectorAll('[data-imt-id]');
-      const untaggedCount = tagged.length;
-      tagged.forEach((el) => el.removeAttribute('data-imt-id'));
+      // evo_v33_003: 清除 ImtElementRegistry 内存注册表（零 DOM 篡改）
+      const untaggedCount = imtRegistry.size;
+      imtRegistry.clear();
 
       // 移除样式
       const styleEl = document.getElementById(IMT_STYLE_ID);
