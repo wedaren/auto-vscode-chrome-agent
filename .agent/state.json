@@ -8,10 +8,15 @@
   "last_validation": {
     "task_id": "evo_v34_004",
     "result": "pass",
-    "score": 95,
+    "score": 100,
     "issues": [],
     "acceptance_cmd_output": "PASS",
-    "validated_at": "2026-03-27T00:00:00.000Z"
+    "validated_at": "2026-03-27T00:00:00.000Z",
+    "details": {
+      "acceptance_cmd": "PASS — grep setDisplayMode ✓, grep displayMode ✓, tsc --noEmit ✓",
+      "code_quality": "顶部注释完整, 仅 import vscode + 本地模块, 无外部 API key, TypeScript 编译无错误",
+      "program_constraints": "无直接模型调用(工具 schema 文件), Chrome 插件不内置模型, 无外部 key 依赖"
+    }
   },
   "last_tick": "2026-03-27T00:00:03.000Z",
   "pm_done": true
