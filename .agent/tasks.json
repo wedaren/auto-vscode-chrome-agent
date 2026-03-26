@@ -2216,7 +2216,7 @@
       "id": "evo_v33_003",
       "type": "coding",
       "title": "重构 extractParagraphs — 使用 ImtElementRegistry 零属性标记提取",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v33_001"
       ],

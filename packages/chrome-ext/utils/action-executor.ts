@@ -5,6 +5,7 @@
 import { buildDomSnapshot, type SnapshotOptions, type DomSnapshotNode } from './dom-snapshot';
 import { buildNodeAnchor, type NodeAnchor } from './anchor-resolver';
 import { imtRegistry } from './imt-registry';
+import { immersiveOverlay } from './imt-overlay';
 
 /** 支持的浏览器操作类型枚举 */
 export type ActionType =
@@ -598,7 +599,7 @@ function extractInlineLeafNodes(container: Element): Element[] {
   for (const el of inlineEls) {
     const text = (el.textContent || '').trim();
     if (text.length < 2) { continue; }
-    if (el.closest('.imt-translation')) { continue; }
+    if (el.closest('.imt-overlay-item')) { continue; }
 
     // 检查是否为真正的叶节点：不含有实质文本的子行内元素
     const childInlines = el.querySelectorAll(selectorStr);
@@ -653,8 +654,8 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
       if (style.display === 'none' || style.visibility === 'hidden') { return; }
     }
 
-    // 跳过已注入的翻译段落
-    if (node.classList.contains('imt-translation')) { return; }
+    // 跳过 Overlay 容器及其子元素（翻译渲染在独立层，不参与段落提取）
+    if (node.id === 'imt-overlay-container' || node.classList.contains('imt-overlay-item')) { return; }
 
     // 如果是段落级标签且有有效文本内容
     if (IMT_PARAGRAPH_TAGS.has(tag)) {
@@ -708,92 +709,8 @@ function executeExtractParagraphs(action: BrowserAction): ActionResult {
   };
 }
 
-/** 沉浸式翻译注入样式（只注入一次）— 无边框纯文本沉浸式风格，参考沉浸式翻译扩展 */
-const IMT_STYLE_ID = 'imt-bilingual-style';
-const IMT_CSS = `
-.imt-translation {
-  margin: 0;
-  color: #888;
-  font-size: 0.88em;
-  line-height: 1.5;
-  font-style: normal;
-  word-break: break-word;
-}
-.imt-translation.imt-inline {
-  display: block;
-}
-.imt-translation.imt-hidden,
-.imt-translation.imt-inline.imt-hidden {
-  display: none;
-}
-`;
-
-/**
- * 确保沉浸式翻译样式已注入
- */
-function ensureImtStyle(): void {
-  if (!document.getElementById(IMT_STYLE_ID)) {
-    const styleEl = document.createElement('style');
-    styleEl.id = IMT_STYLE_ID;
-    styleEl.textContent = IMT_CSS;
-    document.head.appendChild(styleEl);
-  }
-}
-
-/**
- * 表格布局兼容注入 — 根据原始元素的 DOM 上下文创建并插入翻译元素
- *
- * 策略说明（不在 <tr> 内插 <div>）：
- * 1. 父元素是 <tr>（原始元素是 <td>/<th>）→ 在单元格内部追加翻译，不在 tableRow 内插入 <div>
- * 2. 原始元素是行内元素（<a>/<span> 等 inline leaf）→ 使用 <span> 替代 <div>，保持 inline 语义
- * 3. 普通块级元素（<p>/<li> 等）→ 保持原逻辑 insertBefore(div, original.nextSibling)
- *
- * @returns true 插入成功, false 插入失败（无 parentNode）
- */
-function insertTranslationElement(
-  original: Element,
-  translatedText: string,
-  sourceId: string,
-): boolean {
-  const parent = original.parentNode as Element | null;
-  if (!parent) { return false; }
-
-  const parentTag = parent.tagName?.toLowerCase() || '';
-  const originalTag = original.tagName.toLowerCase();
-
-  // ── Case 1: 表格行内 — parentNode.tagName === 'TR' ──
-  // 原始元素是 <td>/<th>，父元素是 <tr>
-  // 不在 <tr> 内直接插入 <div>（无效 HTML），改为在 table 单元格内部追加翻译
-  if (parentTag === 'tr') {
-    const translatedEl = document.createElement('div');
-    translatedEl.className = 'imt-translation';
-    translatedEl.setAttribute('data-imt-source', sourceId);
-    translatedEl.textContent = translatedText;
-    // 追加到单元格内部最后，而非 <tr> 下方
-    original.appendChild(translatedEl);
-    return true;
-  }
-
-  // ── Case 2: 行内元素适配 — <a>/<span> 等 inline leaf ──
-  // 使用 <span> 替代 <div>，添加 imt-inline 类（display:block 保持独立行）
-  // 适用于 HN titleline <a> 等智能叶节点提取场景
-  if (IMT_INLINE_LEAF_TAGS.has(originalTag)) {
-    const translatedEl = document.createElement('span');
-    translatedEl.className = 'imt-translation imt-inline';
-    translatedEl.setAttribute('data-imt-source', sourceId);
-    translatedEl.textContent = translatedText;
-    parent.insertBefore(translatedEl, original.nextSibling);
-    return true;
-  }
-
-  // ── Case 3: 普通块级元素（<p>/<li> 等）— 原逻辑不变 ──
-  const translatedEl = document.createElement('div');
-  translatedEl.className = 'imt-translation';
-  translatedEl.setAttribute('data-imt-source', sourceId);
-  translatedEl.textContent = translatedText;
-  parent.insertBefore(translatedEl, original.nextSibling);
-  return true;
-}
+// evo_v33_004: 旧的 DOM 兄弟插入函数和样式注入已移除
+// 翻译渲染由 ImmersiveOverlay 绝对定位层全权负责，零原始 DOM 篡改
 
 /**
  * 执行 injectBilingual 操作
@@ -837,11 +754,9 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
         return { success: false, error: 'translations 参数 JSON 解析失败' };
       }
 
-      ensureImtStyle();
+      // ── evo_v33_004: Overlay 注入 — 翻译渲染在独立绝对定位层，不篡改原始 DOM ──
 
-      // ── evo_v33_003: 使用 ImtElementRegistry 替代 DOM 属性查找 ──
-      // 当注册表为空时（SPA 重渲染 / tab 切换导致注册表与 DOM 不同步），
-      // 自动重新调用 extractParagraphs 重建注册表，再按索引配对注入翻译。
+      // ── 注册表空时自动重建（SPA 重渲染 / tab 切换导致注册表与 DOM 不同步） ──
       let autoRemarkDone = false;
       const existingRegistered = imtRegistry.size;
       if (existingRegistered === 0 && items.length > 0) {
@@ -868,6 +783,9 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
         }
       }
 
+      // 确保 Overlay 容器已创建
+      immersiveOverlay.createOverlay();
+
       let injected = 0;
       let skipped = 0;
 
@@ -877,33 +795,24 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           continue;
         }
 
-        // evo_v33_003: 优先通过 ImtElementRegistry 查找元素，回退 DOM 查询以兼容旧流程
-        const original = imtRegistry.get(item.id) ?? document.querySelector(`[data-imt-id="${item.id}"]`);
+        // 通过 ImtElementRegistry 查找原始元素
+        const original = imtRegistry.get(item.id);
         if (!original) {
           skipped++;
           continue;
         }
 
-        // 避免重复注入：检查是否已有同 id 的翻译
-        const existingTranslation = document.querySelector(`.imt-translation[data-imt-source="${item.id}"]`);
-        if (existingTranslation) {
-          // 更新现有翻译
-          existingTranslation.textContent = item.translated;
-          existingTranslation.classList.remove('imt-hidden');
-          injected++;
-          continue;
-        }
-
-        // 表格布局兼容注入 — 根据上下文选择合适的插入位置和元素类型
-        const inserted = insertTranslationElement(original, item.translated, item.id);
-        if (inserted) {
+        // 使用 ImmersiveOverlay.addTranslation() 在 Overlay 层创建翻译元素
+        // addTranslation 内置去重逻辑：已存在同 id 条目时自动更新文本
+        const overlayEl = immersiveOverlay.addTranslation(item.id, item.translated, original);
+        if (overlayEl) {
           injected++;
         } else {
           skipped++;
         }
       }
 
-      // ── evo_v23_004: 注入结果诊断增强 ──
+      // ── 注入结果诊断增强 ──
       // injected=0 且 skipped>0 时附加诊断信息，帮助用户/Agent 理解失败原因
       let diagnostic: { possibleCauses: string[]; suggestedActions: string[] } | undefined;
       if (injected === 0 && skipped > 0) {
@@ -911,13 +820,11 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
         const suggestedActions: string[] = [];
 
         if (autoRemarkDone) {
-          // 自动重标记已执行但仍然 injected=0 → 翻译数据与页面段落不匹配
           possibleCauses.push(
-            '自动重标记已执行，但翻译数据与当前页面段落无法匹配（页面内容可能已发生变化）',
+            '自动重建注册表已执行，但翻译数据与当前页面段落无法匹配（页面内容可能已发生变化）',
           );
           suggestedActions.push('重新执行完整翻译流程（extractParagraphs → translate → injectBilingual）');
         } else {
-          // 未触发自动重建 → 注册表有条目但 item.id / item.translated 可能为空
           const registeredCount = imtRegistry.size;
           if (registeredCount > 0) {
             possibleCauses.push(
@@ -950,83 +857,41 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
     }
 
     case 'toggle': {
-      // ── evo_v27_004: 兼容新 DOM 结构（in-cell / inline / block）──
-      // 查询所有翻译元素，涵盖：
-      //   - Case 1: <div class="imt-translation"> inside <td>（表格行内注入）
-      //   - Case 2: <span class="imt-translation imt-inline"> after <a>（叶节点注入）
-      //   - Case 3: <div class="imt-translation"> after <p>（普通块级注入）
-      const translations = document.querySelectorAll('.imt-translation');
-      if (translations.length === 0) {
+      // ── evo_v33_004: 使用 ImmersiveOverlay.toggleAll() 切换可见性 ──
+      const overlaySize = immersiveOverlay.size;
+      if (overlaySize === 0) {
         return { success: true, data: { mode: 'toggle', message: '没有已注入的翻译', toggled: 0 } };
       }
 
-      // 检查当前状态（根据第一个翻译段落判断）
-      const isHidden = translations[0].classList.contains('imt-hidden');
-      let inlineCount = 0;
-      let blockCount = 0;
-
-      translations.forEach((el) => {
-        if (isHidden) {
-          el.classList.remove('imt-hidden');
-        } else {
-          el.classList.add('imt-hidden');
-        }
-        // 统计不同 DOM 结构类型
-        if (el.classList.contains('imt-inline')) {
-          inlineCount++;
-        } else {
-          blockCount++;
-        }
-      });
+      const isVisible = immersiveOverlay.toggleAll();
 
       return {
         success: true,
         data: {
           mode: 'toggle',
-          newState: isHidden ? 'visible' : 'hidden',
-          toggled: translations.length,
-          inlineCount,
-          blockCount,
+          newState: isVisible ? 'visible' : 'hidden',
+          toggled: overlaySize,
         },
       };
     }
 
     case 'clear': {
-      // ── evo_v27_004: 兼容新 DOM 结构的清除逻辑 ──
-      // 移除所有翻译元素，涵盖：
-      //   - <div class="imt-translation"> inside <td>（表格 in-cell 注入）
-      //   - <span class="imt-translation imt-inline"> after <a>（叶节点 inline 注入）
-      //   - <div class="imt-translation"> after <p>（普通 block 注入）
-      const translations = document.querySelectorAll('.imt-translation');
-      const count = translations.length;
-      let inlineRemoved = 0;
-      let blockRemoved = 0;
+      // ── evo_v33_004: 使用 ImmersiveOverlay.removeAll() + ImtElementRegistry.clear() ──
+      const overlayCount = immersiveOverlay.size;
+      const registryCount = imtRegistry.size;
 
-      translations.forEach((el) => {
-        if (el.classList.contains('imt-inline')) {
-          inlineRemoved++;
-        } else {
-          blockRemoved++;
-        }
-        el.remove();
-      });
+      // 销毁 Overlay 容器及所有翻译元素（含 ResizeObserver / scroll 监听器）
+      immersiveOverlay.removeAll();
 
-      // evo_v33_003: 清除 ImtElementRegistry 内存注册表（零 DOM 篡改）
-      const untaggedCount = imtRegistry.size;
+      // 清除内存注册表
       imtRegistry.clear();
-
-      // 移除样式
-      const styleEl = document.getElementById(IMT_STYLE_ID);
-      if (styleEl) { styleEl.remove(); }
 
       return {
         success: true,
         data: {
           mode: 'clear',
-          removed: count,
-          inlineRemoved,
-          blockRemoved,
-          untagged: untaggedCount,
+          removed: overlayCount,
+          registryCleared: registryCount,
         },
       };
     }
