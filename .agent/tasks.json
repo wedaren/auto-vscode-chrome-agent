@@ -2131,7 +2131,7 @@
       "id": "evo_v32_001",
       "type": "coding",
       "title": "VSCode 侧 browser-runtime-contract.ts — 浏览器智能层共享 TypeScript 类型定义",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v31_001"
       ],
