@@ -32,6 +32,11 @@ let userDataManager: UserDataManager | undefined;
 let observabilityStore: ObservabilityStore | undefined;
 let observabilityTree: ObservabilityTreeDataProvider | undefined;
 
+/** 竞选定时器：follower 模式下每 10 秒尝试提升为 leader */
+let promotionTimer: ReturnType<typeof setInterval> | undefined;
+/** 竞选间隔（毫秒） */
+const PROMOTION_INTERVAL_MS = 10_000;
+
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
   outputChannel.appendLine('[BrowserAgent] 插件激活中...');
@@ -159,7 +164,47 @@ export function activate(context: vscode.ExtensionContext): void {
       outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（role=leader, wsServer healthy）');
     } else if (wsServer!.role === 'follower') {
       outputChannel.appendLine(
-        '[BrowserAgent] MessageHandler 未注册：follower 模式跳过，等待竞选提升为 leader',
+        '[BrowserAgent] MessageHandler 未注册：follower 模式跳过，启动定时竞选',
+      );
+
+      // 启动定时竞选：每 10 秒尝试获取 leader 角色
+      promotionTimer = setInterval(() => {
+        void (async () => {
+          try {
+            const promoted = await wsServer!.tryPromote();
+            if (promoted) {
+              // 竞选成功：停止定时器
+              if (promotionTimer) {
+                clearInterval(promotionTimer);
+                promotionTimer = undefined;
+              }
+
+              wsServerHealthy = true;
+              outputChannel.appendLine(
+                '[BrowserAgent] 竞选成功：follower → leader，初始化 MessageHandler 及下游依赖',
+              );
+
+              // 完整初始化 MessageHandler 及下游依赖（lmService/mcpClient/browserToolProvider/skillRunner）
+              const messageHandler = new MessageHandler(
+                lmService!, wsServer!, mcpClient!, outputChannel,
+                browserToolProvider!, skillRegistry, skillRunner, observabilityStore,
+              );
+              wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
+              outputChannel.appendLine(
+                '[BrowserAgent] MessageHandler 已注册（竞选提升为 leader）',
+              );
+            }
+            // tryPromote 返回 false 时静默继续，等待下一轮竞选
+          } catch (err) {
+            // 竞选异常时静默记录日志，不中断定时器
+            outputChannel.appendLine(
+              `[BrowserAgent] 竞选尝试异常: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        })();
+      }, PROMOTION_INTERVAL_MS);
+      outputChannel.appendLine(
+        `[BrowserAgent] 定时竞选已启动（间隔 ${PROMOTION_INTERVAL_MS}ms）`,
       );
     } else {
       outputChannel.appendLine(
@@ -318,6 +363,12 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
+  // 清理竞选定时器（follower 模式下可能存在）
+  if (promotionTimer) {
+    clearInterval(promotionTimer);
+    promotionTimer = undefined;
+  }
+
   reportGenerator?.cancel();
   reportGenerator = undefined;
   skillRunner = undefined;
