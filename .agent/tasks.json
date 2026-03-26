@@ -2253,7 +2253,7 @@
       "id": "evo_v34_001",
       "type": "coding",
       "title": "ImmersiveOverlay DisplayMode 引擎 — 三种显示模式定位与样式切换",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v33_005"
       ],

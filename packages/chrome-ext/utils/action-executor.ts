@@ -5,7 +5,7 @@
 import { buildDomSnapshot, type SnapshotOptions, type DomSnapshotNode } from './dom-snapshot';
 import { buildNodeAnchor, type NodeAnchor } from './anchor-resolver';
 import { imtRegistry } from './imt-registry';
-import { immersiveOverlay } from './imt-overlay';
+import { immersiveOverlay, type DisplayMode } from './imt-overlay';
 
 /** 支持的浏览器操作类型枚举 */
 export type ActionType =
@@ -67,10 +67,12 @@ export interface BrowserAction {
   maxCount?: number;
   /** extractParagraphs 的范围选择器 */
   scopeSelector?: string;
-  /** injectBilingual 的操作模式: inject / toggle / clear */
-  injectMode?: 'inject' | 'toggle' | 'clear';
+  /** injectBilingual 的操作模式: inject / toggle / clear / setDisplayMode */
+  injectMode?: 'inject' | 'toggle' | 'clear' | 'setDisplayMode';
   /** injectBilingual inject 模式的翻译数据（JSON 字符串） */
   translations?: string;
+  /** injectBilingual setDisplayMode 模式的目标显示模式（bilingual / original / translated） */
+  displayMode?: DisplayMode;
   /** compositeDownload: base64 截图数组的 JSON 字符串（每项为 data:image/png;base64,... 格式） */
   screenshots?: string;
   /** compositeDownload: 下载文件名（默认 composite-screenshot.png） */
@@ -898,6 +900,30 @@ function executeInjectBilingual(action: BrowserAction): ActionResult {
           mode: 'clear',
           removed: overlayCount,
           registryCleared: registryCount,
+        },
+      };
+    }
+
+    case 'setDisplayMode': {
+      // ── evo_v34_002: 切换沉浸式翻译显示模式（bilingual / original / translated） ──
+      const targetMode = action.displayMode || 'bilingual';
+
+      // 验证 displayMode 值合法性
+      const validModes: DisplayMode[] = ['bilingual', 'original', 'translated'];
+      if (!validModes.includes(targetMode)) {
+        return {
+          success: false,
+          error: `不支持的 displayMode: ${targetMode}，可选值: bilingual / original / translated`,
+        };
+      }
+
+      immersiveOverlay.setDisplayMode(targetMode);
+
+      return {
+        success: true,
+        data: {
+          mode: 'setDisplayMode',
+          currentMode: immersiveOverlay.getDisplayMode(),
         },
       };
     }
