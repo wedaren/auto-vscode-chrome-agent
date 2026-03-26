@@ -2338,7 +2338,7 @@
       "id": "evo_v35_003",
       "type": "coding",
       "title": "Chrome 深度调研 UI — ResearchPanel + 研究计划编辑 + 思考流 + 报告渲染",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v35_002"
       ],

@@ -536,6 +536,31 @@ body {
   color: #3730a3;
 }
 
+/* 报告导出按钮 */
+.report-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4f46e5;
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  line-height: 1.4;
+}
+.report-export-btn:hover {
+  background: #eef2ff;
+  border-color: #818cf8;
+  color: #3730a3;
+}
+.report-export-btn:active {
+  background: #e0e7ff;
+}
+
 /* line-clamp-2 polyfill */
 .line-clamp-2 {
   display: -webkit-box;

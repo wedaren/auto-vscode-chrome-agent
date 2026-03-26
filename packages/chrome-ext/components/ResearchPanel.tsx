@@ -12,6 +12,7 @@ import 'highlight.js/styles/github.css';
 import { useResearch, type SubQuestion, type SearchStrategy, type ThinkingEntry, type ResearchProgress, type ResearchReport, type ResearchPhase, type Citation } from '../hooks/useResearch';
 import type { BridgeMessage } from '../src/ws-client';
 import type { BridgeMeta } from '../src/observability';
+import { exportReportAsMarkdown, exportReportAsHtml } from '../utils/report-export';
 
 // ────────────────────────────────────────────────────────────────
 // Markdown 渲染器（带引用标注高亮）
@@ -503,29 +504,66 @@ function ReportRenderer({ report, onNewResearch }: ReportRendererProps) {
     }
   }, []);
 
+  /** 导出为 Markdown */
+  const handleExportMd = useCallback(() => {
+    exportReportAsMarkdown(report);
+  }, [report]);
+
+  /** 导出为 HTML */
+  const handleExportHtml = useCallback(() => {
+    exportReportAsHtml(report);
+  }, [report]);
+
   return (
     <div className="flex-1 overflow-y-auto">
       {/* 报告统计概览 */}
-      <div className="px-4 py-3 bg-green-50 border-b border-green-100 flex items-center gap-4">
-        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-          <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-green-800">调研完成</p>
-          <div className="flex items-center gap-3 text-xs text-green-600 mt-0.5">
-            <span>迭代 {report.totalIterations} 轮</span>
-            <span>探索 {report.totalPages} 页</span>
-            <span>引用 {report.citations.length} 条</span>
+      <div className="px-4 py-3 bg-green-50 border-b border-green-100">
+        <div className="flex items-center gap-4">
+          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+            <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
           </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-green-800">调研完成</p>
+            <div className="flex items-center gap-3 text-xs text-green-600 mt-0.5">
+              <span>迭代 {report.totalIterations} 轮</span>
+              <span>探索 {report.totalPages} 页</span>
+              <span>引用 {report.citations.length} 条</span>
+            </div>
+          </div>
+          <button
+            onClick={onNewResearch}
+            className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-md transition-colors"
+          >
+            新调研
+          </button>
         </div>
-        <button
-          onClick={onNewResearch}
-          className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-md transition-colors"
-        >
-          新调研
-        </button>
+
+        {/* 导出按钮行 */}
+        <div className="flex items-center gap-2 mt-2.5 ml-12">
+          <span className="text-xs text-gray-500 mr-1">导出报告：</span>
+          <button
+            onClick={handleExportMd}
+            className="report-export-btn"
+            title="下载 Markdown 格式报告"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            .md
+          </button>
+          <button
+            onClick={handleExportHtml}
+            className="report-export-btn"
+            title="下载 HTML 格式报告（含样式，可直接在浏览器中打开）"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            .html
+          </button>
+        </div>
       </div>
 
       {/* 子问题完成情况 */}
