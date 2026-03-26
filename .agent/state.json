@@ -13,14 +13,17 @@
     "acceptance_cmd_output": "PASS",
     "validated_at": "2026-03-27T00:00:00.000Z",
     "details": {
-      "acceptance_cmd": "PASS — deep-research-engine.ts 存在, CitationTracker 14处引用, Gap/Iteration 49处, 编译零错误",
+      "acceptance_cmd": "PASS — deep-research-engine.ts 存在, CitationTracker 14处引用, Gap/Iteration 49处, npm run compile 零 TS 错误",
       "criteria_1": "report-generator.ts 重构为 deep-research-engine.ts — 完成，extension.ts / command-registry.ts 导入已更新",
       "criteria_2": "迭代式研究循环 plan→search→read→reason→gap-detect→re-plan — 完成，6个阶段方法实现",
       "criteria_3": "最多3轮迭代、15页上限 — 完成，config.maxIterations??3, config.maxPages??15",
       "criteria_4": "研究计划数据模型含子问题列表和搜索策略 — 完成，ResearchPlan/SubQuestion/SearchStrategy 接口",
       "criteria_5": "CitationTracker 为每个信息点绑定来源 URL + 页面标题 + 原文摘录 — 完成，Citation 接口含 url/title/excerpt",
       "criteria_6": "使用 browser_* 工具而非仅 MCP — 完成，BrowserToolProvider 替代 McpClient",
-      "criteria_7": "编译通过 — npm run compile 零错误"
+      "criteria_7": "编译通过 — npm run compile 零错误",
+      "constraint_vscode_lm": "模型调用只通过 LmService（vscode.lm API）— 确认",
+      "constraint_no_ext_api": "无外部 API key 依赖 — 确认",
+      "constraint_top_comment": "文件顶部有注释 — 确认"
     }
   },
   "last_tick": "2026-03-27T00:00:03.000Z",

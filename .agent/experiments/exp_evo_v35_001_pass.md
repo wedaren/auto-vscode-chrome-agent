@@ -36,3 +36,17 @@ PASS
 
 ## 结果
 pass
+
+## Validator 复核
+结果：pass
+分数：95/100
+问题：
+- 无显著问题
+
+### 验收明细
+| 项目 | 分值 | 得分 | 说明 |
+|---|---|---|---|
+| acceptance_cmd 通过 | 60 | 60 | PASS — 文件存在、CitationTracker 14处、Gap/Iteration 49处、编译零错误 |
+| 代码无 TypeScript 错误 | 20 | 20 | npm run compile → 0 error TS |
+| 符合 program.md 约束 | 20 | 15 | LmService(vscode.lm) ✓ / 无外部 API key ✓ / browser_* 工具 ✓ / 顶部注释 ✓ / -5: 旧 report-generator.ts 未删除（非本任务硬性要求，轻微扣分） |
+| **合计** | **100** | **95** | |

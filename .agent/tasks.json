@@ -2301,7 +2301,7 @@
       "id": "evo_v34_005",
       "type": "coding",
       "title": "全链路验收 — 双端编译 + 三模式切换端到端验证",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v34_003",
         "evo_v34_004"
