@@ -59,6 +59,11 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
       wsServer.onDidChangeState(() => this.refresh()),
     );
 
+    // 订阅 WsServer 角色变更（leader ↔ follower 切换时刷新）
+    this.disposables.push(
+      wsServer.onDidChangeRole(() => this.refresh()),
+    );
+
     // 订阅 McpClient 状态变更
     this.disposables.push(
       mcpClient.onDidChangeState(() => this.refresh()),
@@ -128,18 +133,35 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
   private getRootItems(): ConnectionTreeItem[] {
     const items: ConnectionTreeItem[] = [];
 
-    // 1. WebSocket Server 节点
+    // 1. WebSocket Server 节点（展示 Leader/Follower 角色）
     const wsListening = this.wsServer?.listening ?? false;
-    const wsStatus = wsListening ? '$(check) 监听中' : '$(circle-slash) 未启动';
+    const wsRole = this.wsServer?.role ?? 'idle';
+    let wsLabel: string;
+    let wsIcon: string;
+    let wsTooltipText: string;
+    if (wsRole === 'leader') {
+      wsLabel = `WebSocket Server — 🟢 Leader（端口 ${this.wsServer?.port ?? 7777}）`;
+      wsIcon = 'broadcast';
+      wsTooltipText = `WebSocket 服务端运行中，角色 Leader（端口 ${this.wsServer?.port ?? '?'}）`;
+    } else if (wsRole === 'follower') {
+      wsLabel = 'WebSocket Server — 🔵 Follower（等待中）';
+      wsIcon = 'eye';
+      wsTooltipText = `端口 ${this.wsServer?.port ?? 7777} 被其他窗口占用，当前为 Follower 模式，定时竞选中`;
+    } else {
+      const wsStatus = wsListening ? '$(check) 监听中' : '$(circle-slash) 未启动';
+      wsLabel = `WebSocket Server — ${wsStatus}`;
+      wsIcon = wsListening ? 'broadcast' : 'debug-disconnect';
+      wsTooltipText = wsListening
+        ? `WebSocket 服务端运行中 (端口 ${this.wsServer?.port ?? '?'})`
+        : 'WebSocket 服务端未启动';
+    }
     const wsItem = new ConnectionTreeItem(
-      `WebSocket Server — ${wsStatus}`,
+      wsLabel,
       vscode.TreeItemCollapsibleState.Expanded,
       'ws',
     );
-    wsItem.iconPath = new vscode.ThemeIcon(wsListening ? 'broadcast' : 'debug-disconnect');
-    wsItem.tooltip = wsListening
-      ? `WebSocket 服务端运行中 (端口 ${this.wsServer?.port ?? '?'})`
-      : 'WebSocket 服务端未启动';
+    wsItem.iconPath = new vscode.ThemeIcon(wsIcon);
+    wsItem.tooltip = wsTooltipText;
     items.push(wsItem);
 
     // 2. MCP 连接节点
@@ -203,21 +225,32 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
     return items;
   }
 
-  /** WebSocket Server 子节点：端口、监听状态、客户端数 */
+  /** WebSocket Server 子节点：角色、端口、监听状态、客户端数 */
   private getWsChildren(): ConnectionTreeItem[] {
     const port = this.wsServer?.port ?? 7777;
     const listening = this.wsServer?.listening ?? false;
     const clientCount = this.wsServer?.clientCount ?? 0;
+    const role = this.wsServer?.role ?? 'idle';
+
+    // 角色子节点
+    const roleLabel = role === 'leader' ? '🟢 Leader' : role === 'follower' ? '🔵 Follower' : 'idle';
+    const roleItem = new ConnectionTreeItem(`角色: ${roleLabel}`, vscode.TreeItemCollapsibleState.None, 'detail');
+    roleItem.iconPath = new vscode.ThemeIcon(role === 'leader' ? 'shield' : role === 'follower' ? 'eye' : 'circle-slash');
+    roleItem.tooltip = role === 'leader'
+      ? '当前窗口拥有端口监听权，是消息通道的主节点'
+      : role === 'follower'
+        ? '端口被其他窗口占用，定时竞选中，等待接管'
+        : '服务未启动';
 
     const portItem = new ConnectionTreeItem(`端口: ${port}`, vscode.TreeItemCollapsibleState.None, 'detail');
     portItem.iconPath = new vscode.ThemeIcon('globe');
 
     const statusItem = new ConnectionTreeItem(
-      `状态: ${listening ? '监听中' : '未启动'}`,
+      `状态: ${listening ? '监听中' : role === 'follower' ? '等待竞选' : '未启动'}`,
       vscode.TreeItemCollapsibleState.None,
       'detail',
     );
-    statusItem.iconPath = new vscode.ThemeIcon(listening ? 'pass' : 'circle-slash');
+    statusItem.iconPath = new vscode.ThemeIcon(listening ? 'pass' : role === 'follower' ? 'sync~spin' : 'circle-slash');
 
     const clientItem = new ConnectionTreeItem(
       `已连接客户端: ${clientCount}`,
@@ -226,7 +259,7 @@ export class ConnectionTreeDataProvider implements vscode.TreeDataProvider<Conne
     );
     clientItem.iconPath = new vscode.ThemeIcon('person');
 
-    return [portItem, statusItem, clientItem];
+    return [roleItem, portItem, statusItem, clientItem];
   }
 
   /** MCP 连接子节点：状态 + 已发现工具列表 */

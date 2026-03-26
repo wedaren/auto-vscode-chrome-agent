@@ -2092,7 +2092,7 @@
       "id": "evo_v31_003",
       "type": "coding",
       "title": "定时端口竞选机制 — follower 窗口周期性尝试获取 leader 角色",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v31_002"
       ],

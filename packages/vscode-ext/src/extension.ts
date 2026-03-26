@@ -32,10 +32,31 @@ let userDataManager: UserDataManager | undefined;
 let observabilityStore: ObservabilityStore | undefined;
 let observabilityTree: ObservabilityTreeDataProvider | undefined;
 
+/** StatusBar item 展示 WsServer 角色（Leader / Follower） */
+let roleStatusBarItem: vscode.StatusBarItem | undefined;
+
 /** 竞选定时器：follower 模式下每 10 秒尝试提升为 leader */
 let promotionTimer: ReturnType<typeof setInterval> | undefined;
 /** 竞选间隔（毫秒） */
 const PROMOTION_INTERVAL_MS = 10_000;
+
+/** 更新 StatusBar 角色显示 */
+function updateRoleStatusBar(role: string): void {
+  if (!roleStatusBarItem) { return; }
+  if (role === 'leader') {
+    roleStatusBarItem.text = '$(broadcast) BA: Leader';
+    roleStatusBarItem.tooltip = 'Browser Agent: Leader 模式 — 拥有 WebSocket 端口监听权';
+    roleStatusBarItem.backgroundColor = undefined;
+  } else if (role === 'follower') {
+    roleStatusBarItem.text = '$(eye) BA: Follower';
+    roleStatusBarItem.tooltip = 'Browser Agent: Follower 模式 — 端口被其他窗口占用，定时竞选中';
+    roleStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  } else {
+    roleStatusBarItem.text = '$(circle-slash) BA: idle';
+    roleStatusBarItem.tooltip = 'Browser Agent: WebSocket 未启动';
+    roleStatusBarItem.backgroundColor = undefined;
+  }
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('Browser Agent');
@@ -111,6 +132,17 @@ export function activate(context: vscode.ExtensionContext): void {
     .get<number>('port', defaultPort);
   wsServer = new WsServer(outputChannel, port);
   wsServer.setObservabilityStore(observabilityStore);
+
+  // 创建 StatusBar item 展示 WsServer 角色（Leader / Follower / idle）
+  roleStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+  roleStatusBarItem.name = 'Browser Agent Role';
+  updateRoleStatusBar(wsServer.role);
+  roleStatusBarItem.show();
+
+  // 订阅角色变更事件，同步刷新 StatusBar
+  const roleChangeDisposable = wsServer.onDidChangeRole((newRole) => {
+    updateRoleStatusBar(newRole);
+  });
 
   // 初始化浏览器工具提供者（原生浏览器操作，通过 WebSocket 与 Chrome 通信）
   browserToolProvider = new BrowserToolProvider(wsServer, outputChannel);
@@ -346,6 +378,8 @@ export function activate(context: vscode.ExtensionContext): void {
     runSkillCmd,
     toggleSkillCmd,
     addCustomSkillCmd,
+    roleChangeDisposable,
+    { dispose: () => { roleStatusBarItem?.dispose(); roleStatusBarItem = undefined; } },
     { dispose: () => connectionTree?.dispose() },
     { dispose: () => messageTree?.dispose() },
     { dispose: () => agentTree?.dispose() },
@@ -368,6 +402,9 @@ export async function deactivate(): Promise<void> {
     clearInterval(promotionTimer);
     promotionTimer = undefined;
   }
+
+  roleStatusBarItem?.dispose();
+  roleStatusBarItem = undefined;
 
   reportGenerator?.cancel();
   reportGenerator = undefined;
