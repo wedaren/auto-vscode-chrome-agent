@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { LmService } from './lm-service';
 import { WsServer } from './ws-server';
 import { McpClient } from './mcp-client';
-import { ReportGenerator } from './report-generator';
+import { DeepResearchEngine } from './deep-research-engine';
 import { MessageHandler } from './message-handler';
 import { CommandRegistry } from './command-registry';
 import { ConnectionTreeDataProvider } from './connection-tree';
@@ -23,7 +23,7 @@ let mcpClient: McpClient | undefined;
 let browserToolProvider: BrowserToolProvider | undefined;
 let skillRegistry: SkillRegistry | undefined;
 let skillRunner: SkillRunner | undefined;
-let reportGenerator: ReportGenerator | undefined;
+let deepResearchEngine: DeepResearchEngine | undefined;
 let connectionTree: ConnectionTreeDataProvider | undefined;
 let messageTree: MessageTreeDataProvider | undefined;
 let agentTree: AgentTreeDataProvider | undefined;
@@ -245,11 +245,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   })();
 
-  // 初始化报告生成器
-  reportGenerator = new ReportGenerator(lmService, mcpClient, wsServer, outputChannel);
+  // 初始化深度调研引擎（使用 BrowserToolProvider 替代 MCP 直接调用）
+  deepResearchEngine = new DeepResearchEngine(lmService, browserToolProvider, wsServer, outputChannel);
 
   // 注册所有命令
-  const commandRegistry = new CommandRegistry(lmService, mcpClient, reportGenerator, outputChannel, userDataManager);
+  const commandRegistry = new CommandRegistry(lmService, mcpClient, deepResearchEngine, outputChannel, userDataManager);
   const commandDisposables = commandRegistry.registerAll();
 
   // 注册 Activity Bar TreeView（调试视图）
@@ -406,8 +406,8 @@ export async function deactivate(): Promise<void> {
   roleStatusBarItem?.dispose();
   roleStatusBarItem = undefined;
 
-  reportGenerator?.cancel();
-  reportGenerator = undefined;
+  deepResearchEngine?.cancel();
+  deepResearchEngine = undefined;
   skillRunner = undefined;
   skillRegistry?.dispose();
   skillRegistry = undefined;

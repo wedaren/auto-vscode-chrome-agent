@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { LmService } from './lm-service';
 import { McpClient } from './mcp-client';
-import { ReportGenerator } from './report-generator';
+import { DeepResearchEngine } from './deep-research-engine';
 import { UserDataManager } from './user-data-manager';
 
 /**
@@ -13,20 +13,20 @@ import { UserDataManager } from './user-data-manager';
 export class CommandRegistry {
   private readonly lmService: LmService;
   private readonly mcpClient: McpClient;
-  private readonly reportGenerator: ReportGenerator;
+  private readonly deepResearchEngine: DeepResearchEngine;
   private readonly outputChannel: vscode.OutputChannel;
   private readonly userDataManager: UserDataManager;
 
   constructor(
     lmService: LmService,
     mcpClient: McpClient,
-    reportGenerator: ReportGenerator,
+    deepResearchEngine: DeepResearchEngine,
     outputChannel: vscode.OutputChannel,
     userDataManager: UserDataManager,
   ) {
     this.lmService = lmService;
     this.mcpClient = mcpClient;
-    this.reportGenerator = reportGenerator;
+    this.deepResearchEngine = deepResearchEngine;
     this.outputChannel = outputChannel;
     this.userDataManager = userDataManager;
   }
@@ -64,13 +64,12 @@ export class CommandRegistry {
         this.outputChannel.show(true);
 
         try {
-          const report = await this.reportGenerator.generate({
+          const result = await this.deepResearchEngine.generate({
             topic,
-            maxPages: 3,
             sessionId: `report-${Date.now()}`,
           });
-          this.outputChannel.appendLine(`[BrowserAgent] 报告生成完成:\n${report}`);
-          void vscode.window.showInformationMessage('Browser Agent: 深度报告已生成');
+          this.outputChannel.appendLine(`[BrowserAgent] 深度调研完成:\n${result.report}`);
+          void vscode.window.showInformationMessage(`Browser Agent: 深度调研已完成，探索了 ${result.totalPages} 个页面，${result.citations.length} 条引用`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           void vscode.window.showErrorMessage(`Browser Agent: 报告生成失败 - ${message}`);

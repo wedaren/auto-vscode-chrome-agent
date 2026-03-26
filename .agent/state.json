@@ -1,24 +1,26 @@
 {
   "phase": "idle",
-  "current_task": "evo_v34_005",
+  "current_task": "evo_v35_001",
   "loop_count": 1,
   "retry_count": 0,
   "last_result": "pass",
-  "last_score": 100,
+  "last_score": 95,
   "last_validation": {
-    "task_id": "evo_v34_005",
+    "task_id": "evo_v35_001",
     "result": "pass",
-    "score": 100,
+    "score": 95,
     "issues": [],
     "acceptance_cmd_output": "PASS",
     "validated_at": "2026-03-27T00:00:00.000Z",
     "details": {
-      "acceptance_cmd": "PASS — chrome-ext tsc ✓, vscode-ext tsc ✓",
-      "criteria_1": "Chrome 侧 tsc --noEmit 通过（零错误）",
-      "criteria_2": "VSCode 侧 tsc --noEmit 通过（零错误）",
-      "criteria_3": "ImmersiveOverlay CSS 含 bilingual(默认)/original(hidden)/translated(覆盖) 三模式，_applyDisplayMode() 互斥切换",
-      "criteria_4": "TranslateControl 无 toggleAll 直接调用（grep=空），模式切换全部走 executeInjectBilingual('setDisplayMode', mode)",
-      "criteria_5": "action-executor setDisplayMode case(行907-929) 正确调用 immersiveOverlay.setDisplayMode() + 合法值校验"
+      "acceptance_cmd": "PASS — deep-research-engine.ts 存在, CitationTracker 14处引用, Gap/Iteration 49处, 编译零错误",
+      "criteria_1": "report-generator.ts 重构为 deep-research-engine.ts — 完成，extension.ts / command-registry.ts 导入已更新",
+      "criteria_2": "迭代式研究循环 plan→search→read→reason→gap-detect→re-plan — 完成，6个阶段方法实现",
+      "criteria_3": "最多3轮迭代、15页上限 — 完成，config.maxIterations??3, config.maxPages??15",
+      "criteria_4": "研究计划数据模型含子问题列表和搜索策略 — 完成，ResearchPlan/SubQuestion/SearchStrategy 接口",
+      "criteria_5": "CitationTracker 为每个信息点绑定来源 URL + 页面标题 + 原文摘录 — 完成，Citation 接口含 url/title/excerpt",
+      "criteria_6": "使用 browser_* 工具而非仅 MCP — 完成，BrowserToolProvider 替代 McpClient",
+      "criteria_7": "编译通过 — npm run compile 零错误"
     }
   },
   "last_tick": "2026-03-27T00:00:03.000Z",
