@@ -2241,13 +2241,134 @@
       "id": "evo_v33_005",
       "type": "coding",
       "title": "全链路验收 — 零 DOM 篡改验证 + CSS 隔离 + 双端编译",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v33_004"
       ],
       "acceptance": "① action-executor.ts 中无任何 setAttribute('data-imt-id') 调用；② 无任何 parent.insertBefore / parent.appendChild 用于翻译节点插入（Overlay 内部除外）；③ ensureImtStyle 更新为 Overlay 内部样式（含 all:initial 重置 + contain:content）；④ 旧的 insertTranslationElement / IMT_INLINE_LEAF_TAGS 注入辅助逻辑被清理或标记为 deprecated；⑤ Chrome 和 VSCode 双端 tsc --noEmit 通过",
       "acceptance_cmd": "cd packages/chrome-ext && ! grep -q 'setAttribute.*data-imt-id' utils/action-executor.ts && npx tsc --noEmit 2>&1 | tail -3 && cd ../vscode-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
       "evolution_goal": "优化沉浸式翻译，避免篡改原有的 html 布局"
+    },
+    {
+      "id": "evo_v34_001",
+      "type": "coding",
+      "title": "ImmersiveOverlay DisplayMode 引擎 — 三种显示模式定位与样式切换",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_005"
+      ],
+      "acceptance": "① imt-overlay.ts 新增 DisplayMode 类型（bilingual/original/translated）；② 新增 setDisplayMode(mode) 公开方法和 getDisplayMode() getter；③ bilingual 模式定位在 rect.bottom（现有行为）；④ original 模式添加 imt-overlay-hidden 隐藏 Overlay；⑤ translated 模式将条目定位到 rect.top + 不透明白底覆盖原文；⑥ OVERLAY_CSS 包含 .imt-overlay-translated 样式规则；⑦ recalculatePositions 根据当前 mode 计算位置",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q \"DisplayMode\" utils/imt-overlay.ts && grep -q \"setDisplayMode\" utils/imt-overlay.ts && grep -q \"getDisplayMode\" utils/imt-overlay.ts && grep -q \"imt-overlay-translated\" utils/imt-overlay.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "沉浸式翻译能提供原文版与翻译版，或者混合版"
+    },
+    {
+      "id": "evo_v34_002",
+      "type": "coding",
+      "title": "action-executor.ts — executeInjectBilingual 扩展 setDisplayMode 操作",
+      "status": "pending",
+      "depends_on": [
+        "evo_v34_001"
+      ],
+      "acceptance": "① executeInjectBilingual switch 新增 setDisplayMode case；② 读取 action.displayMode 参数并调用 immersiveOverlay.setDisplayMode()；③ 返回 { currentMode } 到调用方；④ Chrome 侧 BrowserAction 类型定义包含 displayMode 可选字段；⑤ 编译通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q \"setDisplayMode\" utils/action-executor.ts && grep -q \"displayMode\" utils/action-executor.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "沉浸式翻译能提供原文版与翻译版，或者混合版"
+    },
+    {
+      "id": "evo_v34_003",
+      "type": "coding",
+      "title": "TranslateControl.tsx — 三模式分段控制器 UI 替换 toggle 按钮",
+      "status": "pending",
+      "depends_on": [
+        "evo_v34_002"
+      ],
+      "acceptance": "① 翻译完成后显示三段式切换器（原文 / 双语 / 译文）替代原 toggle 按钮；② 点击每个段触发 executeInjectBilingual(setDisplayMode, mode)；③ 当前活跃模式高亮显示；④ 默认活跃模式为 bilingual；⑤ 清除翻译后切换器隐藏",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -q \"bilingual\" components/TranslateControl.tsx && grep -q \"translated\" components/TranslateControl.tsx && grep -q \"original\" components/TranslateControl.tsx && grep -q \"setDisplayMode\" components/TranslateControl.tsx && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "沉浸式翻译能提供原文版与翻译版，或者混合版"
+    },
+    {
+      "id": "evo_v34_004",
+      "type": "coding",
+      "title": "VSCode browser-tools.ts — browser_inject_bilingual Schema 扩展 displayMode",
+      "status": "pending",
+      "depends_on": [
+        "evo_v34_002"
+      ],
+      "acceptance": "① browser-tools.ts 中 browser_inject_bilingual 工具 Schema 包含 setDisplayMode mode 文档；② displayMode 参数（bilingual/original/translated）在 Schema properties 中定义；③ WebSocket 消息正确传递 displayMode 字段；④ VSCode 侧编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q \"setDisplayMode\" src/browser-tools.ts && grep -q \"displayMode\" src/browser-tools.ts && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "沉浸式翻译能提供原文版与翻译版，或者混合版"
+    },
+    {
+      "id": "evo_v34_005",
+      "type": "coding",
+      "title": "全链路验收 — 双端编译 + 三模式切换端到端验证",
+      "status": "pending",
+      "depends_on": [
+        "evo_v34_003",
+        "evo_v34_004"
+      ],
+      "acceptance": "① Chrome 侧 tsc --noEmit 通过；② VSCode 侧 tsc --noEmit 通过；③ ImmersiveOverlay 包含 bilingual/original/translated 三种模式 CSS；④ TranslateControl 无 toggleAll 直接调用（已被 setDisplayMode 替代）；⑤ action-executor 的 setDisplayMode case 正确调用 Overlay API",
+      "acceptance_cmd": "cd packages/chrome-ext && npx tsc --noEmit 2>&1 | tail -3 && cd ../vscode-ext && npx tsc --noEmit 2>&1 | tail -3 && echo PASS || echo FAIL",
+      "evolution_goal": "沉浸式翻译能提供原文版与翻译版，或者混合版"
+    },
+    {
+      "id": "evo_v35_001",
+      "type": "coding",
+      "title": "DeepResearchEngine 核心引擎 — 迭代式研究循环 + 研究计划 + 引用追踪",
+      "status": "pending",
+      "depends_on": [
+        "evo_v33_005"
+      ],
+      "acceptance": "report-generator.ts 重构为 deep-research-engine.ts；支持迭代式研究循环（plan → search → read → reason → gap-detect → re-plan，最多 3 轮迭代、15 页上限）；研究计划数据模型含子问题列表和搜索策略；CitationTracker 为每个信息点绑定来源 URL + 页面标题 + 原文摘录；使用 browser_* 工具而非仅 MCP；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && test -f src/deep-research-engine.ts && grep -q 'CitationTracker\\|citationTracker' src/deep-research-engine.ts && grep -q 'gap\\|Gap\\|iteration\\|Iteration' src/deep-research-engine.ts && npm run compile 2>&1 | grep -c 'error TS' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研"
+    },
+    {
+      "id": "evo_v35_002",
+      "type": "coding",
+      "title": "WebSocket 深度调研协议扩展 + MessageHandler 集成",
+      "status": "pending",
+      "depends_on": [
+        "evo_v35_001"
+      ],
+      "acceptance": "ws-server.ts / message-handler.ts 新增 deep_research_start / deep_research_plan / deep_research_plan_confirm / deep_research_thinking / deep_research_progress / deep_research_report 消息类型；MessageHandler 正确路由到 DeepResearchEngine；思考流通过 deep_research_thinking 实时推送；编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'deep_research_start\\|deep_research_plan' src/message-handler.ts && grep -q 'deep_research_thinking\\|deep_research_progress' src/ws-server.ts src/message-handler.ts src/deep-research-engine.ts && npm run compile 2>&1 | grep -c 'error TS' | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研"
+    },
+    {
+      "id": "evo_v35_003",
+      "type": "coding",
+      "title": "Chrome 深度调研 UI — ResearchPanel + 研究计划编辑 + 思考流 + 报告渲染",
+      "status": "pending",
+      "depends_on": [
+        "evo_v35_002"
+      ],
+      "acceptance": "Chrome 侧新增 ResearchPanel 组件（或 ResearchView），含研究计划编辑视图（子问题列表可增删改 + 确认按钮）、实时思考流面板（流式展示 Agent 当前动作和发现）、进度指示器（页面数/阶段/耗时）、报告 Markdown 渲染（含可点击引用标注）；useResearch hook 管理状态；构建通过",
+      "acceptance_cmd": "cd packages/chrome-ext && (find . -name 'ResearchPanel*' -o -name 'research-panel*' -o -name 'ResearchView*' -o -name 'useResearch*') | head -1 | xargs test -f && npm run build 2>&1 | grep -i 'error' | grep -v 'no error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研"
+    },
+    {
+      "id": "evo_v35_004",
+      "type": "coding",
+      "title": "结构化报告模板 + 引用渲染 + 一键导出（.md / .html）",
+      "status": "pending",
+      "depends_on": [
+        "evo_v35_003"
+      ],
+      "acceptance": "报告模板含目录、摘要、分主题论述、[N] 行内引用标注、参考文献列表；Chrome 侧报告渲染支持点击引用跳转到参考文献；导出按钮支持下载 .md 和 .html 两种格式；双端编译通过",
+      "acceptance_cmd": "cd packages/chrome-ext && grep -rq 'export.*md\\|export.*html\\|download.*report\\|exportReport' src/ components/ hooks/ entrypoints/ && npm run build 2>&1 | grep -i 'error' | grep -v 'no error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研"
+    },
+    {
+      "id": "evo_v35_005",
+      "type": "coding",
+      "title": "deep_research 预设 Skill + /research 斜杠命令 + 端到端集成验收",
+      "status": "pending",
+      "depends_on": [
+        "evo_v35_004"
+      ],
+      "acceptance": "SkillRegistry 含 deep_research 预设 Skill；Chrome 侧 /research <主题> 斜杠命令可触发深度调研流程；用户可在报告产出后追问进行迭代优化；双端编译通过",
+      "acceptance_cmd": "cd packages/vscode-ext && grep -q 'deep_research' src/skill-registry.ts && npm run compile 2>&1 | grep -c 'error TS' | xargs -I{} test {} -eq 0 && cd ../chrome-ext && grep -rq '/research\\|research' src/ components/ hooks/ entrypoints/ && npm run build 2>&1 | grep -i 'error' | grep -v 'no error' | wc -l | xargs -I{} test {} -eq 0 && echo PASS || echo FAIL",
+      "evolution_goal": "不考虑时间，使用最优解，希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研"
     }
   ]
 }

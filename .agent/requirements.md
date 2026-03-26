@@ -28,6 +28,8 @@
 | R-18 | 多 Workspace WebSocket 端口冲突修复 | P0 | 🔄 进行中 | Leader/Follower 模式解决多窗口 EADDRINUSE + 自动竞选 |
 | R-19 | 浏览器智能层 — 阶段 1：结构化 DOM Snapshot | P0 | ⬚ 未开始 | Chrome 侧 DOM Snapshot 采集 + 稳定锚点 + 共享类型 + browser_snapshot 工具 + AgentLoop 集成 |
 | R-20 | 沉浸式翻译零 DOM 篡改 | P0 | ⬚ 未开始 | Overlay 绝对定位层 + 内存注册表替代属性标记，零修改原始 DOM |
+| R-21 | 沉浸式翻译三种显示模式 | P1 | 🔄 进行中 | 原文版/翻译版/混合版三模式切换，零篡改前端 Overlay 定位切换 |
+| R-22 | 深度调研能力（Deep Research） | P1 | ⬚ 未开始 | 迭代式研究循环 + 可编辑研究计划 + 实时思考流 + 引用系统 + Chrome 调研 UI + 报告导出 |
 
 ---
 
@@ -292,6 +294,32 @@
 | 验收 | ① 翻译注入后原始元素无新增属性（无 `data-imt-id`）；② 原始元素无新增兄弟/子节点；③ Flex/Grid 布局页面翻译后布局不变；④ 翻译文本正确定位在原文下方且随页面自然滚动；⑤ toggle/clear 功能正常；⑥ 双端编译通过 |
 | 影响范围 | chrome-ext（`action-executor.ts` 提取+注入逻辑重构 + 新增 `imt-overlay.ts` Overlay 模块 + 新增 `imt-registry.ts` 元素注册表） |
 | 备注 | 属于 R-06/R-14 的进一步升级，核心改动全在 Chrome 侧 content script 层，VSCode 侧和 WebSocket 协议无需变更 |
+
+### R-21 沉浸式翻译三种显示模式
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + R-06/R-14/R-20 沉浸式翻译系列迭代 |
+| 优先级 | P1 |
+| 状态 | 🔄 进行中 |
+| 描述 | 当前沉浸式翻译仅支持"双语显示/隐藏"二态切换。需要扩展为三种显示模式：① **原文版**（隐藏 Overlay，现有行为）；② **混合版/双语版**（翻译在原文下方，现有默认行为）；③ **翻译版**（Overlay 条目重定位到原文位置 + 不透明背景视觉替换原文）。核心改动：ImmersiveOverlay 新增 `DisplayMode` 和 `setDisplayMode()`；action-executor 新增 `setDisplayMode` 操作；TranslateControl toggle 替换为三模式分段控制器；VSCode 侧 Schema 更新。 |
+| 用户价值 | 用户可在"沉浸式阅读译文"和"对照原文检查质量"之间自由切换，覆盖不同阅读场景需求 |
+| 验收 | ① 翻译完成后出现三模式切换器（原文 / 双语 / 译文）；② 点击"译文"后原文位置被翻译覆盖、页面变为全翻译视觉；③ 点击"双语"恢复翻译在原文下方；④ 点击"原文"隐藏所有翻译；⑤ 模式切换毫秒级（纯 CSS/定位操作）；⑥ 零 DOM 篡改原则不变；⑦ 双端编译通过 |
+| 影响范围 | chrome-ext（`imt-overlay.ts` DisplayMode 引擎 + `action-executor.ts` setDisplayMode 处理 + `TranslateControl.tsx` 三模式 UI）/ vscode-ext（`browser-tools.ts` Schema 更新） |
+| 备注 | 翻译版模式使用白色不透明背景覆盖原文，在深色页面可能不完美，后续可扩展自动适配背景色。不需要重新翻译，模式切换是纯前端操作。 |
+
+### R-22 深度调研能力（Deep Research）
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区："希望能做一些深度调研的工作，类似 google 的 gemini 的深度调研" |
+| 优先级 | P1 |
+| 状态 | ⬚ 未开始 |
+| 描述 | 将现有 `report-generator.ts` 升级为迭代式深度调研引擎（DeepResearchEngine）。核心循环：研究计划生成 → 用户确认 → 多轮搜索-阅读-推理-补缺 → 结构化引用报告。Chrome 侧提供专属调研 UI（计划编辑 + 思考流 + 报告渲染 + 导出）。`/research` 斜杠命令 + `deep_research` 预设 Skill 双入口。 |
+| 用户价值 | 用户发起一个研究主题后可以放手，Agent 自主完成多源信息收集和综合分析，产出可交付的带引用结构化报告，替代手动打开数十个 tab 阅读和整理的工作 |
+| 验收 | ① 用户输入 `/research <主题>` 后 Agent 生成研究计划并展示；② 用户可编辑计划中的子问题后确认；③ 执行过程中 Chrome 侧实时显示思考流（当前动作 + 已学到什么 + 下一步计划）；④ Agent 完成多轮迭代后产出 Markdown 报告，包含目录、摘要、分主题论述、`[N]` 行内引用标注、参考文献列表；⑤ 用户可一键导出为 .md 或 .html；⑥ 双端编译通过 |
+| 影响范围 | vscode-ext（`report-generator.ts` → `deep-research-engine.ts` 重构 + `message-handler.ts` 新消息类型 + `ws-server.ts` 协议扩展 + `skill-registry.ts` 新预设 Skill）/ chrome-ext（`ResearchPanel` 组件 + `useResearch` hook + 斜杠命令扩展 + 导出工具函数） |
+| 备注 | 当前方案通过 `browser_navigate` 导航搜索引擎页面实现搜索，不依赖外部搜索 API。后续可考虑接入搜索 API 提升搜索精度。 |
 
 ---
 

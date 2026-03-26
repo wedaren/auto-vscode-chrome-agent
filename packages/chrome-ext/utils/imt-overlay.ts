@@ -9,7 +9,16 @@
  *   - 翻译元素通过 getBoundingClientRect() 定位到原始元素下方
  *   - ResizeObserver + scroll 监听自动重新定位
  *   - CSS 隔离：all:initial 重置 + contain:content 防止样式泄漏
+ *   - 三种显示模式（DisplayMode）：bilingual / original / translated
  */
+
+/**
+ * 显示模式类型：
+ *   - bilingual:   双语对照 — 翻译显示在原文下方（默认）
+ *   - original:    仅原文 — 隐藏 Overlay，只显示页面原始内容
+ *   - translated:  仅译文 — 翻译覆盖在原文上方，用不透明白底遮住原文
+ */
+export type DisplayMode = 'bilingual' | 'original' | 'translated';
 
 /** Overlay 容器的 DOM id */
 const OVERLAY_CONTAINER_ID = 'imt-overlay-container';
@@ -49,6 +58,16 @@ const OVERLAY_CSS = `
 #${OVERLAY_CONTAINER_ID}.imt-overlay-hidden .imt-overlay-item {
   visibility: hidden;
 }
+#${OVERLAY_CONTAINER_ID}.imt-overlay-translated .imt-overlay-item {
+  background: #fff;
+  color: #222;
+  font-size: 1em;
+  line-height: 1.6;
+  padding: 2px 4px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+}
 `;
 
 /**
@@ -73,7 +92,9 @@ interface OverlayEntry {
  *   2. addTranslation(id, text, originalElement) — 逐条添加翻译
  *   3. recalculatePositions() — 手动触发全量位置刷新（窗口变化时自动触发）
  *   4. toggleAll() — 切换翻译显示/隐藏
- *   5. removeAll() — 销毁整个 Overlay（包括 ResizeObserver）
+ *   5. setDisplayMode(mode) — 切换三种显示模式（bilingual/original/translated）
+ *   6. getDisplayMode() — 获取当前显示模式
+ *   7. removeAll() — 销毁整个 Overlay（包括 ResizeObserver）
  */
 export class ImmersiveOverlay {
   /** Overlay 容器 DOM 元素 */
@@ -90,6 +111,9 @@ export class ImmersiveOverlay {
 
   /** requestAnimationFrame 节流标记 */
   private rafPending = false;
+
+  /** 当前显示模式，默认 bilingual（双语对照） */
+  private _displayMode: DisplayMode = 'bilingual';
 
   /**
    * 创建 Overlay 容器并追加到 body 末尾。
@@ -217,8 +241,34 @@ export class ImmersiveOverlay {
   }
 
   /**
+   * 设置显示模式并立即应用到 Overlay 容器。
+   *
+   * 模式行为：
+   *   - bilingual:   移除隐藏/覆盖类名，翻译显示在原文下方（rect.bottom）
+   *   - original:    添加 imt-overlay-hidden，隐藏所有翻译
+   *   - translated:  添加 imt-overlay-translated，翻译定位到 rect.top 并用白底覆盖原文
+   *
+   * @param mode 目标显示模式
+   */
+  setDisplayMode(mode: DisplayMode): void {
+    this._displayMode = mode;
+    this._applyDisplayMode();
+    this.recalculatePositions();
+  }
+
+  /**
+   * 获取当前显示模式。
+   */
+  getDisplayMode(): DisplayMode {
+    return this._displayMode;
+  }
+
+  /**
    * 重新计算所有翻译元素的绝对定位坐标。
    * 当页面滚动、窗口 resize 或 DOM 结构变化时调用。
+   * 根据当前 displayMode 决定定位策略：
+   *   - bilingual/original: 翻译定位到原文下方（rect.bottom）
+   *   - translated: 翻译定位到原文上方（rect.top），覆盖原文
    * 自动清理已脱离 DOM 的条目。
    */
   recalculatePositions(): void {
@@ -278,10 +328,13 @@ export class ImmersiveOverlay {
   /**
    * 计算单个条目的绝对定位坐标并设置到翻译元素上。
    *
-   * 定位策略：
+   * 定位策略根据 displayMode 分为两种：
+   *   - bilingual / original: 翻译放置在原始元素正下方（rect.bottom）
+   *   - translated: 翻译放置在原始元素顶部（rect.top），不透明白底覆盖原文
+   *
+   * 通用：
    *   - 使用 getBoundingClientRect() 获取原始元素的视口坐标
    *   - 转换为页面绝对坐标（加上 scrollX/scrollY）
-   *   - 翻译元素放置在原始元素正下方
    *   - width 匹配原始元素宽度
    */
   private _positionEntry(entry: OverlayEntry): void {
@@ -295,9 +348,46 @@ export class ImmersiveOverlay {
     const scrollY = window.scrollY || document.documentElement.scrollTop;
 
     const el = entry.overlayElement;
-    el.style.top = `${rect.bottom + scrollY}px`;
     el.style.left = `${rect.left + scrollX}px`;
     el.style.width = `${rect.width}px`;
+
+    if (this._displayMode === 'translated') {
+      // translated 模式：定位到原文顶部，覆盖原文
+      el.style.top = `${rect.top + scrollY}px`;
+      el.style.minHeight = `${rect.height}px`;
+    } else {
+      // bilingual / original 模式：定位到原文下方
+      el.style.top = `${rect.bottom + scrollY}px`;
+      el.style.minHeight = '';
+    }
+  }
+
+  /**
+   * 将当前 displayMode 应用到容器的 CSS 类名上。
+   * 互斥切换 imt-overlay-hidden / imt-overlay-translated 类名。
+   */
+  private _applyDisplayMode(): void {
+    if (!this.container) {
+      return;
+    }
+
+    // 先移除所有模式类名
+    this.container.classList.remove('imt-overlay-hidden', 'imt-overlay-translated');
+
+    switch (this._displayMode) {
+      case 'original':
+        // 仅原文 — 隐藏 Overlay
+        this.container.classList.add('imt-overlay-hidden');
+        break;
+      case 'translated':
+        // 仅译文 — 翻译覆盖在原文上方
+        this.container.classList.add('imt-overlay-translated');
+        break;
+      case 'bilingual':
+      default:
+        // 双语对照 — 无额外类名（默认样式）
+        break;
+    }
   }
 
   /**
