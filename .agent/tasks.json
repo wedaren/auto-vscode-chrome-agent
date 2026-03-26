@@ -2180,7 +2180,7 @@
       "id": "evo_v32_005",
       "type": "coding",
       "title": "AgentLoop 集成 — system prompt 更新 + Snapshot 工具使用说明 + 全量验收",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v32_004"
       ],
