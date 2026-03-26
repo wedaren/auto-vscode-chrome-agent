@@ -535,6 +535,9 @@ const IMT_PARAGRAPH_TAGS = new Set([
 ]);
 
 /**
+ * @deprecated evo_v33_005: 遗留注入辅助常量，原用于 insertTranslationElement 注入流程。
+ * 当前仅被 extractInlineLeafNodes (提取阶段) 引用，后续将重构为提取专用模块。
+ *
  * 行内文本叶节点标签 — 智能叶节点提取(inline leaf extraction)
  * 当段落级容器(如 <td>)内含这些行内元素时，优先提取叶节点而非整个容器
  * 适用于 HN titleline <a> 等场景，提取粒度从 <td> 降到 <a>/<span> 级别
@@ -577,6 +580,9 @@ function detectMainContent(): Element {
 }
 
 /**
+ * @deprecated evo_v33_005: 遗留注入辅助函数，原为 insertTranslationElement 注入流程的配套逻辑。
+ * 当前仍在 executeExtractParagraphs 提取阶段使用，后续将重构至提取专用模块。
+ *
  * 智能叶节点提取(leaf node extraction)：从段落容器中提取有意义的行内文本元素
  *
  * 当段落容器(如 <td>)内含 <a>/<span> 等行内元素时，提取最深层的叶节点，

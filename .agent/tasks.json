@@ -2228,7 +2228,7 @@
       "id": "evo_v33_004",
       "type": "coding",
       "title": "重构 injectBilingual + toggle + clear — 使用 Overlay 注入替代 DOM 兄弟插入",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "evo_v33_002",
         "evo_v33_003"
