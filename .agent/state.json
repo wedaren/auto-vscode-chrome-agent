@@ -10,18 +10,18 @@
     "result": "pass",
     "score": 95,
     "issues": [],
-    "acceptance_cmd_output": "⚡ Done in 62ms\nPASS",
-    "validated_at": "2026-03-26T13:30:00.000Z",
+    "acceptance_cmd_output": "⚡ Done in 43ms\nPASS",
+    "validated_at": "2026-03-26T14:00:00.000Z",
     "checks": {
-      "acceptance_cmd": "PASS — grep role===leader/follower/follower模式 ≥2 命中; npm run compile 成功 (62ms)",
-      "no_showErrorMessage_eaddrinuse": "PASS — extension.ts 和 ws-server.ts 中无 showErrorMessage+EADDRINUSE 模式",
+      "acceptance_cmd": "PASS — grep 命中 7 行 (≥2); npm run compile 成功 (43ms, 569.8kb)",
+      "no_showErrorMessage_eaddrinuse": "PASS — extension.ts 和 ws-server.ts 中无 showErrorMessage+EADDRINUSE 组合",
       "role_based_messagehandler": "PASS — extension.ts 行153: leader 时注册 MessageHandler; 行160: follower 跳过并记录日志",
       "wsServerHealthy_role_linkage": "PASS — leader+listening → healthy=true (行136); follower → healthy=false 非 error (行140)",
-      "follower_no_error": "PASS — catch 块仅记录日志不弹 showErrorMessage; ws-server EADDRINUSE 用 showInformationMessage+resolve",
-      "typescript_strict": "PASS — npm run compile 零错误",
-      "note": "evo_v31_001 已完整覆盖本任务需求，无需额外代码变更"
+      "follower_no_error": "PASS — catch 块仅记录日志不弹 showErrorMessage; ws-server.ts 行293 EADDRINUSE 用 showInformationMessage+resolve",
+      "typescript_strict": "PASS — npm run compile 零错误，esbuild production 构建成功",
+      "program_md_constraints": "PASS — 模型调用仅通过 vscode.lm API; Chrome 不内置模型; 无外部 API key 依赖"
     }
   },
-  "last_tick": "2026-03-26T13:30:00.000Z",
+  "last_tick": "2026-03-26T14:00:00.000Z",
   "pm_done": true
 }

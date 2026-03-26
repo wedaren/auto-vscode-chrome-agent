@@ -26,6 +26,7 @@
 | R-16 | 全方位用户体验优化 | P0 | 🔄 进行中 | 智能跟进建议 + Agent 执行进度条 + 会话搜索置顶 + 斜杠命令扩展 + 长回复增强 |
 | R-17 | 沉浸式翻译渐进式体验 | P0 | 🔄 进行中 | 翻译一批注入一批，首批 3-5s 可见，段落级进度展示 |
 | R-18 | 多 Workspace WebSocket 端口冲突修复 | P0 | 🔄 进行中 | Leader/Follower 模式解决多窗口 EADDRINUSE + 自动竞选 |
+| R-19 | 浏览器智能层 — 阶段 1：结构化 DOM Snapshot | P0 | ⬚ 未开始 | Chrome 侧 DOM Snapshot 采集 + 稳定锚点 + 共享类型 + browser_snapshot 工具 + AgentLoop 集成 |
 
 ---
 
@@ -264,6 +265,19 @@
 | 验收 | ① 打开第二个 workspace 不弹出 EADDRINUSE 错误对话框；② StatusBar 或 ConnectionTree 正确显示 leader/follower 角色；③ 关闭 leader 窗口后 follower 在 15 秒内自动升级为 leader 并启动 WS 服务；④ 升级后 Chrome 可正常连接并通信；⑤ 双端编译通过 |
 | 影响范围 | vscode-ext（`ws-server.ts` EADDRINUSE 处理逻辑 + `extension.ts` 激活流程 + `connection-tree.ts` 状态展示） |
 | 备注 | Chrome 侧无需改动，始终连接固定端口。不引入进程间通信或 lock file，利用端口绑定本身作为 leader 选举机制。 |
+
+### R-19 浏览器智能层 — 阶段 1：结构化 DOM Snapshot
+
+| 字段 | 内容 |
+|------|------|
+| 来源 | program.md 功能进化区 + `docs/browser-intelligence-architecture.md` 阶段 1 |
+| 优先级 | P0 |
+| 状态 | ⬚ 未开始 |
+| 描述 | 当前页面上下文仅含 url/title/selectedText，Agent 对页面结构零感知，工具调用靠猜测 selector。需要实现浏览器智能层的第一阶段：① Chrome 侧 `dom-snapshot.ts` 构建结构化 DOM Snapshot 树（tag、role、visibility、interactivity、rect、textPreview、selectorHint）；② Chrome 侧 `anchor-resolver.ts` 为关键节点构建多路 NodeAnchor（cssSelector、textQuote、parentSignature 等）并支持锚点重定位；③ VSCode 侧 `browser-runtime-contract.ts` 统一定义浏览器智能层共享 TypeScript 类型；④ 新增 `browser_snapshot` 工具（browser-tools.ts 注册 + action-executor.ts 新 ActionType）；⑤ AgentLoop system prompt 更新，使 Agent 知道并能使用结构化 Snapshot。 |
+| 用户价值 | Agent 首次拥有页面结构视图，工具调用从"猜 selector"升级为"基于结构精准定位"，操作成功率和注入稳定性预期显著提升 |
+| 验收 | ① `browser_snapshot` 工具在普通页面和 CSP 严格页面均返回有效 DomSnapshotNode 树；② Snapshot 节点包含 tag、role、visible、interactive、textPreview、rect 字段；③ 关键节点携带 NodeAnchor 信息；④ Snapshot 深度限制 12 层、节点上限 3000；⑤ AgentLoop system prompt 包含 `browser_snapshot` 工具说明；⑥ 双端编译通过 |
+| 影响范围 | chrome-ext（新增 `dom-snapshot.ts` + `anchor-resolver.ts` + action-executor.ts 扩展）/ vscode-ext（新增 `browser-runtime-contract.ts` + browser-tools.ts 扩展 + agent-loop.ts prompt 更新） |
+| 备注 | 本阶段是架构文档五阶段演进的基础，不涉及语义模型、Patch DSL、专职 Agent 或视觉验证。Snapshot 通过工具调用获取（非自动附加），避免不必要的性能开销。 |
 
 ---
 

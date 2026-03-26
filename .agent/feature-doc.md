@@ -114,6 +114,7 @@
 | 正式使用文档 | 已实现 | `docs/` 已覆盖项目总览、双端指南和用例 |
 | CSP 安全工具 + 长截图体验 | 进行中 | evaluate 在 CSP 严格页面失败，需新增安全工具 + 图片拼接下载 |
 | 多 Workspace 端口冲突 | 进行中 | 多窗口 EADDRINUSE 修复，Leader/Follower 自动竞选 |
+| 浏览器智能层 — 阶段1 DOM Snapshot | 未开始 | 结构化 DOM Snapshot + 稳定锚点 + browser_snapshot 工具 + AgentLoop 集成 |
 
 ---
 
@@ -444,6 +445,76 @@
 - EADDRINUSE 处理为错误弹窗 + wsServerHealthy = false，用户体验差
 - 无 leader/follower 概念，无自动竞选机制
 - 多窗口场景下用户只能手动改端口或关闭多余窗口
+
+---
+
+## 浏览器智能层 — 阶段 1：结构化 DOM Snapshot（evo_v32）
+
+### 文档目标
+
+说明当前浏览器上下文和操作体系的核心短板，以及浏览器智能层第一阶段（DOM Snapshot）的解决方案。本阶段是整个智能层五阶段演进的基础，后续的语义模型、Patch DSL、专职 Agent、视觉验证都依赖于此。
+
+### 当前结论
+
+#### 已确定
+
+- 当前页面上下文仅包含 `url`、`title`、`selectedText` 三个字段，Agent 对页面结构一无所知——它不知道页面上有哪些区域、哪些元素可交互、哪些位置适合注入内容。
+- 当前浏览器操作全靠 Agent 猜测 CSS selector 后直接执行，没有预检、没有验证、没有回滚。操作失败后 Agent 只能靠错误信息再试，成功率低。
+- 当前沉浸式翻译等注入场景的节点定位完全依赖单一 selector，页面重排或框架重渲染后定位即失效。
+- `browser-intelligence-architecture.md` 已定义了完整的五阶段演进路线，第一阶段是"结构化 DOM Snapshot"——让系统第一次拥有页面结构视图。
+
+#### 合理假设
+
+- Chrome 侧在 content script 中构建 `DomSnapshotNode` 树（含 tag、role、visibility、interactivity、rect、textPreview、selectorHint），通过新的 `browser_snapshot` 工具返回给 VSCode 侧，是技术可行的。
+- DOM Snapshot 需要深度和节点数限制（默认深度 12 层、最多 3000 节点），避免在复杂页面上产出超大快照。
+- 稳定锚点（NodeAnchor）应作为 Snapshot 的伴生能力同步实现——每个关键节点同时生成 cssSelector、textQuote、parentSignature 等多路锚点，为后续 Patch 定位和回滚打基础。
+- 共享数据结构（DomSnapshotNode、NodeAnchor、SemanticPageModel 接口、DomPatchPlan 接口）应独立定义在 `browser-runtime-contract.ts` 中，避免 Chrome 和 VSCode 两端重复定义。
+
+#### 待确认
+
+- Snapshot 的默认深度和节点数上限是否需要根据实际 LLM token 限制微调（当前按 12 层 / 3000 节点先实施）。
+- 是否需要在 Snapshot 中包含 computed style 摘要（当前阶段不包含，留给阶段 2 语义模型）。
+- Agent 是否应在每次对话轮次自动触发 Snapshot，还是仅在需要时主动调用工具（当前按"工具调用"方式，Agent 主动请求）。
+
+### 用户与场景
+
+- **场景 A：Agent 理解页面结构后再操作** — 用户说"点击页面上的登录按钮"，Agent 先调用 `browser_snapshot` 获取页面结构树，识别出登录按钮的确切位置和 selector，再精准执行点击，而不是凭猜测。
+- **场景 B：Agent 选择注入位置** — 用户说"在每个标题后面加上翻译"，Agent 先分析 Snapshot 找到所有标题节点及其锚点信息，再决定在哪些位置注入，而不是硬编码 selector。
+- **场景 C：开发者调试工具调用** — 开发者在 VSCode 调试视图中查看 Agent 获取的 Snapshot 数据，理解 Agent 为什么选择了某个 selector，定位工具调用失败的原因。
+
+### 功能范围
+
+#### 本次要做
+
+- Chrome 侧 `dom-snapshot.ts`：构建结构化 DOM Snapshot 树（DomSnapshotNode）
+- Chrome 侧 `anchor-resolver.ts`：为关键节点构建 NodeAnchor 多路锚点 + 锚点重定位解析
+- VSCode 侧 `browser-runtime-contract.ts`：定义浏览器智能层共享 TypeScript 类型（DomSnapshotNode、NodeAnchor、SemanticPageModel、DomPatchPlan 等）
+- `browser_snapshot` 工具注册：VSCode browser-tools.ts 新增工具 + Chrome action-executor.ts 新增 ActionType
+- AgentLoop system prompt 更新：告知 Agent 可用 `browser_snapshot` 获取结构化页面视图
+
+#### 本次不做
+
+- 语义页面模型构建（阶段 2）
+- Patch DSL 与受控执行（阶段 3）
+- Understanding / Mutation 专职 Agent（阶段 4）
+- 视觉联合验证（阶段 5）
+- Snapshot 自动附加到每轮对话（当前阶段按工具调用方式）
+- 包含 computed style 或 event 能力摘要
+
+### 关键体验
+
+1. Agent 收到用户任务后，调用 `browser_snapshot` 获取当前页面的结构化视图
+2. Snapshot 返回一棵精简的 DOM 树，每个节点包含 tag、role、可见性、可交互性、文本预览和边界框
+3. Agent 基于 Snapshot 精准选择操作目标，不再凭空猜测 selector
+4. 关键节点同时携带 NodeAnchor 信息，为后续定位和回滚提供稳定基础
+5. 开发者可在调试日志中看到 Snapshot 数据，辅助排查
+
+### 当前状态
+
+- 页面上下文仅有 url / title / selectedText，无任何结构信息
+- Agent 工具调用靠 LLM 自行猜测 selector，无预检
+- 注入操作无验证、无回滚
+- 浏览器智能层架构文档已完成（`docs/browser-intelligence-architecture.md`），但零实现
 
 ---
 

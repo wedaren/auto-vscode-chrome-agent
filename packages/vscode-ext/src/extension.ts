@@ -124,31 +124,43 @@ export function activate(context: vscode.ExtensionContext): void {
   outputChannel.appendLine('[BrowserAgent] SkillRunner 已初始化');
 
   // === 异步初始化 WebSocket 服务 + 健康检查 ===
-  // wsServer.start() 失败时标记不健康并阻断 MessageHandler 注册，防止下游级联崩溃
+  // wsServer.start() 成功后根据 role 决定是否注册 MessageHandler：
+  //   leader + listening → healthy, 注册 MessageHandler
+  //   follower           → not healthy but not error, 跳过 MessageHandler
   void (async () => {
     try {
       await wsServer!.start();
-      wsServerHealthy = true;
-      outputChannel.appendLine('[BrowserAgent] WebSocket 服务 initialized — healthy');
+
+      // wsServerHealthy 与 role 联动：仅 leader+listening 才标记 healthy
+      if (wsServer!.role === 'leader') {
+        wsServerHealthy = true;
+        outputChannel.appendLine('[BrowserAgent] WebSocket 服务 initialized — healthy (role=leader)');
+      } else if (wsServer!.role === 'follower') {
+        // follower 模式：端口被其他窗口占用，不是错误，不弹 showErrorMessage
+        wsServerHealthy = false;
+        outputChannel.appendLine('[BrowserAgent] WebSocket follower 模式 — 被动等待，不注册 MessageHandler');
+      }
     } catch (err) {
       wsServerHealthy = false;
       const errMsg = err instanceof Error ? err.message : String(err);
       outputChannel.appendLine(
         `[BrowserAgent][CRITICAL] WebSocket 服务初始化失败，标记为不健康: ${errMsg}`,
       );
-      vscode.window.showErrorMessage(
-        `Browser Agent WebSocket 启动失败，消息通道不可用: ${errMsg}`,
-      );
+      // 不弹 showErrorMessage，仅记录日志；follower 模式已在 ws-server.ts 中优雅处理
     }
 
-    // 只有 wsServer healthy 时才注册消息处理回调，阻断不健康时的下游依赖
-    if (wsServerHealthy) {
+    // 根据 role 决定是否注册 MessageHandler：leader 注册、follower 跳过
+    if (wsServerHealthy && wsServer!.role === 'leader') {
       const messageHandler = new MessageHandler(
         lmService!, wsServer!, mcpClient!, outputChannel,
         browserToolProvider!, skillRegistry, skillRunner, observabilityStore,
       );
       wsServer!.onMessage((ws, msg) => messageHandler.handle(ws, msg));
-      outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（wsServer healthy）');
+      outputChannel.appendLine('[BrowserAgent] MessageHandler 已注册（role=leader, wsServer healthy）');
+    } else if (wsServer!.role === 'follower') {
+      outputChannel.appendLine(
+        '[BrowserAgent] MessageHandler 未注册：follower 模式跳过，等待竞选提升为 leader',
+      );
     } else {
       outputChannel.appendLine(
         '[BrowserAgent] MessageHandler 未注册：WebSocket 不健康，已阻断下游依赖',
